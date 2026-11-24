@@ -7,7 +7,8 @@ and appends it to the setup (`pack.py`):
 administrator rights, no UAC prompt), with its `.sha256`.
 
 The setup (`installer/setup`, the `kodact-setup` binary) is KodAct's own dark
-window, in GPUI like the app: the mark on a burgundy glow, where to install,
+window, in GPUI like the app: the mark on a burgundy glow and the author's
+handwritten signature (`setup/signature.png`, Pinyon Script, OFL), where to install,
 four choices (LibreOffice, `kodact` on PATH, every nudge, a desktop shortcut),
 then each part as it unpacks with one progress bar, then done or what went
 wrong with Try again. What it installs is a zip (LZMA) after the .exe, then its

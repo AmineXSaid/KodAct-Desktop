@@ -1116,6 +1116,12 @@ impl Render for Workspace {
                 from_panel: side_panel.is_some(),
                 text: s.doc_text,
                 source: s.source_view,
+                sheet_print: s.sheet_print,
+                sheet_pages: s
+                    .sheet_pages
+                    .as_ref()
+                    .filter(|(k, _)| side_doc.as_ref().is_some_and(|f| crate::state::doc_version_key(f) == *k))
+                    .map(|(_, r)| r.clone()),
                 version: {
                     let (all, at) = s.doc_versions();
                     (at, all.len().max(1))

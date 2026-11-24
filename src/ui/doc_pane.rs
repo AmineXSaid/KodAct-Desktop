@@ -76,6 +76,9 @@ pub struct Fit {
     pub edit_text: Option<SharedString>,
     /// How a Markdown file shows: a page to type on, as it reads, or source.
     pub md_mode: crate::state::MdMode,
+    /// A workbook shows as it prints; its pages, when drawn (`None`: drawing).
+    pub sheet_print: bool,
+    pub sheet_pages: Option<Result<std::sync::Arc<crate::office::Doc>, String>>,
     /// The page editor wrote the file a moment ago.
     pub md_saved: bool,
     /// Where the file is, as VS Code's breadcrumbs: the project, its
@@ -170,7 +173,15 @@ pub fn render(
     // type on, as it reads, or its source.
     let md = file.is_markdown() && !diagram;
     let md_mode = fit.md_mode;
-    let two_views = office.is_none() && (diagram || html);
+    // PowerShell and the other files the editor can't colour: read coloured,
+    // with Edit to switch to the editor (and Read to come back).
+    let coloured_read = office.is_none()
+        && !binary
+        && !md
+        && !diagram
+        && !html
+        && super::text_editor::colours_elsewhere(&file.name);
+    let two_views = office.is_none() && (diagram || html || coloured_read);
     let source = (two_views && fit.source) || (md && md_mode == crate::state::MdMode::Markdown);
     let text_view = fit.text;
     let page_pick = fit.page_pick;
@@ -220,8 +231,8 @@ pub fn render(
     let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram && !html))
         && super::text_editor::editable(file)
         // PowerShell and the other languages the editor can't colour read
-        // coloured instead (the source view below), not as grey text.
-        && !super::text_editor::colours_elsewhere(&file.name)
+        // coloured (the source view below) until you choose Edit.
+        && (!coloured_read || source)
         && !showing_changes;
     let md_page_on = md && md_mode == crate::state::MdMode::Editing && !showing_changes;
     let full = fit.full;
@@ -521,14 +532,33 @@ pub fn render(
             let (to_preview, to_source) = (state.clone(), state.clone());
             g.push(
                 super::button::Segmented::new("doc-views", "View")
-                    .option("Preview", !source, move |_, _, cx| {
+                    .option(if coloured_read { "Read" } else { "Preview" }, !source, move |_, _, cx| {
                         to_preview.update(cx, |s, cx| s.set_source_view(false, cx))
                     })
                     .option(
-                        if diagram || html { "Code" } else { "Markdown" },
+                        if coloured_read {
+                            "Edit"
+                        } else if diagram || html {
+                            "Code"
+                        } else {
+                            "Markdown"
+                        },
                         source,
                         move |_, _, cx| to_source.update(cx, |s, cx| s.set_source_view(true, cx)),
                     )
+                    .into_any_element(),
+            );
+        }
+        if sheets_read.is_some() && crate::office_render::can_draw() {
+            let (to_cells, to_print) = (viewer.clone(), viewer.clone());
+            g.push(
+                super::button::Segmented::new("sheet-views", "View")
+                    .option("Cells", !fit.sheet_print, move |_, _, cx| {
+                        to_cells.update(cx, |s, cx| s.set_sheet_print(false, cx))
+                    })
+                    .option("Pages", fit.sheet_print, move |_, _, cx| {
+                        to_print.update(cx, |s, cx| s.set_sheet_print(true, cx))
+                    })
                     .into_any_element(),
             );
         }
@@ -1007,6 +1037,49 @@ pub fn render(
                 file.name
             )),
             Some(Ok(p)) => match p.as_ref() {
+                crate::office::Preview::Sheets(_) if fit.sheet_print => {
+                    // The workbook as it prints: charts, data bars, merged
+                    // tiles and page setup, as Excel (or LibreOffice) draws it.
+                    return match &fit.sheet_pages {
+                        Some(Ok(d)) if !d.pages.is_empty() => finish_at(
+                            &fit,
+                            full_t,
+                            file,
+                            header,
+                            div().flex_1().min_h_0().flex().relative().child(pages_view(
+                                body.bg(t.extra.inset),
+                                d,
+                                &fit,
+                                page_pick,
+                                state.clone(),
+                                t,
+                            )),
+                            footer(),
+                            fit.width,
+                            t,
+                        ),
+                        Some(Err(e)) => finish_at(
+                            &fit,
+                            full_t,
+                            file,
+                            header,
+                            body.child(quiet(format!("Its pages could not be drawn: {e}. Cells shows its data."))),
+                            footer(),
+                            fit.width,
+                            t,
+                        ),
+                        _ => finish_at(
+                            &fit,
+                            full_t,
+                            file,
+                            header,
+                            body.child(quiet("Laying out the sheets as they print…".to_string())),
+                            footer(),
+                            fit.width,
+                            t,
+                        ),
+                    };
+                }
                 crate::office::Preview::Sheets(sheets) => {
                     // The formula bar stays under the toolbar; the sheets
                     // scroll under it.

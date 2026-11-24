@@ -86,10 +86,18 @@ const LOGO: &[u8] = include_bytes!("mark.png");
 const LOGO_DOT: &[u8] = include_bytes!("mark-dot.png");
 const LOGO_SLASH: &[u8] = include_bytes!("mark-slash.png");
 const LOGO_ANGLE: &[u8] = include_bytes!("mark-angle.png");
+/// The author's signature, handwritten: "Mohamed Amine Said" in Pinyon Script (SIL OFL 1.1,
+/// `signature-font-OFL.txt`), drawn once into a picture at three times its size, champagne
+/// fading to ivory left to right. The picture, not the font, ships.
+const SIGNATURE: &[u8] = include_bytes!("signature.png");
+/// Its size in the window, in logical pixels (the picture is 1314 x 144).
+const SIGNATURE_SIZE: (f32, f32) = (255.5, 28.);
 
 /// The intro, from the window's first frame: the mark comes together, the name rises, the
 /// right side glides in. Quick: about a second.
 const INTRO: Duration = Duration::from_millis(1150);
+/// The signature is written over a little longer than the intro, finishing just after it.
+const SIGNED: Duration = Duration::from_millis(2100);
 
 /// Where `t` (0 to 1 over the intro) is between `a` and `b`, from 0 to 1.
 fn span(t: f32, a: f32, b: f32) -> f32 {
@@ -170,6 +178,7 @@ pub struct Setup {
     launch_after: bool,
     logo: Arc<Image>,
     pieces: [Arc<Image>; 3],
+    signature: Arc<Image>,
 }
 
 impl Setup {
@@ -219,6 +228,7 @@ impl Setup {
             logo: Arc::new(Image::from_bytes(ImageFormat::Png, LOGO.to_vec())),
             pieces: [LOGO_DOT, LOGO_SLASH, LOGO_ANGLE]
                 .map(|b| Arc::new(Image::from_bytes(ImageFormat::Png, b.to_vec()))),
+            signature: Arc::new(Image::from_bytes(ImageFormat::Png, SIGNATURE.to_vec())),
         };
         if matches!(s.mode, Mode::Uninstall { .. }) {
             s.steps = work::UNINSTALL_STEPS.to_vec();
@@ -586,29 +596,34 @@ impl Setup {
                             .text_color(Ink::subtle())
                             .child(version),
                     )
-                    // The author's signature: a rose hairline, then the name, signed off.
-                    .child(div().w(px(36.)).h(px(1.)).bg(rgba(0xe0889f80)))
+                    // The author's signature: a whisper of "crafted by", then the name in a
+                    // light hand, written in from left to right as the intro ends.
                     .child(
                         div()
-                            .flex()
-                            .items_baseline()
-                            .gap(px(6.))
-                            .child(
-                                div()
-                                    .text_size(px(11.))
-                                    .text_color(Ink::muted())
-                                    .child("crafted by"),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(14.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(rgb(0xf0a7b9))
-                                    .child("Mohamed Amine Said"),
-                            ),
+                            .text_size(px(9.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(Ink::subtle())
+                            .child("C R A F T E D   B Y"),
                     )
+                    .child({
+                        // A frame of the signature's full width keeps it centred while the
+                        // window inside it widens from the left: the name is written, not slid.
+                        let (w, h) = SIGNATURE_SIZE;
+                        div().w(px(w)).h(px(h)).mt(px(-4.)).child(
+                            div()
+                                .h(px(h))
+                                .w(px(w))
+                                .overflow_hidden()
+                                .child(img(self.signature.clone()).w(px(w)).h(px(h)).flex_none())
+                                .with_animation("signature-write", Animation::new(SIGNED), move |el, t| {
+                                    // The pen moves quickly, then eases into the last letters.
+                                    let p = 1. - (1. - span(t, 0.55, 1.)).powi(3);
+                                    el.w(px(w * p))
+                                }),
+                        )
+                    })
                     .with_animation("signature-in", Animation::new(INTRO), |el, t| {
-                        el.opacity(span(t, 0.75, 1.))
+                        el.opacity(span(t, 0.7, 1.))
                     }),
             )
     }

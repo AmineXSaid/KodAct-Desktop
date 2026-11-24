@@ -2231,6 +2231,11 @@ pub struct AppState {
     pub doc_sheet: usize,
     /// A document in the panel shows its text, not its pages.
     pub doc_text: bool,
+    /// A workbook in the panel shows its pages as they print (charts, bars and
+    /// all), not its cells.
+    pub sheet_print: bool,
+    /// Those pages, for the version shown (`doc_version_key`), once drawn.
+    pub sheet_pages: Option<(SharedString, Result<std::sync::Arc<crate::office::Doc>, String>)>,
     /// The panel's file or plan shows its source, not its preview.
     pub source_view: bool,
     /// A Markdown file shows as it reads (else as a page to type on, or,
@@ -2694,6 +2699,8 @@ impl AppState {
             doc_preview: None,
             card_thumbs: Default::default(),
             doc_text: false,
+            sheet_print: false,
+            sheet_pages: None,
             source_view: false,
             md_viewing: false,
             doc_comment_hold: None,
@@ -5478,6 +5485,7 @@ impl AppState {
         }
         self.doc = Some(file);
         self.source_view = false;
+        self.ensure_sheet_pages(cx);
         if self.doc_show_changes {
             self.load_doc_changes(cx);
         }
@@ -5677,6 +5685,50 @@ impl AppState {
                     s.show_file_toast(format!("Saved to Downloads as {name}"), path, cx)
                 }
                 Err(e) => s.show_toast(format!("Could not export it: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    /// Show the workbook in the panel as it prints, or as its cells.
+    pub fn set_sheet_print(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.sheet_print = on;
+        self.ensure_sheet_pages(cx);
+        cx.notify();
+    }
+
+    /// Draw the open workbook's pages (Excel or LibreOffice, off the UI
+    /// thread), once per version, while its print view is on.
+    fn ensure_sheet_pages(&mut self, cx: &mut Context<Self>) {
+        if !self.sheet_print {
+            return;
+        }
+        let Some(file) = self.doc.clone() else { return };
+        if file.office() != Some(crate::office::Kind::Xlsx) {
+            return;
+        }
+        let Some(bytes) = file.bytes.clone() else { return };
+        let key = doc_version_key(&file);
+        if self.sheet_pages.as_ref().is_some_and(|(k, _)| *k == key) {
+            return;
+        }
+        // The last version's pages stay up until the new ones are drawn.
+        let name = file.name.to_string();
+        cx.spawn(async move |this, cx| {
+            let drawn = cx
+                .background_spawn(async move { crate::office::draw(&name, &bytes) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                let still = s.doc.as_ref().is_some_and(|d| doc_version_key(d) == key);
+                if still {
+                    s.sheet_pages = Some((
+                        key,
+                        drawn.map(|(pages, total)| {
+                            std::sync::Arc::new(crate::office::Doc { pages, total, ..Default::default() })
+                        }),
+                    ));
+                    cx.notify();
+                }
             });
         })
         .detach();
