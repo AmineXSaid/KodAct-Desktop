@@ -1,11 +1,30 @@
 """Excel workbooks: read, set cells, append rows, create from CSV, recalculate.
 
+    python xlsx_tool.py init OUT.xlsx [--audience WORDS | --theme NAME] --title T [--subtitle S] [--sheet NAME]
+    python xlsx_tool.py add FILE --json BLOCK       (BLOCK: JSON object or list, or @file.json; saves in place)
     python xlsx_tool.py read FILE [--sheet NAME] [--formulas]
     python xlsx_tool.py read FILE --range "Sheet1!B2:D9"   (each cell's value and formula)
     python xlsx_tool.py set FILE OUT.xlsx --cell "Sheet1!B3=42" [--cell "C3==B3*2" ...]
     python xlsx_tool.py append-rows FILE OUT.xlsx --csv ROWS.csv [--sheet NAME]
     python xlsx_tool.py create OUT.xlsx --csv DATA.csv [--sheet NAME]
     python xlsx_tool.py recalc FILE OUT.xlsx
+
+`init` makes the requested workbook first, with its theme (from who it is
+for) and a title band; each `add` lays a block below the last one and saves:
+
+    {"block": "table", "columns": [...], "rows": [[...]], "formats": {"Q3": "usd"},
+     "formulas": {"Change": "=[@Q3]-[@Q2]"}, "totals": {"Q3": "sum"},
+     "bars": ["Q3"], "scale": ["Change"], "icons": ["Q3"], "heading": "Costs", "name": "Costs"}
+    {"block": "kpis", "items": [{"label": "Total", "formula": "=SUM(D7:D9)", "format": "usd"}]}
+    {"block": "chart", "type": "column|bar|line|area|pie|doughnut", "data": "C6:D9",
+     "categories": "B7:B9", "title": "…", "at": "H6"}
+    {"block": "note", "text": "…", "kind": "note|warning|success"}
+    {"block": "sheet", "sheet": "Data", "title": "…"}          (a new sheet; "sheet" on any block targets one)
+
+Tables are real Excel Tables (filters, banding, a totals row of formulas);
+formats: money usd eur int dec pct date text, or an Excel format. `add`
+prints each table's range, which charts and KPI formulas refer to. Run
+`recalc` after adding formulas.
 
 A value starting with "=" is a formula ("C3==B3*2" sets C3 to =B3*2).
 Edits keep every sheet, style, number format, width and formula they don't
@@ -72,6 +91,57 @@ def _value(text):
         return float(text)
     except ValueError:
         return text
+
+
+THEME_MARK = "kodact-theme:"
+
+
+def init(out, theme="clean", title="", subtitle=None, sheet=None):
+    import deck_design
+    import sheet_design
+    t = deck_design.theme(theme)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = (sheet or "Summary")[:31]
+    sheet_design.title_band(ws, t, title, subtitle)
+    _finish(wb, title, new=True)
+    wb.properties.category = THEME_MARK + theme
+    _save(wb, out)
+
+
+def add(path, specs, theme=None):
+    """Lay out blocks (one dict or a list) and save in place; returns what each made."""
+    import deck_design
+    import sheet_design
+    wb = openpyxl.load_workbook(path)
+    cat = wb.properties.category or ""
+    t = deck_design.theme(theme or (cat[len(THEME_MARK):] if cat.startswith(THEME_MARK) else "clean"))
+    made = []
+    for spec in specs if isinstance(specs, list) else [specs]:
+        if not isinstance(spec, dict):
+            sys.exit('a block is a JSON object, e.g. {"block": "table", "columns": [...], "rows": [...]}')
+        made.append(sheet_design.add_block(wb, t, spec))
+    _finish(wb)
+    _save(wb, path)
+    return made
+
+
+def _save(wb, out):
+    tmp = out + ".part"
+    wb.save(tmp)
+    os.replace(tmp, out)
+
+
+def _json(arg):
+    import json
+    raw = arg
+    if arg.startswith("@"):
+        with open(arg[1:], encoding="utf-8") as f:
+            raw = f.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        sys.exit(f"--json is not valid JSON ({e}); quote keys and strings with double quotes")
 
 
 def read(path, sheet=None, formulas=False):
@@ -218,12 +288,28 @@ def _csv(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init"); i.add_argument("out"); i.add_argument("--theme"); i.add_argument("--audience")
+    i.add_argument("--title", required=True); i.add_argument("--subtitle"); i.add_argument("--sheet")
+    b = sub.add_parser("add"); b.add_argument("file"); b.add_argument("--json", required=True); b.add_argument("--theme")
     r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--sheet"); r.add_argument("--formulas", action="store_true"); r.add_argument("--range")
     s = sub.add_parser("set"); s.add_argument("file"); s.add_argument("out"); s.add_argument("--cell", action="append", required=True)
     a = sub.add_parser("append-rows"); a.add_argument("file"); a.add_argument("out"); a.add_argument("--csv", required=True); a.add_argument("--sheet")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--csv", required=True); c.add_argument("--sheet")
     x = sub.add_parser("recalc"); x.add_argument("file"); x.add_argument("out")
     args = ap.parse_args(argv)
+    if args.cmd == "init":
+        import deck_design
+        theme = args.theme or deck_design.for_audience(args.audience)
+        deck_design.theme(theme)
+        init(args.out, theme, args.title, args.subtitle, args.sheet)
+        print(f"wrote {args.out}: its {theme} title band; add blocks with `add`")
+        return
+    if args.cmd == "add":
+        for m in add(args.file, _json(args.json), args.theme):
+            if m:
+                print(f"table at {m}")
+        print(f"saved {args.file}")
+        return
     if args.cmd == "read":
         sys.stdout.write(read_range(args.file, args.range) if args.range else read(args.file, args.sheet, args.formulas))
     elif args.cmd == "set":

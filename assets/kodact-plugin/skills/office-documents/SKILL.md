@@ -11,11 +11,24 @@ chat **from the first command that names it**, opens it beside the chat, and
 redraws it each time the file changes. So the person watches the file being
 made: create the requested file first, then build it up in place.
 
-**Start with the file they asked for.** For a new deck, your first command is
-`pptx_tool.py init deck.pptx --theme … --title …`: the real .pptx, with its
-title slide, before any plan, outline or helper script. Then `add` slides
-one or a few at a time. Never begin by writing a `.md` outline or a
-build script the person did not ask for.
+**Start with the file they asked for.** Your first command makes the real
+file in the type requested, before any plan, outline or helper script:
+`pptx_tool.py init deck.pptx`, `docx_tool.py init report.docx` or
+`xlsx_tool.py init budget.xlsx`, each with `--audience "<who it is for>"`
+and `--title`. Then `add` to it a few slides or blocks at a time, so the
+person watches it grow. Never begin by writing a `.md` outline or a build
+script the person did not ask for.
+
+**Design for who it is for.** `--audience` picks the theme from the
+person's words, and every element follows it: colours, fonts, shapes,
+charts, cards, faces. kids (warm, bright, rounded, drawn faces and stars),
+warm (patients, parents, a community: calm and soft), corporate (boards,
+finance: navy and teal, square), editorial (reports, research: serif),
+bold (talks, launches: dark stage), clean (everything else). Pass
+`--theme` only when the person named a look. Then choose components for
+the content: numbers become KPI tiles or a chart, a process becomes steps,
+a decision becomes a comparison, dates become a timeline, a warning a
+callout. Plain bullets are the last resort, not the default.
 
 **Don't look for tools.** KodAct has already found them: `KODACT_PYTHON` is
 the Python with the libraries, and `check_tool.py render` draws pages with
@@ -74,8 +87,10 @@ and look → report.**
 
 | Task | Command |
 |:--|:--|
+| **Start a new document (always first)** | `init report.docx --audience "the board" --title "Q3 Review" --subtitle "…" --tag "Confidential"` |
+| **Add designed blocks** | `add report.docx --json '[{"block": "heading", "text": "Summary"}, {"block": "kpis", "items": [...]}]'` |
 | Read as Markdown | `read memo.docx` |
-| Write from Markdown | `create memo.docx --markdown memo.md` |
+| Write from Markdown | `create memo.docx --markdown memo.md` (only to convert Markdown the person gave you) |
 | Replace text, keeping formatting | `replace memo.docx memo-2.docx --find "Q2" --replace "Q3"` (repeat pairs) |
 | Add sections at the end | `append memo.docx memo-2.docx --markdown more.md` |
 | Add a Word comment on a quote | `comment memo.docx memo-2.docx --quote "fall to 700" --text "Why?"` (repeat pairs) |
@@ -94,10 +109,21 @@ reject one by one. `read` lists a file's comments and tracked changes at the
 end. Quote the exact words as they are in the file; a quote that is not
 found is an error, not a silent skip.
 
+Word blocks: `heading`, `text` (with **bold**, `lead` for an intro),
+`bullets`, `callout` (note, tip, info, warning, danger, success), `table`
+(numbers right-aligned, a `highlight` row, a header that repeats on each
+page), `kpis`, `cards`, `steps`, `timeline`, `compare` (with a `verdict`),
+`quote`, `chart` (column, bar, line, area, pie, doughnut, in the theme's
+colours), `image`, `toc`, `pagebreak`. `docx_tool.py --help` shows each
+one's fields. They are real Word tables, styles and fields, so the person
+can keep editing them in Word.
+
 ## Excel (.xlsx), `xlsx_tool.py`
 
 | Task | Command |
 |:--|:--|
+| **Start a new workbook (always first)** | `init budget.xlsx --audience "finance team" --title "Q3 Budget" --subtitle "…"` |
+| **Add designed blocks** | `add budget.xlsx --json '[{"block": "table", …}, {"block": "chart", …}]'` |
 | Read every sheet (values) | `read budget.xlsx` |
 | Read the formulas | `read budget.xlsx --sheet Budget --formulas` |
 | A range's values and formulas | `read budget.xlsx --range "Budget!B2:D9"` |
@@ -109,6 +135,15 @@ found is an error, not a silent skip.
 A value that starts with `=` is a formula (`D5==C5-B5` sets `=C5-B5`).
 Numbers stay numbers. `read` shows each sheet as a table with column
 letters and row numbers, so you can name cells exactly.
+
+Excel blocks: `table` (a real Excel Table with filters and banding;
+`formulas` per column such as `"=[@Q3]-[@Q2]"`, a `totals` row of live
+formulas, `formats`, and conditional formatting: `bars`, `scale`, `icons`),
+`kpis` (tiles whose `formula` keeps them live), `chart` (native: column,
+bar, line, area, pie, doughnut, over `data` and `categories` ranges), `note`,
+and `sheet` (a new sheet; any block takes `"sheet"`). `add` prints each
+table's range; refer to it in charts and KPI formulas. Keep numbers as
+numbers and totals as formulas, then `recalc`.
 
 ## PowerPoint (.pptx), `pptx_tool.py`
 
@@ -125,9 +160,7 @@ letters and row numbers, so you can name cells exactly.
 | Reorder or delete slides | `slides deck.pptx deck-2.pptx --order 1,3,2` (slides left out are deleted) |
 | Duplicate a slide | `duplicate deck.pptx deck-2.pptx --slide 2` (the copy follows it) |
 
-**Designing a deck.** Pick the theme from the audience: `kids` (warm cream,
-bright colours, rounded cards, drawn faces and stars), `clean` (white, one
-blue, for work), `bold` (dark stage, strong colour, for talks). Then choose
+**Designing a deck.** The theme comes from `--audience` (above). Choose
 each slide's layout from what it says, and vary them:
 
 | Layout | For | Fields |
@@ -136,7 +169,17 @@ each slide's layout from what it says, and vary them:
 | `steps` | a process or a cause and effect (2-4) | `items` as "Head: body", `footer` |
 | `statement` | the one sentence to remember | `statement`, `items`, `art` |
 | `faces` | feelings, reactions (up to 4) | `items` [{"label", "mood"}], `lines` |
-| `bullets` | a short plain list | `items` |
+| `chart` | numbers over categories or time (native, editable) | `chart`: {`type` column bar line pie doughnut area stacked, `categories`, `series`}, `items` beside it |
+| `table` | exact figures | `columns`, `rows`, `highlight` |
+| `kpis` | 2-4 headline numbers | `items` [{"value", "label", "delta", "better": "up"/"down"}] |
+| `timeline` | dates and milestones | `items` as "When: what" |
+| `compare` | two options | `left`/`right` {"title", "items"}, `verdict` |
+| `grid` | 3-6 features or ideas | `items` [{"icon", "head", "text"}] |
+| `cycle` | a repeating process | `items`, `center` |
+| `pyramid` | levels, top first | `items` as "Head: line" |
+| `quote` | a voice | `quote`, `by` |
+| `image` | a picture | `path`, `caption`, `items` |
+| `bullets` | a short plain list (last resort) | `items` |
 | `closing` | the last slide | `title`, `items` |
 
 Every slide takes `title`, `icon` (sun, star, heart, cloud, cell, none) and
@@ -148,6 +191,15 @@ slides, and fix with `set-text`, or `slides` to drop and re-`add`.
 In an outline, each `# Title` starts a slide; the first is the title slide
 and the line under it its subtitle; `- ` lines are bullets, two spaces per
 level. Keep slides to one idea and at most five bullets.
+
+## Markdown (.md)
+
+A Markdown file shows in KodAct's panel as a designed page, redrawn as you
+write it. Use what it draws: headings, tables, task lists (`- [ ]`),
+callouts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`,
+`> [!CAUTION]`), and diagrams in ```` ```mermaid ```` blocks (flowcharts,
+sequences, timelines, gantt charts, mind maps, pie charts), which are drawn,
+not shown as code.
 
 ## PDF, `pdf_tool.py`
 

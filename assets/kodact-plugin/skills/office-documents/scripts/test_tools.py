@@ -379,6 +379,122 @@ class Slides(Tmp):
         finally:
             del os.environ["KODACT_OFFICE_RENDER"]
 
+    def test_word_init_and_blocks_make_a_valid_designed_document(self):
+        import doc_design
+        doc = self.path("report.docx")
+        docx_tool.init(doc, "corporate", "Q3 Review", "Results", "Confidential")
+        self.assertEqual(check_tool.validate(doc), [])
+        blocks = [
+            {"block": "toc"},
+            {"block": "heading", "text": "Summary"},
+            {"block": "text", "text": "Up **23%**.", "lead": True},
+            {"block": "kpis", "items": [{"value": "185k", "label": "Revenue", "delta": "+23%"},
+                                        {"value": "2.1%", "label": "Churn", "delta": "-0.4%", "better": "down"}]},
+            {"block": "callout", "kind": "warning", "title": "Risk", "text": "Costs rise."},
+            {"block": "table", "columns": ["Item", "Q3"], "rows": [["Servers", 1350], ["Total", 1990]], "highlight": 1},
+            {"block": "chart", "chart": {"type": "column", "categories": ["Q1", "Q2"], "series": {"A": [1, 2]}}},
+            {"block": "chart", "chart": {"type": "doughnut", "categories": ["a", "b"], "series": {"S": [60, 40]}}},
+            {"block": "steps", "items": ["Hire: two", "Ship: it"]},
+            {"block": "timeline", "items": ["Oct: open", "Dec: launch"]},
+            {"block": "compare", "left": {"title": "Build", "items": ["x"]}, "right": {"title": "Buy", "items": ["y"]},
+             "verdict": "Buy."},
+            {"block": "cards", "items": ["Quality: checked", "Speed: weekly"]},
+            {"block": "quote", "quote": "Ship small.", "by": "Us"},
+            {"block": "bullets", "items": ["One", "Two"], "numbered": True},
+            {"block": "pagebreak"},
+        ]
+        self.assertEqual(docx_tool.add(doc, blocks), len(blocks))
+        self.assertEqual(check_tool.validate(doc), [])
+        self.assertFalse(os.path.exists(doc + ".part"))
+        text = docx_tool.read(doc)
+        for words in ("# Summary", "185k", "Costs rise.", "Servers", "Hire", "Ship small."):
+            self.assertIn(words, text)
+        d = docx.Document(doc)
+        self.assertEqual(d.core_properties.category, "kodact-theme:corporate")
+        self.assertEqual(d.styles["Heading 1"].font.name, "Segoe UI Semibold")
+        self.assertEqual(len(d.inline_shapes), 2, "both charts are pictures in the text")
+        # Every table, row and cell property in the order Word's schema wants.
+        for kind, order in doc_design.ORDER.items():
+            for el in d.element.body.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}" + kind):
+                names = [c.tag.split("}")[1] for c in el]
+                ranks = [order.index(n) for n in names if n in order]
+                self.assertEqual(ranks, sorted(ranks), f"{kind}: {names}")
+        with self.assertRaises(SystemExit):
+            docx_tool.add(doc, {"block": "hologram"})
+
+    def test_audience_picks_the_theme(self):
+        import deck_design
+        self.assertEqual(deck_design.for_audience("kids aged 8"), "kids")
+        self.assertEqual(deck_design.for_audience("the board"), "corporate")
+        self.assertEqual(deck_design.for_audience("parents of patients"), "warm")
+        self.assertEqual(deck_design.for_audience("a research report"), "editorial")
+        self.assertEqual(deck_design.for_audience("conference keynote"), "bold")
+        self.assertEqual(deck_design.for_audience(None), "clean")
+
+    def test_every_deck_layout_draws_in_every_theme(self):
+        import deck_design
+        from PIL import Image
+        pic = self.path("pic.png")
+        Image.new("RGB", (40, 30), "red").save(pic)
+        specs = [
+            {"layout": "chart", "title": "C", "chart": {"type": k, "categories": ["a", "b"],
+                                                         "series": {"S": [1, 2]}}} for k in deck_design.CHARTS
+        ] + [
+            {"layout": "table", "title": "T", "columns": ["a", "b"], "rows": [["x", 1]]},
+            {"layout": "timeline", "title": "T", "items": ["Jan: a", "Feb: b"]},
+            {"layout": "compare", "title": "C", "left": {"title": "A", "items": ["x"]},
+             "right": {"title": "B", "items": ["y"]}, "verdict": "A"},
+            {"layout": "grid", "title": "G", "items": ["A: a", "B: b", "C: c"]},
+            {"layout": "kpis", "title": "K", "items": [{"value": "1", "label": "x", "delta": "+1"}]},
+            {"layout": "quote", "title": "", "quote": "Q", "by": "B"},
+            {"layout": "image", "title": "I", "path": pic, "items": ["x"]},
+            {"layout": "cycle", "title": "C", "items": ["a", "b", "c"], "center": "x"},
+            {"layout": "pyramid", "title": "P", "items": ["a", "b", "c"]},
+        ]
+        for theme in deck_design.THEMES:
+            deck = self.path(f"{theme}.pptx")
+            pptx_tool.init(deck, theme, "T")
+            for spec in specs:
+                pptx_tool.add(deck, spec)
+            self.assertEqual(check_tool.validate(deck), [], theme)
+            self.assertEqual(len(Presentation(deck).slides), 1 + len(specs))
+
+    def test_excel_init_and_blocks_make_a_live_designed_workbook(self):
+        book = self.path("budget.xlsx")
+        xlsx_tool.init(book, "corporate", "Q3 Budget", "Costs by item")
+        made = xlsx_tool.add(book, [
+            {"block": "table", "heading": "Costs", "name": "Costs", "columns": ["Item", "Q2", "Q3", "Change"],
+             "rows": [["Servers", 1200, 1350], ["Licences", 800, 640]], "formulas": {"Change": "=[@Q3]-[@Q2]"},
+             "formats": {"Q3": "eur"}, "totals": {"Q3": "sum"}, "bars": ["Q3"], "icons": ["Change"],
+             "scale": ["Q2"]},
+            {"block": "kpis", "items": [{"label": "Total", "formula": "=SUM(D8:D9)", "format": "eur"}]},
+            {"block": "chart", "type": "column", "data": "C7:D9", "categories": "B8:B9", "title": "Q2 vs Q3"},
+            {"block": "note", "text": "Costs rise in January.", "kind": "warning"},
+            {"block": "sheet", "sheet": "Split", "title": "Split"},
+            {"block": "chart", "sheet": "Split", "type": "doughnut", "data": "C7:D9", "categories": "B8:B9",
+             "at": "B6"},
+        ])
+        self.assertEqual(made[0], "B7:E9")
+        self.assertEqual(check_tool.validate(book), [])
+        wb = openpyxl.load_workbook(book)
+        ws = wb["Summary"]
+        self.assertEqual(ws["E8"].value, "=D8-C8", "a row formula becomes plain references")
+        self.assertEqual(ws["D10"].value, "=SUM(D8:D9)", "the totals row is a formula")
+        self.assertIn("Costs", ws.tables, "a real Excel Table, with filters")
+        self.assertEqual(len(ws.conditional_formatting), 3)
+        self.assertEqual(len(ws._charts), 1)
+        self.assertEqual(len(wb["Split"]._charts), 1)
+        self.assertEqual(wb.properties.category, "kodact-theme:corporate")
+        self.assertTrue(ws.sheet_properties.pageSetUpPr.fitToPage)
+        for bad in ({"block": "table", "columns": ["a"]}, {"block": "chart", "type": "radar", "data": "A1:A2",
+                     "categories": "B1:B2"}, {"block": "nope"}):
+            with self.assertRaises(SystemExit):
+                xlsx_tool.add(book, bad)
+        if HAS_OFFICE:
+            out = self.path("budget-calc.xlsx")
+            xlsx_tool.recalc(book, out)
+            self.assertEqual(openpyxl.load_workbook(out, data_only=True)["Summary"]["D10"].value, 1990)
+
     def _outline(self):
         p = self.path("outline.md")
         with open(p, "w", encoding="utf-8") as f:

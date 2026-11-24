@@ -1,6 +1,8 @@
 """Word documents: read, create from Markdown, replace text, append,
 comment, track changes, accept them.
 
+    python docx_tool.py init OUT.docx [--audience WORDS | --theme NAME] --title T [--subtitle S] [--tag T] [--page a4|letter]
+    python docx_tool.py add FILE --json BLOCK      (BLOCK: JSON object or list, or @file.json; saves in place)
     python docx_tool.py read FILE
     python docx_tool.py create OUT.docx --markdown FILE.md [--page a4|letter] [--title TEXT]
     python docx_tool.py replace FILE OUT.docx --find TEXT --replace TEXT [--find ... --replace ...]
@@ -8,6 +10,27 @@ comment, track changes, accept them.
     python docx_tool.py comment FILE OUT.docx --quote TEXT --text NOTE [--quote ... --text ...] [--author NAME]
     python docx_tool.py track FILE OUT.docx --find TEXT --replace TEXT [...] [--author NAME]
     python docx_tool.py accept FILE OUT.docx
+
+`init` makes the requested document first: the theme (picked from who it is
+for) on Word's own styles, a cover band, a header and page numbers. Each
+`add` appends blocks and saves, so the person watches it grow. Blocks are
+real Word parts the person can keep editing:
+
+    {"block": "heading", "text": "…", "level": 1}
+    {"block": "text", "text": "Paragraphs; **bold** spans", "lead": true}
+    {"block": "bullets", "items": [...], "numbered": false}
+    {"block": "callout", "kind": "note|tip|info|warning|danger|success", "title": "…", "text": "…"}
+    {"block": "table", "columns": [...], "rows": [[...]], "highlight": 2, "caption": "…"}
+    {"block": "kpis", "items": [{"value": "185k", "label": "Revenue", "delta": "+23%", "better": "up"}]}
+    {"block": "cards", "items": [{"head": "…", "text": "…"}], "columns": 3}
+    {"block": "steps", "items": ["Head: what happens", ...]}
+    {"block": "timeline", "items": ["Jan: kickoff", ...]}
+    {"block": "compare", "left": {"title", "items"}, "right": {...}, "verdict": "…"}
+    {"block": "quote", "quote": "…", "by": "…"}
+    {"block": "chart", "chart": {"type": "column|bar|line|area|pie|doughnut", "categories": [...],
+     "series": {"Name": [...]}}, "caption": "…"}
+    {"block": "image", "path": "pic.png", "caption": "…"}
+    {"block": "toc"}  {"block": "pagebreak"}
 
 `comment` anchors a real Word comment on the first place a quote appears;
 `track` makes each replacement a tracked change (shown struck through and
@@ -110,6 +133,59 @@ def _changes_and_comments(d):
             if words:
                 lines.append(f"- {kind} by {el.get(qn('w:author')) or 'someone'}: {words}")
     return lines
+
+
+THEME_MARK = "kodact-theme:"
+
+
+def init(out, theme="clean", title="", subtitle=None, tag=None, page="letter"):
+    import deck_design
+    import doc_design
+    t = deck_design.theme(theme)
+    d = docx.Document()
+    _page(d, page)
+    doc_design.apply_theme(d, t, title)
+    doc_design.cover(d, t, title or "Untitled", subtitle, tag)
+    _finish(d, title, new=True)
+    d.core_properties.category = THEME_MARK + theme
+    _save(d, out)
+
+
+def add(path, specs, theme=None):
+    """Append blocks (one dict, or a list) and save in place; returns how many."""
+    import deck_design
+    import doc_design
+    d = docx.Document(path)
+    cat = d.core_properties.category or ""
+    name = theme or (cat[len(THEME_MARK):] if cat.startswith(THEME_MARK) else "clean")
+    t = deck_design.theme(name)
+    specs = specs if isinstance(specs, list) else [specs]
+    for spec in specs:
+        if not isinstance(spec, dict):
+            sys.exit('a block is a JSON object, e.g. {"block": "text", "text": "…"}')
+        doc_design.add_block(d, t, spec)
+    _finish(d)
+    _save(d, path)
+    return len(specs)
+
+
+def _save(d, out):
+    """Write beside the target and move it into place: a viewer never reads half a file."""
+    tmp = out + ".part"
+    d.save(tmp)
+    os.replace(tmp, out)
+
+
+def _json(arg):
+    import json
+    raw = arg
+    if arg.startswith("@"):
+        with open(arg[1:], encoding="utf-8") as f:
+            raw = f.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        sys.exit(f"--json is not valid JSON ({e}); quote keys and strings with double quotes")
 
 
 def read(path):
@@ -439,6 +515,10 @@ def _text(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init"); i.add_argument("out"); i.add_argument("--theme"); i.add_argument("--audience")
+    i.add_argument("--title", required=True); i.add_argument("--subtitle"); i.add_argument("--tag")
+    i.add_argument("--page", choices=sorted(PAGES), default="letter")
+    b = sub.add_parser("add"); b.add_argument("file"); b.add_argument("--json", required=True); b.add_argument("--theme")
     r = sub.add_parser("read"); r.add_argument("file")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--markdown", required=True)
     c.add_argument("--page", choices=sorted(PAGES), default="letter"); c.add_argument("--title")
@@ -453,7 +533,16 @@ def main(argv=None):
     k.add_argument("--author", default=AUTHOR)
     x = sub.add_parser("accept"); x.add_argument("file"); x.add_argument("out")
     args = ap.parse_args(argv)
-    if args.cmd == "read":
+    if args.cmd == "init":
+        import deck_design
+        theme = args.theme or deck_design.for_audience(args.audience)
+        deck_design.theme(theme)
+        init(args.out, theme, args.title, args.subtitle, args.tag, args.page)
+        print(f"wrote {args.out}: its {theme} cover; add blocks with `add`")
+    elif args.cmd == "add":
+        n = add(args.file, _json(args.json), args.theme)
+        print(f"added {n} block(s); saved {args.file}")
+    elif args.cmd == "read":
         sys.stdout.write(read(args.file))
     elif args.cmd == "create":
         create(args.out, _text(args.markdown), args.page, args.title)

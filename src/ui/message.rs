@@ -1472,14 +1472,30 @@ pub(super) fn prob_fold_key(chat: usize, msg: usize, b: usize) -> String {
     format!("prob-fold-{chat}-{msg}-{b}")
 }
 
-/// Effective open state of a tool block: errors/warnings start expanded by
-/// default (never hidden behind a collapse) until toggled via `ui_toggles`.
-pub(super) fn tool_is_open(call: &ToolCall, b: usize, cx: &ItemContext) -> bool {
+/// Effective open state of a tool block: a problem starts expanded (never
+/// hidden behind a collapse) until toggled via `ui_toggles`, unless a later
+/// step of the reply succeeded: a failure KodAct recovered from (a missing
+/// tool it looked for, a retried command) folds to its one line, so the
+/// chat isn't a wall of error output. Toggling still opens it.
+pub(super) fn tool_is_open(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext) -> bool {
     if is_problem(call.status) {
-        !cx.ui_toggles.contains(&prob_fold_key(cx.chat, cx.index, b))
+        let toggled = cx.ui_toggles.contains(&prob_fold_key(cx.chat, cx.index, b));
+        if recovered(blocks, b) {
+            toggled
+        } else {
+            !toggled
+        }
     } else {
         call.open
     }
+}
+
+/// A later step of this reply finished well.
+pub(super) fn recovered(blocks: &[Block], b: usize) -> bool {
+    blocks
+        .iter()
+        .skip(b + 1)
+        .any(|x| matches!(x, Block::Tool(c) if c.status == ToolStatus::Done))
 }
 
 /// Concise single-line outcome suffix (e.g. `"42 lines"`, `"exit 0"`, `"failed"`).
@@ -1622,7 +1638,7 @@ pub(super) fn tool_header(
         .count();
     let shell = call.kind == ToolKind::Bash;
     let has_body = has_body(call);
-    let shown_open = has_body && tool_is_open(call, b, cx);
+    let shown_open = has_body && tool_is_open(call, b, blocks, cx);
     let why = failure_line(call).filter(|_| !shell);
     let outcome = tool_outcome(call);
     let waiting = call.status == ToolStatus::Running && awaits_you(blocks, b);
@@ -1807,10 +1823,11 @@ pub(super) fn tool_header(
 pub(super) fn tool_body(
     call: &ToolCall,
     b: usize,
+    blocks: &[Block],
     cx: &ItemContext,
     t: &Theme,
 ) -> Option<AnyElement> {
-    if !(tool_is_open(call, b, cx) && has_body(call)) {
+    if !(tool_is_open(call, b, blocks, cx) && has_body(call)) {
         return None;
     }
     let frame = || {
@@ -2067,7 +2084,7 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
         .flex()
         .flex_col()
         .child(tool_header(call, b, blocks, cx, t))
-        .when(!is_agent, |d| d.children(tool_body(call, b, cx, t)));
+        .when(!is_agent, |d| d.children(tool_body(call, b, blocks, cx, t)));
     flash(row, b, cx, t)
 }
 
@@ -3154,5 +3171,20 @@ mod tests {
             crate::backend::tool_call("Bash", &serde_json::json!({ "command": "npm test" }));
         bash_fail.status = crate::state::ToolStatus::Failed;
         assert_eq!(super::tool_outcome(&bash_fail).as_deref(), Some("failed"));
+    }
+
+    /// A failure a later step recovered from folds (the PATH dump of a tool
+    /// looked for and not found); the last failure of a reply stays open.
+    #[test]
+    fn a_recovered_failure_folds() {
+        use crate::state::{Block, ToolStatus};
+        let step = |status| {
+            let mut c = crate::backend::tool_call("Bash", &serde_json::json!({ "command": "which soffice" }));
+            c.status = status;
+            Block::Tool(c)
+        };
+        let blocks = vec![step(ToolStatus::Failed), step(ToolStatus::Done), step(ToolStatus::Failed)];
+        assert!(super::recovered(&blocks, 0), "a later step succeeded");
+        assert!(!super::recovered(&blocks, 2), "nothing after it: still a problem");
     }
 }

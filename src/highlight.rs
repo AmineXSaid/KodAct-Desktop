@@ -18,7 +18,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {
     Plain,
     Keyword,
@@ -34,7 +34,86 @@ pub enum Kind {
     Removed,
 }
 
-static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
+static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
+    let base = two_face::syntax::extra_newlines();
+    let mut builder = base.into_builder();
+    // Grammars bat's set lacks, written for KodAct: PowerShell (a Windows
+    // user's scripts, and what KodAct itself runs to draw Office files).
+    for src in [POWERSHELL] {
+        if let Ok(def) = syntect::parsing::SyntaxDefinition::load_from_str(src, true, None) {
+            builder.add(def);
+        }
+    }
+    builder.build()
+});
+
+/// PowerShell, as a Sublime syntax: comments, here-strings and strings with
+/// their `$variables`, variables, cmdlets (`Verb-Noun`), `-Parameters` and
+/// `-eq`-style operators, keywords, types (`[string]`) and numbers.
+const POWERSHELL: &str = r#"%YAML 1.2
+---
+name: PowerShell
+file_extensions: [ps1, psm1, psd1, pwsh]
+scope: source.powershell
+contexts:
+  main:
+    - match: '<#'
+      scope: punctuation.definition.comment.begin.powershell
+      push: block_comment
+    - match: '#.*$'
+      scope: comment.line.powershell
+    - match: '@"'
+      push: here_double
+    - match: "@'"
+      push: here_single
+    - match: '"'
+      push: double
+    - match: "'"
+      push: single
+    - match: '\$(?:\{[^}]*\}|[\w:?]+)'
+      scope: variable.other.powershell
+    - match: '\[[A-Za-z_][\w.\[\]]*\]'
+      scope: storage.type.powershell
+    - match: '(?i)\b(?:if|elseif|else|switch|foreach|for|while|do|until|break|continue|return|function|filter|param|begin|process|end|try|catch|finally|throw|trap|in|class|enum|using|exit)\b'
+      scope: keyword.control.powershell
+    - match: '(?i)-(?:eq|ne|gt|ge|lt|le|like|notlike|match|notmatch|contains|notcontains|in|notin|replace|split|join|and|or|not|xor|band|bor|is|isnot|as|f)\b'
+      scope: keyword.operator.powershell
+    - match: '\b[A-Z][a-zA-Z]+-[A-Z][a-zA-Z]+\b'
+      scope: support.function.powershell
+    - match: '(?<![\w$])-[A-Za-z][\w]*'
+      scope: variable.parameter.powershell
+    - match: '\b\d+(?:\.\d+)?(?:[kKmMgGtT][bB])?\b|\b0x[0-9a-fA-F]+\b'
+      scope: constant.numeric.powershell
+    - match: '(?i)\$(?:true|false|null)\b'
+      scope: constant.language.powershell
+  block_comment:
+    - meta_scope: comment.block.powershell
+    - match: '#>'
+      pop: true
+  double:
+    - meta_scope: string.quoted.double.powershell
+    - match: '`.'
+      scope: constant.character.escape.powershell
+    - match: '\$(?:\{[^}]*\}|[\w:]+)'
+      scope: variable.other.powershell
+    - match: '"'
+      pop: true
+  single:
+    - meta_scope: string.quoted.single.powershell
+    - match: "''"
+    - match: "'"
+      pop: true
+  here_double:
+    - meta_scope: string.quoted.double.heredoc.powershell
+    - match: '\$(?:\{[^}]*\}|[\w:]+)'
+      scope: variable.other.powershell
+    - match: '^"@'
+      pop: true
+  here_single:
+    - meta_scope: string.quoted.single.heredoc.powershell
+    - match: "^'@"
+      pop: true
+"#;
 
 /// Parsed blocks, by hash of language and text. Small and bounded: cleared
 /// when it grows past what a few long chats need.
@@ -50,9 +129,14 @@ pub fn warm_up() {
     std::thread::spawn(|| LazyLock::force(&SYNTAXES));
 }
 
+/// Whether a grammar colours `lang` (`ps1`, `powershell`, `bat`…).
+pub fn knows(lang: &str) -> bool {
+    syntax(lang).is_some()
+}
+
 fn syntax(lang: &str) -> Option<&'static SyntaxReference> {
     let lang = lang.trim().to_ascii_lowercase();
-    if lang.is_empty() || lang == "text" || lang == "plaintext" {
+    if lang.is_empty() || matches!(lang.as_str(), "text" | "plaintext" | "txt" | "log") {
         return None;
     }
     let alias = match lang.as_str() {
@@ -65,12 +149,20 @@ fn syntax(lang: &str) -> Option<&'static SyntaxReference> {
         "md" => "markdown",
         "c++" => "cpp",
         "cs" | "c#" => "cs",
-        "ps1" | "pwsh" => "powershell",
+        "ps1" | "psm1" | "psd1" | "pwsh" => "powershell",
         other => other,
     };
     SYNTAXES
         .find_syntax_by_token(alias)
         .or_else(|| SYNTAXES.find_syntax_by_name(alias))
+        // The extension itself (`ps1`), and the grammar's name in any case ("PowerShell").
+        .or_else(|| SYNTAXES.find_syntax_by_token(&lang))
+        .or_else(|| {
+            SYNTAXES
+                .syntaxes()
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(alias))
+        })
 }
 
 /// What a scope stack means for colour: the innermost scope that says
@@ -261,5 +353,22 @@ mod tests {
     fn unknown_languages_stay_plain() {
         let runs = highlight("anything at all", "no-such-language");
         assert_eq!(runs.as_slice(), &[(0..15, Kind::Plain)]);
+    }
+}
+
+#[cfg(test)]
+mod powershell_tests {
+    use super::*;
+
+    #[test]
+    fn powershell_is_coloured() {
+        assert!(knows("ps1") && knows("powershell") && knows("psm1"));
+        assert!(!knows("txt"), "plain text has nothing to colour");
+        let code = "# draw it\n$app = New-Object -ComObject PowerPoint.Application\nif ($x -eq 3) { Write-Output \"done $x\" }";
+        let spans = highlight(code, "ps1");
+        let kinds: std::collections::HashSet<Kind> = spans.iter().map(|(_, k)| *k).collect();
+        for k in [Kind::Comment, Kind::Variable, Kind::Keyword, Kind::Str, Kind::Function, Kind::Operator] {
+            assert!(kinds.contains(&k), "{k:?} missing from {kinds:?}");
+        }
     }
 }

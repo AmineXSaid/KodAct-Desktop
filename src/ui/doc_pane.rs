@@ -219,6 +219,9 @@ pub fn render(
     let previewing_html = html && !source && !showing_changes;
     let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram && !html))
         && super::text_editor::editable(file)
+        // PowerShell and the other languages the editor can't colour read
+        // coloured instead (the source view below), not as grey text.
+        && !super::text_editor::colours_elsewhere(&file.name)
         && !showing_changes;
     let md_page_on = md && md_mode == crate::state::MdMode::Editing && !showing_changes;
     let full = fit.full;

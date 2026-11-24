@@ -48,6 +48,36 @@ def paper(t):
 
 # ---------- low-level Word parts ----------
 
+# The order Word's schema puts property children in: Word refuses a file
+# ("unreadable content") whose children are out of order.
+ORDER = {
+    "tblPr": ["tblStyle", "tblpPr", "tblOverlap", "bidiVisual", "tblStyleRowBandSize", "tblStyleColBandSize",
+              "tblW", "jc", "tblCellSpacing", "tblInd", "tblBorders", "shd", "tblLayout", "tblCellMar", "tblLook",
+              "tblCaption", "tblDescription"],
+    "tcPr": ["cnfStyle", "tcW", "gridSpan", "hMerge", "vMerge", "tcBorders", "shd", "noWrap", "tcMar",
+             "textDirection", "tcFitText", "vAlign", "hideMark"],
+    "trPr": ["cnfStyle", "divId", "gridBefore", "gridAfter", "wBefore", "wAfter", "cantSplit", "trHeight",
+             "tblHeader", "tblCellSpacing", "jc", "hidden"],
+}
+
+
+def put(parent, el):
+    """Put `el` in `parent` (a tblPr, tcPr or trPr) where the schema wants it,
+    replacing one of the same kind."""
+    kind = parent.tag.split("}")[1]
+    name = el.tag.split("}")[1]
+    for old in parent.findall(el.tag):
+        parent.remove(old)
+    order = ORDER[kind]
+    at = order.index(name)
+    for i, child in enumerate(list(parent)):
+        cname = child.tag.split("}")[1]
+        if cname in order and order.index(cname) > at:
+            child.addprevious(el)
+            return el
+    parent.append(el)
+    return el
+
 def _fonts(run_or_style_font, name):
     """Set a font for every script (Word otherwise keeps Calibri for some)."""
     run_or_style_font.name = name
@@ -57,7 +87,7 @@ def _fonts(run_or_style_font, name):
         fonts = rpr.find(qn("w:rFonts"))
         if fonts is None:
             fonts = OxmlElement("w:rFonts")
-            rpr.append(fonts)
+            rpr.insert(0, fonts)
         for k in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
             fonts.set(qn(k), name)
 
@@ -68,7 +98,7 @@ def _style_fonts(style, name):
     fonts = rpr.find(qn("w:rFonts"))
     if fonts is None:
         fonts = OxmlElement("w:rFonts")
-        rpr.append(fonts)
+        rpr.insert(0, fonts)
     for k in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
         fonts.set(qn(k), name)
     for k in ("w:asciiTheme", "w:hAnsiTheme", "w:cstheme", "w:eastAsiaTheme"):
@@ -77,14 +107,11 @@ def _style_fonts(style, name):
 
 
 def shade(cell, fill):
-    tcpr = cell._tc.get_or_add_tcPr()
-    for old in tcpr.findall(qn("w:shd")):
-        tcpr.remove(old)
     shd = OxmlElement("w:shd")
     shd.set(qn("w:val"), "clear")
     shd.set(qn("w:color"), "auto")
     shd.set(qn("w:fill"), fill)
-    tcpr.append(shd)
+    put(cell._tc.get_or_add_tcPr(), shd)
 
 
 def borders(cell, **sides):
@@ -92,8 +119,7 @@ def borders(cell, **sides):
     tcpr = cell._tc.get_or_add_tcPr()
     b = tcpr.find(qn("w:tcBorders"))
     if b is None:
-        b = OxmlElement("w:tcBorders")
-        tcpr.append(b)
+        b = put(tcpr, OxmlElement("w:tcBorders"))
     for side in ("top", "left", "bottom", "right"):
         if side not in sides:
             continue
@@ -110,35 +136,53 @@ def borders(cell, **sides):
             el.set(qn("w:space"), "0")
             el.set(qn("w:color"), color)
         b.append(el)
+    # Sides in the schema's order, whatever order they were set in.
+    rank = {n: i for i, n in enumerate(("top", "left", "start", "bottom", "right", "end", "insideH", "insideV"))}
+    for el in sorted(b, key=lambda e: rank.get(e.tag.split("}")[1], 99)):
+        b.append(el)
 
 
 def no_borders(table):
-    tblpr = table._tbl.tblPr
-    for old in tblpr.findall(qn("w:tblBorders")):
-        tblpr.remove(old)
     b = OxmlElement("w:tblBorders")
     for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
         el = OxmlElement(f"w:{side}")
         el.set(qn("w:val"), "nil")
         b.append(el)
-    tblpr.append(b)
+    put(table._tbl.tblPr, b)
 
 
 def cell_margins(table, top=80, bottom=80, left=140, right=140):
-    tblpr = table._tbl.tblPr
     m = OxmlElement("w:tblCellMar")
     for side, v in (("top", top), ("left", left), ("bottom", bottom), ("right", right)):
         el = OxmlElement(f"w:{side}")
         el.set(qn("w:w"), str(v))
         el.set(qn("w:type"), "dxa")
         m.append(el)
-    tblpr.append(m)
+    put(table._tbl.tblPr, m)
+
+
+def col_widths(table, inches):
+    """Fixed column widths: Word otherwise spreads columns evenly."""
+    table.autofit = False
+    layout = OxmlElement("w:tblLayout")
+    layout.set(qn("w:type"), "fixed")
+    put(table._tbl.tblPr, layout)
+    grid = table._tbl.tblGrid
+    for gc, w in zip(grid.findall(qn("w:gridCol")), inches):
+        gc.set(qn("w:w"), str(int(w * 1440)))
+    for row in table.rows:
+        for cell, w in zip(row.cells, inches):
+            cell.width = Inches(w)
+
+
+def row_height(row, inches):
+    from docx.enum.table import WD_ROW_HEIGHT_RULE
+    row.height = Inches(inches)
+    row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
 
 
 def keep_row_together(row):
-    trpr = row._tr.get_or_add_trPr()
-    el = OxmlElement("w:cantSplit")
-    trpr.append(el)
+    put(row._tr.get_or_add_trPr(), OxmlElement("w:cantSplit"))
 
 
 def run(p, words, t, size=None, color=None, bold=None, italic=None, font=None):
@@ -261,11 +305,13 @@ def cover(doc, t, title, subtitle=None, tag=None):
     # A strip of the theme's colours under the band.
     strip = doc.add_table(rows=1, cols=len(a))
     no_borders(strip)
+    cell_margins(strip, 0, 0, 0, 0)
+    row_height(strip.rows[0], 0.07)
     for i, col in enumerate(a):
         shade(strip.cell(0, i), col)
         sp = strip.cell(0, i).paragraphs[0]
-        spacing(sp, 0, 0)
-        sp.add_run().font.size = Pt(3)
+        spacing(sp, 0, 0, 1.0)
+        sp.add_run().font.size = Pt(1)
     doc.add_paragraph()
 
 
@@ -338,8 +384,7 @@ def _table(doc, t, spec):
         shade(c, a)
         run(c.paragraphs[0], name, t, size=10.5, color="FFFFFF", bold=True, font=t["head"])
     # The header row repeats on each page the table runs onto.
-    trpr = tbl.rows[0]._tr.get_or_add_trPr()
-    trpr.append(OxmlElement("w:tblHeader"))
+    put(tbl.rows[0]._tr.get_or_add_trPr(), OxmlElement("w:tblHeader"))
     for ri, row in enumerate(rows, start=1):
         if len(row) != len(cols):
             raise SystemExit(f"row {ri} has {len(row)} cells for {len(cols)} columns")
@@ -460,6 +505,7 @@ def _steps(doc, t, spec):
         borders(n, bottom=("single", 24, "FFFFFF"))
         borders(c, bottom=("single", 24, "FFFFFF"))
         keep_row_together(tbl.rows[i])
+    col_widths(tbl, [0.6, 5.9])
     _caption(doc, t, spec)
 
 
@@ -483,6 +529,7 @@ def _timeline(doc, t, spec):
         run(q, "● ", t, size=11, color=col)
         run(q, what.strip(), t, color=t["ink"])
         keep_row_together(tbl.rows[i])
+    col_widths(tbl, [1.3, 5.2])
     _caption(doc, t, spec)
 
 

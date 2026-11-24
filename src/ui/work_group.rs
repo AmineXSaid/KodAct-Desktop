@@ -358,7 +358,7 @@ fn render_step_row(blocks: &[Block], i: usize, cx: &ItemContext, t: &Theme) -> O
                     .flex()
                     .flex_col()
                     .child(message::tool_header(c, i, blocks, cx, t))
-                    .when(!is_agent, |d| d.children(message::tool_body(c, i, cx, t)))
+                    .when(!is_agent, |d| d.children(message::tool_body(c, i, blocks, cx, t)))
                     .children(answer.map(|p| message::approval_line(&blocks[p], cx, t))),
                 i,
                 cx,

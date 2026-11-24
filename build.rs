@@ -14,6 +14,11 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         .collect();
     entries.sort();
     for p in entries {
+        // Python's caches (from running the skill's tests) are not the plugin.
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if name == "__pycache__" || name.ends_with(".pyc") || name.ends_with(".part") {
+            continue;
+        }
         if p.is_dir() {
             walk(&p, out);
         } else {

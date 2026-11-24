@@ -10,7 +10,9 @@
 //!
 //! Two looks: `Chat` for replies, and `Document` for a file opened in the
 //! side panel (`doc_pane.rs`): a larger reading size, more leading, and the
-//! title in the display serif. Both draw tables and task lists.
+//! title in the display serif. Both draw tables and task lists, and
+//! GitHub's callouts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`,
+//! `[!CAUTION]`) as tinted boxes with their kind named.
 
 use gpui::{
     canvas, div, fill, font, point, prelude::*, px, relative, size, AnyElement, App, Bounds,
@@ -50,12 +52,69 @@ enum Block {
         code: String,
     },
     Quote(Vec<Span>),
+    /// A paragraph of a callout; `first` carries its title row.
+    Alert {
+        kind: Alert,
+        first: bool,
+        spans: Vec<Span>,
+    },
     Rule,
     Table {
         align: Vec<Alignment>,
         head: Vec<Vec<Span>>,
         rows: Vec<Vec<Vec<Span>>>,
     },
+}
+
+/// GitHub's callout kinds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Alert {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
+impl Alert {
+    fn from_kind(k: pulldown_cmark::BlockQuoteKind) -> Alert {
+        use pulldown_cmark::BlockQuoteKind as K;
+        match k {
+            K::Note => Alert::Note,
+            K::Tip => Alert::Tip,
+            K::Important => Alert::Important,
+            K::Warning => Alert::Warning,
+            K::Caution => Alert::Caution,
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Alert::Note => "Note",
+            Alert::Tip => "Tip",
+            Alert::Important => "Important",
+            Alert::Warning => "Warning",
+            Alert::Caution => "Caution",
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            Alert::Note | Alert::Important => "icons/info.svg",
+            Alert::Tip => "icons/lightbulb.svg",
+            Alert::Warning | Alert::Caution => "icons/triangle-alert.svg",
+        }
+    }
+
+    /// Its colour and tint, from the theme's tokens.
+    fn colors(self, t: &Theme) -> (gpui::Hsla, gpui::Hsla) {
+        match self {
+            Alert::Note | Alert::Important => (t.colors.primary, t.colors.primary.opacity(0.08)),
+            Alert::Tip => (t.extra.success, t.extra.success_tint),
+            Alert::Warning => (t.extra.warning, t.extra.warning_tint),
+            Alert::Caution => (t.extra.danger, t.extra.danger_tint),
+        }
+    }
 }
 
 /// How a piece of markdown is drawn.
@@ -201,6 +260,8 @@ fn parse(src: &str) -> Vec<Block> {
     let mut lists: Vec<Option<u64>> = vec![];
     let mut item_number: Option<Option<u64>> = None;
     let mut quote = 0usize;
+    // The callout being read, and whether its first paragraph is still to come.
+    let mut alert: Option<(Alert, bool)> = None;
     let mut code: Option<(String, String)> = None;
     let mut heading: Option<u8> = None;
     let mut table: Option<TableBuild> = None;
@@ -233,7 +294,10 @@ fn parse(src: &str) -> Vec<Block> {
     let src = fence_ascii_art(&src);
     for ev in Parser::new_ext(
         &src,
-        Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS,
+        Options::ENABLE_STRIKETHROUGH
+            | Options::ENABLE_TABLES
+            | Options::ENABLE_TASKLISTS
+            | Options::ENABLE_GFM,
     ) {
         let style = Span {
             text: String::new(),
@@ -351,12 +415,29 @@ fn parse(src: &str) -> Vec<Block> {
                     });
                 }
             }
-            Event::Start(Tag::BlockQuote(_)) => quote += 1,
-            Event::End(TagEnd::BlockQuote(_)) => quote = quote.saturating_sub(1),
+            Event::Start(Tag::BlockQuote(kind)) => {
+                quote += 1;
+                if let Some(k) = kind {
+                    alert = Some((Alert::from_kind(k), true));
+                }
+            }
+            Event::End(TagEnd::BlockQuote(kind)) => {
+                quote = quote.saturating_sub(1);
+                if kind.is_some() {
+                    alert = None;
+                }
+            }
             Event::Start(Tag::Paragraph) => {}
             Event::End(TagEnd::Paragraph) => {
                 if item_number.is_some() {
                     push(&mut spans, " ", style);
+                } else if let Some((kind, first)) = alert.as_mut() {
+                    out.push(Block::Alert {
+                        kind: *kind,
+                        first: *first,
+                        spans: std::mem::take(&mut spans),
+                    });
+                    *first = false;
                 } else if quote > 0 {
                     out.push(Block::Quote(std::mem::take(&mut spans)));
                 } else {
@@ -1027,6 +1108,36 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .pl(t.space.md)
                 .child(runs(id, &spans, t, FontWeight::NORMAL, prose))
                 .into_any_element(),
+            Block::Alert { kind, first, spans } => {
+                let (color, tint) = kind.colors(t);
+                let mut b = div()
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.xs)
+                    .border_l_2()
+                    .border_color(color)
+                    .bg(tint)
+                    .rounded_r(t.radius.button)
+                    .px(t.space.md)
+                    .py(t.space.sm);
+                if first {
+                    b = b.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(t.space.xs)
+                            .child(icon(kind.icon(), t.size.icon_sm, color))
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(color)
+                                    .child(kind.title()),
+                            ),
+                    );
+                }
+                b.child(runs(id, &spans, t, FontWeight::NORMAL, prose))
+                    .into_any_element()
+            }
             Block::Rule => crate::theme::rule(t).mx_0().into_any_element(),
             Block::Code { lang, code } => {
                 let key = format!("{}-{n}", copy.key);
@@ -1577,6 +1688,11 @@ mod tests {
             }
         );
         assert!(matches!(&b[7], Block::Quote(_)));
+        // GitHub's callouts become their own blocks; a plain quote stays a quote.
+        let a = parse("> [!WARNING]\n> Back up first.\n>\n> Then run it.\n\n> Just a quote.");
+        assert!(matches!(&a[0], Block::Alert { kind: Alert::Warning, first: true, .. }));
+        assert!(matches!(&a[1], Block::Alert { kind: Alert::Warning, first: false, .. }));
+        assert!(matches!(&a[2], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
     }
 
