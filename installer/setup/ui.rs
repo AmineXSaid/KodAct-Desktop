@@ -78,7 +78,9 @@ fn font() -> &'static str {
     }
 }
 
-const LOGO: &[u8] = include_bytes!("logo.png");
+/// KodAct's ./< mark, `assets/brand/kodact-mark-burgundy.svg` as it is, at twice its size
+/// (`rsvg-convert -w 560 -h 544 assets/brand/kodact-mark-burgundy.svg -o installer/setup/mark.png`).
+const LOGO: &[u8] = include_bytes!("mark.png");
 
 /// The few icons the setup draws (Lucide, ISC licence, from the app's own set).
 struct Icons;
@@ -495,12 +497,15 @@ impl Setup {
                     .items_center()
                     .pt(px(160.))
                     .child(
-                        img(self.logo.clone()).size(px(112.)).with_animation(
-                            "mark-in",
-                            Animation::new(Duration::from_millis(700))
-                                .with_easing(gpui::ease_out_quint()),
-                            |el, d| el.opacity(d),
-                        ),
+                        img(self.logo.clone())
+                            .w(px(140.))
+                            .h(px(136.))
+                            .with_animation(
+                                "mark-in",
+                                Animation::new(Duration::from_millis(700))
+                                    .with_easing(gpui::ease_out_quint()),
+                                |el, d| el.opacity(d),
+                            ),
                     )
                     .child(
                         div()
@@ -527,11 +532,10 @@ impl Setup {
                     .right(px(32.))
                     .bottom(px(28.))
                     .flex()
-                    .justify_between()
+                    .justify_center()
                     .text_size(px(12.))
                     .text_color(Ink::subtle())
-                    .child(version)
-                    .child("For you · no admin rights"),
+                    .child(version),
             )
     }
 
