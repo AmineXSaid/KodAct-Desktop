@@ -1059,7 +1059,7 @@ pub fn render(
                             full_t,
                             file,
                             header,
-                            body.child(office_editor),
+                            body.overflow_hidden().child(office_editor),
                             footer(),
                             fit.width,
                             t,

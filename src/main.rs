@@ -48,6 +48,7 @@ mod names;
 mod office;
 mod office_edit;
 mod office_render;
+mod pptx_edit;
 #[cfg(test)]
 mod palette_check;
 mod plugin;

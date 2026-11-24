@@ -1080,6 +1080,17 @@ pub enum ExplorerAction {
     Reveal,
 }
 
+/// A change to the deck in the panel (`AppState::deck_edit`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeckEdit {
+    Format {
+        slide: usize,
+        para: usize,
+        format: crate::pptx_edit::Format,
+    },
+    Slides(crate::pptx_edit::SlideOp),
+}
+
 /// How the side panel shows a Markdown file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MdMode {
@@ -2181,6 +2192,8 @@ pub struct AppState {
     pub md_jump: Option<usize>,
     /// The explorer's right-click menu: the row, and where the click was.
     pub explorer_menu: Option<(ExplorerItem, gpui::Point<gpui::Pixels>)>,
+    /// The slide the deck editor shows after a change to the deck.
+    pub deck_focus: Option<usize>,
     /// The plan version the Plan tab shows (from 0); None, the latest.
     pub plan_version: Option<usize>,
     /// The cells picked in a workbook in the panel (anchor, other end).
@@ -2611,6 +2624,7 @@ impl AppState {
             md_saved_at: None,
             md_jump: None,
             explorer_menu: None,
+            deck_focus: None,
             plan_version: None,
             doc_pick: None,
             doc_show_changes: false,
@@ -5949,6 +5963,74 @@ impl AppState {
             },
         }
         cx.notify();
+    }
+
+    /// Change the deck in the panel: a paragraph's format, or its slides.
+    /// Words typed and not saved go in first, so nothing is lost; the deck
+    /// is written to its file and its card (keeping its version), and the
+    /// pages are drawn again, showing the slide the change is on.
+    pub fn deck_edit(&mut self, edit: DeckEdit, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone() else { return };
+        let Some(bytes) = file.bytes.clone() else { return };
+        if file.office() != Some(crate::office::Kind::Pptx) {
+            return;
+        }
+        let words = std::mem::take(&mut self.doc_words);
+        let disk = self.doc_disk_path(&file);
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move {
+                    let typed = crate::office_edit::write_pptx_text(
+                        &bytes,
+                        &crate::ui::office_editor::pptx_edits(&words),
+                    )?;
+                    let (updated, show) = match edit {
+                        DeckEdit::Format { slide, para, format } => (
+                            crate::pptx_edit::format_para(&typed, slide, para, format)?,
+                            slide,
+                        ),
+                        DeckEdit::Slides(op) => crate::pptx_edit::slides(&typed, op)?,
+                    };
+                    if let Some(p) = disk {
+                        if let Some(parent) = p.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        std::fs::write(&p, &updated).map_err(|e| e.to_string())?;
+                    }
+                    Ok::<_, String>((updated, show))
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match result {
+                Ok((updated, show)) => {
+                    let new = FileRef {
+                        bytes: Some(std::sync::Arc::from(updated)),
+                        ..file.clone()
+                    };
+                    if let Some(chat) = s.current {
+                        if let Some(c) = s.chats.iter_mut().find(|c| c.id == chat) {
+                            let card = c.messages.iter_mut().rev().find_map(|m| match m {
+                                Message::Assistant { blocks } => {
+                                    blocks.iter_mut().rev().find_map(|b| match b {
+                                        Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                                        _ => None,
+                                    })
+                                }
+                                _ => None,
+                            });
+                            if let Some(f) = card {
+                                *f = new.clone();
+                            }
+                        }
+                    }
+                    s.doc_preview = None;
+                    s.deck_focus = Some(show);
+                    s.show_doc(new, cx);
+                    cx.notify();
+                }
+                Err(e) => s.show_toast(format!("Could not change the deck: {e}"), cx),
+            });
+        })
+        .detach();
     }
 
     /// Hold `anchor` for the comment box: the page editor's Comment.

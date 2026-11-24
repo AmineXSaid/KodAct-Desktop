@@ -22,6 +22,8 @@ use crate::theme::ActiveTheme;
 enum Item {
     Label(String),
     Field {
+        /// (slide, notes, paragraph); a Word file's slide is 0.
+        key: (usize, bool, usize),
         original: String,
         field: Entity<TextareaState>,
         heading: Option<u8>,
@@ -39,6 +41,11 @@ pub struct OfficeEditor {
     error: Option<String>,
     _subs: Vec<Subscription>,
     field_subs: Vec<Subscription>,
+    /// The field last typed in: (slide, notes, paragraph).
+    focused: Option<(usize, bool, usize)>,
+    /// The deck bar's text-size menu is open.
+    size_menu: bool,
+    scroll: gpui::ScrollHandle,
 }
 
 impl OfficeEditor {
@@ -51,6 +58,9 @@ impl OfficeEditor {
             error: None,
             _subs: subs,
             field_subs: vec![],
+            focused: None,
+            size_menu: false,
+            scroll: gpui::ScrollHandle::new(),
         }
     }
 
@@ -81,10 +91,14 @@ impl OfficeEditor {
         // Focus moves redraw the field's frame.
         let handle = gpui::Focusable::focus_handle(field.read(cx), cx);
         self.field_subs
-            .push(cx.on_focus_in(&handle, window, |_, _, cx| cx.notify()));
+            .push(cx.on_focus_in(&handle, window, move |this, _, cx| {
+                this.focused = Some(key);
+                cx.notify()
+            }));
         self.field_subs
             .push(cx.on_focus_out(&handle, window, |_, _, _, cx| cx.notify()));
         Item::Field {
+            key,
             original,
             field,
             heading: p.heading,
@@ -197,12 +211,27 @@ impl Render for OfficeEditor {
                 .child(e.clone())
                 .into_any_element();
         }
+        let deck = file.office() == Some(Kind::Pptx);
+        // After a change to the deck, the slide it is on.
+        let focus_slide = self.state.update(cx, |s, _| s.deck_focus.take());
+        let mut slide_at: Vec<usize> = vec![];
         let mut col = div()
-            .w_full()
-            .max_w(t.size.doc_measure)
+            .id("office-edit")
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll)
             .flex()
             .flex_col()
-            .gap(t.space.xs);
+            .items_center()
+            .gap(t.space.xs)
+            .px(t.space.xxl)
+            .pt(t.space.xl)
+            .pb(px(if deck { 120. } else { 64. }));
+        let children = std::cell::Cell::new(0usize);
+        let push = |col: gpui::Stateful<gpui::Div>, el: AnyElement| {
+            children.set(children.get() + 1);
+            col.child(div().w_full().max_w(t.size.doc_measure).child(el))
+        };
         // One field: set in the reading face at the document's size, framed
         // on hover and ringed while it is typed in.
         let field_view = |field: &Entity<TextareaState>,
@@ -263,9 +292,10 @@ impl Render for OfficeEditor {
                         .child(
                             Textarea::new(field)
                                 .appearance(false)
+                                .px_0()
+                                .py(px(2.))
                                 .font_family(t.font_reading.clone())
-                                .text_size(size)
-                                .line_height(relative(t.size.line_height_doc)),
+                                .text_size(size),
                         ),
                 )
                 .into_any_element()
@@ -275,13 +305,18 @@ impl Render for OfficeEditor {
         while i < items.len() {
             match items[i].1 {
                 Item::Label(text) => {
-                    col = col.child(
+                    if text.starts_with("Slide ") {
+                        slide_at.push(children.get());
+                    }
+                    col = push(
+                        col,
                         div()
                             .pt(t.space.lg)
                             .text_size(t.text.caption)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(t.colors.text_muted)
-                            .child(text.clone()),
+                            .child(text.clone())
+                            .into_any_element(),
                     );
                     i += 1;
                 }
@@ -340,7 +375,7 @@ impl Render for OfficeEditor {
                         }
                         grid = grid.child(row);
                     }
-                    col = col.child(grid);
+                    col = push(col, grid.into_any_element());
                 }
                 Item::Field {
                     field,
@@ -348,18 +383,191 @@ impl Render for OfficeEditor {
                     list,
                     ..
                 } => {
-                    col = col.child(field_view(field, *heading, *list, window, cx));
+                    let el = field_view(field, *heading, *list, window, cx);
+                    col = push(col, el);
                     i += 1;
                 }
             }
         }
+        if let Some(at) = focus_slide.and_then(|n| slide_at.get(n)) {
+            self.scroll.scroll_to_item(*at);
+        }
+        let bar = deck.then(|| self.deck_bar(&t, cx));
         div()
-            .flex()
-            .justify_center()
-            .px(t.space.xxl)
-            .pt(t.space.xl)
-            .pb(t.space.xxl * 2.)
+            .size_full()
+            .relative()
             .child(col)
+            .children(bar)
             .into_any_element()
+    }
+}
+
+/// The text sizes the deck bar offers: name and points.
+const SIZES: &[(&str, u32)] = &[("Title", 40), ("Heading", 28), ("Subheading", 22), ("Body", 18), ("Small", 14)];
+
+impl OfficeEditor {
+    /// The floating bar over a deck's words: the selected text box's size,
+    /// bold, italic and bullets; a new slide, duplicate, delete, move up
+    /// and down; and Comment.
+    fn deck_bar(&mut self, t: &crate::theme::Theme, cx: &mut Context<Self>) -> AnyElement {
+        use crate::pptx_edit::{Format, SlideOp};
+        use crate::state::DeckEdit;
+        let slide = self.focused.map_or(0, |k| k.0);
+        let para = self.focused.filter(|k| !k.1).map(|k| k.2);
+        let tool = |id: &'static str, path: &'static str, tip: &'static str| {
+            super::button::Button::icon(id, path, tip).compact()
+        };
+        let sep = || div().w(px(1.)).h(px(18.)).mx(px(2.)).bg(t.colors.border);
+        let me = cx.entity();
+        let fmt = |f: Format| {
+            let me = me.clone();
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| me.update(cx, |this, cx| {
+                let Some((slide, false, para)) = this.focused else {
+                    this.state.update(cx, |s, cx| {
+                        s.show_toast("Click into a slide's text box first.", cx)
+                    });
+                    return;
+                };
+                this.size_menu = false;
+                this.state.update(cx, |s, cx| {
+                    s.deck_edit(DeckEdit::Format { slide, para, format: f }, cx)
+                });
+            })
+        };
+        let op = |o: SlideOp| {
+            let me = me.clone();
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                me.update(cx, |this, cx| {
+                    this.state.update(cx, |s, cx| s.deck_edit(DeckEdit::Slides(o), cx))
+                })
+            }
+        };
+        let size_label = "Text size";
+        let bar = div()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .p(px(4.))
+            .rounded(t.radius.pill)
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .shadow(t.elevation_popover())
+            .child(
+                div()
+                    .id("deck-size")
+                    .h(px(28.))
+                    .px(t.space.sm)
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .rounded(t.radius.pill)
+                    .cursor_pointer()
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(if para.is_some() { t.colors.text } else { t.colors.text_subtle })
+                    .hover(|s| s.bg(t.colors.hover))
+                    .when(self.size_menu, |d| d.bg(t.colors.hover))
+                    .child(size_label)
+                    .child(super::icon("icons/chevron-down.svg", px(12.), t.colors.text_muted))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.size_menu = !this.size_menu;
+                        cx.notify();
+                    })),
+            )
+            .child(tool("deck-bold", "icons/bold.svg", "Bold").on_click(fmt(Format::Bold)))
+            .child(tool("deck-italic", "icons/italic.svg", "Italic").on_click(fmt(Format::Italic)))
+            .child(tool("deck-bullets", "icons/list.svg", "Bullets").on_click(fmt(Format::Bullets)))
+            .child(sep())
+            .child(tool("deck-new", "icons/plus.svg", "New slide after this one").on_click(op(SlideOp::New(slide))))
+            .child(
+                tool("deck-dup", "icons/copy-plus.svg", "Duplicate slide")
+                    .on_click(op(SlideOp::Duplicate(slide))),
+            )
+            .child(tool("deck-del", "icons/trash-2.svg", "Delete slide").on_click(op(SlideOp::Delete(slide))))
+            .child(
+                tool("deck-up", "icons/arrow-up.svg", "Move slide up")
+                    .disabled(slide == 0)
+                    .on_click(op(SlideOp::Move(slide, -1))),
+            )
+            .child(tool("deck-down", "icons/arrow-down.svg", "Move slide down").on_click(op(SlideOp::Move(slide, 1))))
+            .child(sep())
+            .child(tool("deck-comment", "icons/message-square-plus.svg", "Comment").on_click(cx.listener(
+                move |this, _, _, cx| {
+                    let words = this.focused_text(cx);
+                    this.state.update(cx, |s, cx| {
+                        s.hold_doc_comment(
+                            crate::doc_versions::Anchor {
+                                place: format!("Slide {}", slide + 1),
+                                quote: words,
+                            },
+                            cx,
+                        )
+                    });
+                },
+            )));
+        let menu = self.size_menu.then(|| {
+            let mut m = div()
+                .w(px(200.))
+                .mb(t.space.xs)
+                .flex()
+                .flex_col()
+                .p(t.space.xs)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .rounded(t.radius.card)
+                .shadow(t.elevation_popover());
+            for (k, (name, pt)) in SIZES.iter().enumerate() {
+                m = m.child(
+                    div()
+                        .id(("deck-size-item", k))
+                        .h(t.size.menu_row)
+                        .px(t.space.sm)
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .rounded(t.radius.small)
+                        .cursor_pointer()
+                        .hover(|s| s.bg(t.colors.hover))
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text)
+                        .child(*name)
+                        .child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(format!("{pt} pt")),
+                        )
+                        .on_click(fmt(Format::Size(*pt))),
+                );
+            }
+            super::motion::unfold(m, "deck-size-menu", true, false, t)
+        });
+        div()
+            .absolute()
+            .bottom(t.space.lg)
+            .left_0()
+            .right_0()
+            .flex()
+            .flex_col()
+            .items_center()
+            .children(menu)
+            .child(bar)
+            .into_any_element()
+    }
+
+    /// The words of the field last typed in.
+    fn focused_text(&self, cx: &Context<Self>) -> String {
+        let Some(want) = self.focused else { return String::new() };
+        self.items
+            .iter()
+            .find_map(|it| match it {
+                Item::Field { field, key, .. } if *key == want => {
+                    Some(field.read(cx).value().to_string())
+                }
+                _ => None,
+            })
+            .unwrap_or_default()
     }
 }

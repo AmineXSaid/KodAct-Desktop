@@ -416,6 +416,16 @@ pub fn write_docx_text(bytes: &[u8], edits: &BTreeMap<usize, String>) -> Result<
 
 /// The slide parts of a deck in slide order, each with its notes part.
 fn slide_parts(zip: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Vec<(String, Option<String>)> {
+    // The deck's own order (a moved slide is in its new place); file
+    // numbers when it has no slide list.
+    let ordered: Vec<(usize, String)> = crate::pptx_edit::order_in(zip)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| {
+            let n = p.strip_prefix("ppt/slides/slide")?.strip_suffix(".xml")?.parse().ok()?;
+            Some((n, p))
+        })
+        .collect();
     let mut slides: Vec<(usize, String)> = zip
         .file_names()
         .filter_map(|n| {
@@ -428,6 +438,9 @@ fn slide_parts(zip: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Vec<(String, Option<
         })
         .collect();
     slides.sort();
+    if !ordered.is_empty() {
+        slides = ordered;
+    }
     slides
         .into_iter()
         .map(|(n, path)| {

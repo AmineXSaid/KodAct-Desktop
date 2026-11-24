@@ -28,6 +28,7 @@ icons!(
     "heading-3",
     "pilcrow",
     "square-code",
+    "trash-2",
     "panel-bottom",
     "zoom-in",
     "zoom-out",
