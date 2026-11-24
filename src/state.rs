@@ -8495,10 +8495,38 @@ fix everything under 8, render it again to check, then tell me the scores before
                             | "pptx"
                             | "pdf"
                     );
-                    match doc.then(|| file_card(name.clone(), ext, full.clone(), bytes.clone())) {
+                    match doc.then(|| file_card(name.clone(), ext.clone(), full.clone(), bytes.clone())) {
                         Some(Some(file)) => {
                             s.doc = None;
                             s.open_doc(file, cx);
+                        }
+                        // A picture, or a text or code file, reads in the panel.
+                        _ if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp") => {
+                            s.doc = None;
+                            s.open_doc(
+                                FileRef {
+                                    name: name.clone().into(),
+                                    path: Some(full.clone().into()),
+                                    content: "".into(),
+                                    bytes: Some(std::sync::Arc::from(bytes.into_boxed_slice())),
+                                },
+                                cx,
+                            );
+                        }
+                        _ if bytes.len() <= crate::ui::text_editor::MAX_BYTES
+                            && !bytes.contains(&0)
+                            && std::str::from_utf8(&bytes).is_ok() =>
+                        {
+                            s.doc = None;
+                            s.open_doc(
+                                FileRef {
+                                    name: name.clone().into(),
+                                    path: Some(full.clone().into()),
+                                    content: String::from_utf8_lossy(&bytes).to_string().into(),
+                                    bytes: None,
+                                },
+                                cx,
+                            );
                         }
                         _ if is_local => cx.open_with_system(std::path::Path::new(&full)),
                         _ => {

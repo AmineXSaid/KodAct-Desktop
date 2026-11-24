@@ -1034,6 +1034,17 @@ impl Render for Workspace {
             t.size.window_in_ms,
             window,
         );
+        // The Files tab's explorer lists the project: read it when it shows.
+        {
+            let s = self.state.read(cx);
+            if s.panel == Some(crate::state::PanelTab::Files)
+                && s.project_file_index().is_none()
+                && !s.completions_loading
+            {
+                let st = self.state.clone();
+                cx.defer(move |cx| st.update(cx, |s, cx| s.ensure_completions(cx)));
+            }
+        }
         // The title menu's name field opens filled with the file's name.
         {
             let (menu, name) = {
@@ -1148,6 +1159,14 @@ impl Render for Workspace {
                         agent_strip: &s.agent_strip,
                         agent_strip_at: &s.agent_strip_at,
                         agent_jumper_focus: &s.agent_jumper_focus,
+                        open_doc: s.doc.as_ref(),
+                        project_index: s.project_file_index(),
+                        project_name: s
+                            .project_dir
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "Project".into()),
+                        project_dir: &s.project_dir,
                     },
                     self.state.clone(),
                     &t,

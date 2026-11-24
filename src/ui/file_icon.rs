@@ -88,6 +88,16 @@ pub fn asset(name: &str, folder: bool, path: &str) -> &'static str {
         .unwrap_or("file-icons/file.svg")
 }
 
+/// An open folder's icon for the folder icon `path`, as VS Code shows it.
+pub fn open_folder(path: &'static str) -> &'static str {
+    let want = path.replace(".svg", "-open.svg");
+    super::file_icon_open::OPEN_SVGS
+        .iter()
+        .map(|(p, _)| *p)
+        .find(|p| *p == want)
+        .unwrap_or(path)
+}
+
 fn svg_path(icon: &str) -> Option<&'static str> {
     SVGS.iter().map(|(p, _)| *p).find(|p| {
         p.strip_prefix("file-icons/")

@@ -41,6 +41,8 @@ pub mod env_editor;
 pub mod file_card;
 pub mod file_icon;
 pub mod file_icon_map;
+pub mod file_icon_open;
+pub mod explorer;
 pub mod file_mark;
 pub mod files_pane;
 pub mod find_bar;

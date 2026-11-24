@@ -201,6 +201,7 @@ impl AssetSource for Assets {
             // The @ list's full-colour file icons (`ui/file_icon.rs`).
             return Ok(crate::ui::file_icon_map::SVGS
                 .iter()
+                .chain(crate::ui::file_icon_open::OPEN_SVGS.iter())
                 .find(|(p, _)| *p == path)
                 .map(|(_, bytes)| Cow::Borrowed(*bytes)));
         }

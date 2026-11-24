@@ -201,6 +201,12 @@ pub struct View<'a> {
     pub agent_strip: &'a gpui::ScrollHandle,
     pub agent_strip_at: &'a std::cell::Cell<Option<usize>>,
     pub agent_jumper_focus: &'a std::cell::Cell<Option<usize>>,
+    /// The Files tab's explorer: the file open beside the chat, and the
+    /// project's index (None while read), name and folder.
+    pub open_doc: Option<&'a crate::state::FileRef>,
+    pub project_index: Option<std::sync::Arc<Vec<String>>>,
+    pub project_name: String,
+    pub project_dir: &'a std::path::Path,
 }
 
 /// The bar over a plan, as over a document in Claude's panel: what it is,
@@ -562,62 +568,19 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             v.ui_toggles,
             t,
         ),
-        PanelTab::Files if files.is_empty() => empty(
+        // The explorer: this chat's files in their folders, then the project.
+        PanelTab::Files => super::explorer::render(
+            super::explorer::View {
+                files,
+                open: v.open_doc,
+                toggles: v.ui_toggles,
+                index: v.project_index.clone(),
+                project: v.project_name.clone(),
+                project_dir: v.project_dir,
+            },
+            state.clone(),
             t,
-            "No files yet",
-            "Documents, spreadsheets, PDFs, decks and diagrams KodAct makes in this chat are listed here. Click one to read it in this panel.",
-            None,
         ),
-        PanelTab::Files => pad(div()).gap(t.space.xs).children(files.into_iter().enumerate().map(|(i, f)| {
-            let opener = state.clone();
-            let hover = t.colors.border.opacity(0.7);
-            let mark: AnyElement = match f.office() {
-                Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), v.scale),
-                None if f.is_diagram() => {
-                    icon("icons/network.svg", t.size.icon, t.colors.sky).into_any_element()
-                }
-                None => gpui::img(super::file_icon::asset(
-                    &f.name,
-                    false,
-                    f.path.as_deref().unwrap_or(&f.name),
-                ))
-                .flex_none()
-                .size(t.size.icon)
-                .into_any_element(),
-            };
-            div()
-                .id(("panel-file", i))
-                .flex()
-                .items_center()
-                .gap(t.space.md)
-                .h(t.size.row)
-                .px(t.space.md)
-                .rounded(t.radius.button)
-                .cursor_pointer()
-                .hover(move |s| s.bg(hover))
-                .child(div().flex_none().w(t.size.icon_lg).flex().justify_center().child(mark))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(t.text.body_sm)
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(t.colors.text_strong)
-                        .child(f.title()),
-                )
-                .child(
-                    div()
-                        .flex_none()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_muted)
-                        .child(f.kind()),
-                )
-                .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(f.clone(), cx)))
-        }))
-        .into_any_element(),
         PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
