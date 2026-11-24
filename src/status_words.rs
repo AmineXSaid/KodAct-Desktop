@@ -269,6 +269,27 @@ fn nudge(kind: &str, v: &Value) -> Option<String> {
                 missing.join(" and ")
             )
         }
+        "unpinned_installs" => {
+            let list: Vec<String> = v["packages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|p| {
+                    let name = p["name"].as_str()?;
+                    Some(match p["version"].as_str() {
+                        Some(ver) => format!("{name} {ver}"),
+                        None => name.to_string(),
+                    })
+                })
+                .collect();
+            if list.is_empty() {
+                return None;
+            }
+            format!(
+                "Nudge: {} installed with no version; KodAct was told its checks covered that version only.",
+                list.join(", ")
+            )
+        }
         "passing_snapshot" => format!(
             "Nudge: a version that passed its checks was saved ({}); KodAct was told it can go back to it.",
             str_or(v, "label", "a snapshot")
@@ -477,6 +498,8 @@ mod tests {
         assert_eq!(words("nudge", &json!({"kind": "clock", "used_s": 5})), None);
         let c = words("nudge", &json!({"kind": "constraints", "missing_files": ["out.txt"], "unrun_commands": [], "over_limit": []})).unwrap();
         assert_eq!(c, "Nudge: your request names files not made yet (out.txt). KodAct was asked to do it or say why not.");
+        let u = words("nudge", &json!({"kind": "unpinned_installs", "packages": [{"name": "transformers", "version": "5.24.0"}]})).unwrap();
+        assert_eq!(u, "Nudge: transformers 5.24.0 installed with no version; KodAct was told its checks covered that version only.");
         assert_eq!(words("api_retry", &json!({"attempt": 1})), None);
     }
 

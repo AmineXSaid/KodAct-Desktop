@@ -1,10 +1,17 @@
 [package]
 name = "kodact-desktop"
 version = "0.1.0"
+default-run = "kodact-desktop"
 edition = "2021"
 description = "KodAct desktop: the desktop app for the KodAct CLI, in GPUI."
 license = "UNLICENSED"
 publish = false
+
+# KodAct's setup (installer/setup): its own window; `installer/build.sh` appends what it
+# installs to the .exe. The app itself is src/main.rs.
+[[bin]]
+name = "kodact-setup"
+path = "installer/setup/main.rs"
 
 [dependencies]
 # GPUI Kit (Apache-2.0) re-exports its pinned GPUI snapshot (`gpui-pre` 0.3.8)
