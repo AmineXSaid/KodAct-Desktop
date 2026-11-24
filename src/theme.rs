@@ -807,11 +807,12 @@ impl CodeColors {
                 number: c(0xd99530),
                 comment: c(0x8a8888),
                 function: c(0x63a6e9),
-                type_: c(0x52b87a),
+                // Lime, the CLI's green, where Pajamas has green.
+                type_: c(0xc6ff3d),
                 variable: c(0xcbbbf2),
                 operator: c(0xf6806d),
                 meta: c(0x8a8888),
-                added: c(0x52b87a),
+                added: c(0xc6ff3d),
                 removed: c(0xf6806d),
             }
         } else {
@@ -821,11 +822,12 @@ impl CodeColors {
                 number: c(0xab6100),
                 comment: c(0x747273),
                 function: c(0x2f68b4),
-                type_: c(0x2f7549),
+                // The CLI's lime on paper: a deep olive that holds contrast.
+                type_: c(0x4a7200),
                 variable: c(0x7b58cf),
                 operator: c(0xc02f12),
                 meta: c(0x747273),
-                added: c(0x2f7549),
+                added: c(0x4a7200),
                 removed: c(0xc02f12),
             }
         }

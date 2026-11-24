@@ -384,7 +384,76 @@ pub fn sync_component_theme(cx: &mut App) {
         c.scrollbar = t.extra.stage.opacity(0.);
         c.scrollbar_thumb = t.colors.text_subtle.opacity(0.35);
         c.scrollbar_thumb_hover = t.colors.text_subtle.opacity(0.6);
+        c.highlight_theme = std::sync::Arc::new(highlight_theme(&t));
     });
+}
+
+/// The code editor's colours (files in the side panel, the composer): GitLab
+/// Pajamas' syntax hues from `theme.code`, lime for its greens, on the
+/// panel's own background so the editor sits flush in it.
+fn highlight_theme(t: &crate::theme::Theme) -> gpui::component::highlighter::HighlightTheme {
+    let hex = |c: gpui::Hsla| {
+        let c = gpui::Rgba::from(c);
+        let b = |v: f32| (v.clamp(0., 1.) * 255.).round() as u8;
+        format!("#{:02x}{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b), b(c.a))
+    };
+    let k = &t.code;
+    let plain = |c| serde_json::json!({ "color": hex(c) });
+    let italic = |c| serde_json::json!({ "color": hex(c), "font_style": "italic" });
+    let bold = |c| serde_json::json!({ "color": hex(c), "font_weight": 600 });
+    let syntax = serde_json::json!({
+        "attribute": plain(k.number),
+        "boolean": plain(k.number),
+        "comment": italic(k.comment),
+        "comment.doc": italic(k.comment),
+        "constant": plain(k.number),
+        "constructor": plain(k.function),
+        "embedded": plain(t.colors.text),
+        "emphasis": italic(t.colors.text),
+        "emphasis.strong": bold(t.colors.text),
+        "enum": plain(k.type_),
+        "function": plain(k.function),
+        "keyword": plain(k.keyword),
+        "label": plain(k.variable),
+        "link_text": plain(k.string),
+        "link_uri": plain(k.function),
+        "number": plain(k.number),
+        "operator": plain(k.operator),
+        "preproc": plain(k.meta),
+        "property": plain(k.variable),
+        "punctuation": plain(t.colors.text_muted),
+        "punctuation.bracket": plain(t.colors.text_muted),
+        "punctuation.delimiter": plain(t.colors.text_muted),
+        "punctuation.list_marker": plain(k.operator),
+        "punctuation.special": plain(k.operator),
+        "string": plain(k.string),
+        "string.escape": plain(k.number),
+        "string.regex": plain(k.operator),
+        "string.special": plain(k.string),
+        "string.special.symbol": plain(k.number),
+        "tag": plain(k.keyword),
+        "tag.doctype": plain(k.meta),
+        "text.literal": plain(k.string),
+        "title": bold(k.function),
+        "type": plain(k.type_),
+        "variable": plain(t.colors.text),
+        "variable.special": plain(k.variable),
+        "variant": plain(k.type_),
+    });
+    let theme = serde_json::json!({
+        "name": "KodAct",
+        "appearance": if t.is_dark { "dark" } else { "light" },
+        "style": {
+            "editor.background": hex(t.extra.panel),
+            "editor.foreground": hex(t.colors.text),
+            "editor.active_line.background": hex(t.colors.hover),
+            "editor.line_number": hex(t.colors.text_subtle),
+            "editor.active_line_number": hex(t.colors.text),
+            "editor.invisible": hex(t.colors.text_subtle),
+            "syntax": syntax,
+        }
+    });
+    serde_json::from_value(theme).expect("the code theme's JSON matches the kit's schema")
 }
 
 /// A scroll box inside something that scrolls (a list in Settings, a
@@ -521,5 +590,19 @@ mod ui_helper_tests {
         let t = truncate_lines(&big, 10);
         assert!(t.truncated);
         assert_eq!(t.shown.len(), 800);
+    }
+}
+
+#[cfg(test)]
+mod code_theme_tests {
+    /// The code theme parses in both modes, and its types are lime.
+    #[test]
+    fn code_theme_parses_with_lime_types() {
+        for dark in [false, true] {
+            let t = crate::theme::Theme::of(crate::theme::Look::Calm, dark);
+            let h = super::highlight_theme(&t);
+            let ty = h.style("type").and_then(|s| s.color).unwrap();
+            assert_eq!(ty, t.code.type_);
+        }
     }
 }
