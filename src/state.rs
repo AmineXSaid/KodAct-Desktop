@@ -1060,6 +1060,26 @@ pub enum DocMenu {
     Format,
 }
 
+/// A row of the Files tab's explorer, right-clicked.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExplorerItem {
+    /// A file KodAct wrote in this chat.
+    Chat(FileRef),
+    /// A file or folder of the project, by its project-relative path.
+    Project { rel: String, dir: bool },
+}
+
+/// What the explorer's right-click menu does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExplorerAction {
+    Open,
+    Download,
+    Attach,
+    CopyPath,
+    CopyRelative,
+    Reveal,
+}
+
 /// How the side panel shows a Markdown file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MdMode {
@@ -2159,6 +2179,8 @@ pub struct AppState {
     pub md_saved_at: Option<std::time::Instant>,
     /// The page editor scrolls to this block (the outline's pick).
     pub md_jump: Option<usize>,
+    /// The explorer's right-click menu: the row, and where the click was.
+    pub explorer_menu: Option<(ExplorerItem, gpui::Point<gpui::Pixels>)>,
     /// The plan version the Plan tab shows (from 0); None, the latest.
     pub plan_version: Option<usize>,
     /// The cells picked in a workbook in the panel (anchor, other end).
@@ -2588,6 +2610,7 @@ impl AppState {
             doc_comment_hold: None,
             md_saved_at: None,
             md_jump: None,
+            explorer_menu: None,
             plan_version: None,
             doc_pick: None,
             doc_show_changes: false,
@@ -5812,6 +5835,120 @@ impl AppState {
         self.doc = Some(renamed);
         self.doc_menu = None;
         self.show_toast(format!("Renamed to {name}"), cx);
+    }
+
+    pub fn open_explorer_menu(
+        &mut self,
+        item: ExplorerItem,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        self.explorer_menu = Some((item, at));
+        cx.notify();
+    }
+
+    pub fn close_explorer_menu(&mut self, cx: &mut Context<Self>) {
+        if self.explorer_menu.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// Where an explorer row is on this computer, and its path in the project.
+    fn explorer_paths(&self, item: &ExplorerItem) -> (Option<std::path::PathBuf>, String) {
+        match item {
+            ExplorerItem::Chat(f) => {
+                let disk = self.doc_disk_path(f);
+                let rel = disk
+                    .as_ref()
+                    .and_then(|p| p.strip_prefix(&self.project_dir).ok())
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                    .or_else(|| f.path.as_ref().map(|p| p.to_string()))
+                    .unwrap_or_else(|| f.name.to_string());
+                (disk, rel)
+            }
+            ExplorerItem::Project { rel, .. } => (
+                (self.current_remote().is_none()).then(|| self.project_dir.join(rel)),
+                rel.clone(),
+            ),
+        }
+    }
+
+    /// Do `act` to the right-clicked row.
+    pub fn explorer_action(&mut self, act: ExplorerAction, cx: &mut Context<Self>) {
+        let Some((item, _)) = self.explorer_menu.take() else { return };
+        let (disk, rel) = self.explorer_paths(&item);
+        match act {
+            ExplorerAction::Open => match &item {
+                ExplorerItem::Chat(f) => self.open_doc(f.clone(), cx),
+                ExplorerItem::Project { rel, dir: false } => self.open_project_file(rel.clone(), cx),
+                ExplorerItem::Project { .. } => {}
+            },
+            ExplorerAction::Download => match &item {
+                ExplorerItem::Chat(f) => self.download(f, cx),
+                ExplorerItem::Project { dir: false, .. } => {
+                    let Some(p) = disk else {
+                        return self.show_toast("This file is on another computer.", cx);
+                    };
+                    let Some(dir) = crate::downloads::dir() else {
+                        return self.show_toast("Could not find your Downloads folder.", cx);
+                    };
+                    let name = p
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    cx.spawn(async move |this, cx| {
+                        let saved = cx
+                            .background_spawn(async move {
+                                let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
+                                crate::downloads::save(&dir, &name, &bytes).map_err(|e| e.to_string())
+                            })
+                            .await;
+                        let _ = this.update(cx, |s, cx| match saved {
+                            Ok(path) => s.show_toast(
+                                format!(
+                                    "Saved to Downloads as {}",
+                                    path.file_name()
+                                        .map(|n| n.to_string_lossy().into_owned())
+                                        .unwrap_or_default()
+                                ),
+                                cx,
+                            ),
+                            Err(e) => s.show_toast(format!("Could not save it: {e}"), cx),
+                        });
+                    })
+                    .detach();
+                }
+                ExplorerItem::Project { .. } => {}
+            },
+            ExplorerAction::Attach => match (&item, disk) {
+                (_, Some(p)) if p.exists() => self.add_attachment_paths(vec![p], cx),
+                (ExplorerItem::Chat(f), _) if f.bytes.is_none() => {
+                    self.attach_text(f.name.to_string(), f.content.to_string(), cx)
+                }
+                _ => self.show_toast("This file can't be attached from here.", cx),
+            },
+            ExplorerAction::CopyPath => {
+                let text = disk.map(|p| p.display().to_string()).unwrap_or(rel);
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                self.show_toast("Path copied.", cx);
+            }
+            ExplorerAction::CopyRelative => {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(rel));
+                self.show_toast("Relative path copied.", cx);
+            }
+            ExplorerAction::Reveal => match disk {
+                Some(p) => {
+                    let folder = if p.is_dir() {
+                        p
+                    } else {
+                        p.parent().map(|d| d.to_path_buf()).unwrap_or(p)
+                    };
+                    cx.open_with_system(&folder);
+                }
+                None => self.show_toast("This file is on another computer.", cx),
+            },
+        }
+        cx.notify();
     }
 
     /// Hold `anchor` for the comment box: the page editor's Comment.

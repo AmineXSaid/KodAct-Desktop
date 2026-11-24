@@ -1112,6 +1112,30 @@ impl Render for Workspace {
                 device: s.web_device,
                 edit_text: s.doc_edit.as_ref().map(|(_, t)| t.clone()),
                 md_mode: s.md_mode(),
+                crumbs: side_doc
+                    .as_ref()
+                    .and_then(|f| f.path.as_ref())
+                    .map(|p| {
+                        let p = std::path::Path::new(p.as_ref());
+                        let rel = p.strip_prefix(&s.project_dir).unwrap_or(p);
+                        let mut out: Vec<SharedString> = vec![];
+                        if !rel.is_absolute() {
+                            if let Some(n) = s.project_dir.file_name() {
+                                out.push(n.to_string_lossy().to_string().into());
+                            }
+                        }
+                        out.extend(
+                            rel.components()
+                                .filter_map(|c| match c {
+                                    std::path::Component::Normal(n) => {
+                                        Some(SharedString::from(n.to_string_lossy().to_string()))
+                                    }
+                                    _ => None,
+                                }),
+                        );
+                        out
+                    })
+                    .unwrap_or_default(),
                 md_saved: s
                     .md_saved_at
                     .is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(4)),
@@ -1167,6 +1191,7 @@ impl Render for Workspace {
                             .map(|n| n.to_string_lossy().to_string())
                             .unwrap_or_else(|| "Project".into()),
                         project_dir: &s.project_dir,
+                        explorer_menu: s.explorer_menu.as_ref(),
                     },
                     self.state.clone(),
                     &t,

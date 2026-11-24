@@ -181,6 +181,8 @@ pub struct View<'a> {
     pub index: Option<Arc<Vec<String>>>,
     pub project: String,
     pub project_dir: &'a std::path::Path,
+    /// The right-click menu: its row and where.
+    pub menu: Option<&'a (crate::state::ExplorerItem, gpui::Point<gpui::Pixels>)>,
 }
 
 pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
@@ -226,7 +228,99 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             }
         }
     }
-    col.into_any_element()
+    let menu = v.menu.map(|(item, at)| context_menu(item, *at, &state, t));
+    div()
+        .size_full()
+        .child(col)
+        .children(menu)
+        .into_any_element()
+}
+
+/// The right-click menu: Open, Download, Attach to chat; the paths; the
+/// folder it is in. A folder offers its paths and its place.
+fn context_menu(
+    item: &crate::state::ExplorerItem,
+    at: gpui::Point<gpui::Pixels>,
+    state: &Entity<AppState>,
+    t: &Theme,
+) -> AnyElement {
+    use crate::state::{ExplorerAction as A, ExplorerItem};
+    let folder = matches!(item, ExplorerItem::Project { dir: true, .. });
+    let reveal = if cfg!(windows) {
+        "Reveal in File Explorer"
+    } else if cfg!(target_os = "macos") {
+        "Reveal in Finder"
+    } else {
+        "Open containing folder"
+    };
+    let mut groups: Vec<Vec<(A, &'static str, &'static str, &'static str)>> = vec![];
+    if !folder {
+        groups.push(vec![
+            (A::Open, "icons/eye.svg", "Open", "Enter"),
+            (A::Download, "icons/download.svg", "Download", ""),
+            (A::Attach, "icons/paperclip.svg", "Attach to chat", ""),
+        ]);
+    }
+    groups.push(vec![
+        (A::CopyPath, "icons/copy.svg", "Copy path", ""),
+        (A::CopyRelative, "icons/copy.svg", "Copy relative path", ""),
+    ]);
+    groups.push(vec![(A::Reveal, "icons/folder-open.svg", reveal, "")]);
+    let mut menu = div()
+        .id("explorer-menu")
+        .w(px(232.))
+        .flex()
+        .flex_col()
+        .p(t.space.xs)
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(t.radius.card)
+        .shadow(t.elevation_popover())
+        .occlude();
+    for (g, group) in groups.into_iter().enumerate() {
+        if g > 0 {
+            menu = menu.child(div().h(px(1.)).my(t.space.xs).bg(t.colors.border));
+        }
+        for (act, path, label, keys) in group {
+            let st = state.clone();
+            menu = menu.child(
+                div()
+                    .id(SharedString::from(format!("explorer-act-{label}")))
+                    .h(t.size.menu_row)
+                    .px(t.space.sm)
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .rounded(t.radius.small)
+                    .cursor_pointer()
+                    .text_size(t.text.body_sm)
+                    .text_color(t.colors.text)
+                    .hover(|s| s.bg(t.colors.hover))
+                    .child(icon(path, t.size.icon_sm, t.colors.text_muted))
+                    .child(div().flex_1().child(label))
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child(keys),
+                    )
+                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.explorer_action(act, cx))),
+            );
+        }
+    }
+    let st = state.clone();
+    let menu = menu.on_mouse_down_out(move |_, _, cx| {
+        st.update(cx, |s, cx| s.close_explorer_menu(cx))
+    });
+    gpui::deferred(
+        gpui::anchored()
+            .position(at)
+            .snap_to_window_with_margin(px(8.))
+            .child(super::motion::unfold(menu, "explorer-menu", false, false, t)),
+    )
+    .with_priority(4)
+    .into_any_element()
 }
 
 /// A section's header: a chevron and its name in small capitals.
@@ -357,6 +451,27 @@ fn row(r: Row, state: &Entity<AppState>, t: &Theme) -> AnyElement {
                 .text_ellipsis()
                 .child(r.name),
         )
+        .on_mouse_down(gpui::MouseButton::Right, {
+            let st = state.clone();
+            let item = match (&target, chat) {
+                (Some(Target::Chat(f)), _) => Some(crate::state::ExplorerItem::Chat(f.clone())),
+                (Some(Target::Project(rel)), _) => Some(crate::state::ExplorerItem::Project {
+                    rel: rel.clone(),
+                    dir: false,
+                }),
+                (None, false) => Some(crate::state::ExplorerItem::Project {
+                    rel: path.clone(),
+                    dir: true,
+                }),
+                (None, true) => None,
+            };
+            move |ev, _, cx| {
+                cx.stop_propagation();
+                if let Some(item) = item.clone() {
+                    st.update(cx, |s, cx| s.open_explorer_menu(item, ev.position, cx));
+                }
+            }
+        })
         .on_click(move |_, _, cx| {
             st.update(cx, |s, cx| match (&folder, &target) {
                 (Some(_), _) if chat => s.toggle_ui(chat_folded(&path), None, cx),

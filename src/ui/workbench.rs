@@ -207,6 +207,7 @@ pub struct View<'a> {
     pub project_index: Option<std::sync::Arc<Vec<String>>>,
     pub project_name: String,
     pub project_dir: &'a std::path::Path,
+    pub explorer_menu: Option<&'a (crate::state::ExplorerItem, gpui::Point<gpui::Pixels>)>,
 }
 
 /// The bar over a plan, as over a document in Claude's panel: what it is,
@@ -577,6 +578,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 index: v.project_index.clone(),
                 project: v.project_name.clone(),
                 project_dir: v.project_dir,
+                menu: v.explorer_menu,
             },
             state.clone(),
             t,

@@ -78,6 +78,9 @@ pub struct Fit {
     pub md_mode: crate::state::MdMode,
     /// The page editor wrote the file a moment ago.
     pub md_saved: bool,
+    /// Where the file is, as VS Code's breadcrumbs: the project, its
+    /// folders, the file (empty when it has no place on disk).
+    pub crumbs: Vec<SharedString>,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -302,6 +305,7 @@ pub fn render(
         .into_any_element(),
     };
     let chip_state = state.clone();
+    let plain = office.is_none() && !md && !diagram && !html;
     let title_text = div()
         .min_w(px(48.))
         .flex_shrink(1.)
@@ -311,7 +315,9 @@ pub fn render(
         .text_size(t.text.body)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(t.colors.text_strong)
-        .child(file.title());
+        // Code, text and pictures by their file name, as an editor's tab;
+        // documents by their title.
+        .child(if plain { file.name.clone() } else { file.title() });
     // A Markdown file's title opens its menu: Rename, Versions.
     let md_tools = md && !fit.live;
     let title_el: AnyElement = if md_tools {
@@ -347,13 +353,15 @@ pub fn render(
         .gap(t.space.sm)
         .child(mark)
         .child(title_el)
-        .child(
-            div()
-                .flex_none()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_muted)
-                .child(file.kind()),
-        )
+        .when(!plain, |d| {
+            d.child(
+                div()
+                    .flex_none()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child(file.kind()),
+            )
+        })
         .when(total > 1, |d| {
             d.child(
                 div()
@@ -818,6 +826,7 @@ pub fn render(
         .flex()
         .flex_col()
         .child(row1)
+        .children(breadcrumbs(&fit.crumbs, file, t))
         .child(row2)
         .when(words_editable && (text_view || !has_pages), |d| {
             d.child(
@@ -1114,6 +1123,55 @@ pub fn render(
     };
 
     finish_at(&fit, full_t, file, header, body, footer(), fit.width, t)
+}
+
+/// Where the file is, under the title row, as VS Code's breadcrumbs: the
+/// project and folders quiet, the file last with its icon.
+fn breadcrumbs(crumbs: &[SharedString], file: &FileRef, t: &Theme) -> Option<AnyElement> {
+    if crumbs.len() < 2 {
+        return None;
+    }
+    let last = crumbs.len() - 1;
+    let mut row = div()
+        .flex_none()
+        .h(px(24.))
+        .px(t.space.md)
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .overflow_hidden()
+        .bg(t.extra.panel)
+        .border_b_1()
+        .border_color(t.colors.border)
+        .text_size(t.text.caption)
+        .text_color(t.colors.text_muted);
+    for (i, c) in crumbs.iter().enumerate() {
+        if i > 0 {
+            row = row.child(icon("icons/chevron-right.svg", px(12.), t.colors.text_subtle));
+        }
+        let seg = div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .whitespace_nowrap()
+            .when(i < last, |d| d.flex_shrink(1.).min_w(px(12.)).overflow_hidden().text_ellipsis())
+            .when(i == last, |d| {
+                d.flex_none()
+                    .text_color(t.colors.text)
+                    .child(
+                        gpui::img(super::file_icon::asset(
+                            &file.name,
+                            false,
+                            file.path.as_deref().unwrap_or(&file.name),
+                        ))
+                        .flex_none()
+                        .size(px(14.)),
+                    )
+            })
+            .child(c.clone());
+        row = row.child(seg);
+    }
+    Some(row.into_any_element())
 }
 
 /// The menu `m` of a Markdown file, under the title row.
