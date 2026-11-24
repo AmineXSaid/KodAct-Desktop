@@ -2059,7 +2059,99 @@ impl Settings {
             .update(cx, |s, cx| s.test_models(base, key, ids, cx));
     }
 
-    fn about(&self, t: &Theme) -> AnyElement {
+    /// The engine: which KodAct CLI new chats run, its version, and the way
+    /// to replace it with a newer `kodact.exe` without reinstalling the app.
+    fn engine_card(
+        &self,
+        cli: Option<std::path::PathBuf>,
+        info: Option<(std::path::PathBuf, Result<String, String>, bool)>,
+        t: &Theme,
+    ) -> AnyElement {
+        let (version, mine) = match &info {
+            Some((_, Ok(v), mine)) => (v.clone(), *mine),
+            Some((_, Err(e), mine)) => (format!("doesn't answer: {e}"), *mine),
+            None => ("…".to_string(), false),
+        };
+        let where_ = cli
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "KodAct CLI not found: put kodact.exe in the bin folder beside KodAct.exe, or replace it below".into());
+        let (replace, reset) = (self.state.clone(), self.state.clone());
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.sm)
+            .p(t.space.md)
+            .rounded(t.radius.card)
+            .border_1()
+            .border_color(t.colors.border)
+            .bg(t.colors.surface)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .child(
+                        div()
+                            .text_size(t.text.body_sm)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(t.colors.text_strong)
+                            .child("Engine"),
+                    )
+                    .child(
+                        div()
+                            .px(t.space.sm)
+                            .rounded(t.radius.pill)
+                            .bg(t.colors.hover)
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child(if mine { "Yours" } else { "Bundled" }),
+                    ),
+            )
+            .child(
+                div()
+                    .text_size(t.text.caption)
+                    .font_family(t.font_mono.clone())
+                    .text_color(t.colors.text)
+                    .child(version),
+            )
+            .child(
+                div()
+                    .text_size(t.text.caption)
+                    .font_family(t.font_mono.clone())
+                    .text_color(t.colors.text_muted)
+                    .child(where_),
+            )
+            .child(
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("A new KodAct CLI release? Pick its kodact.exe: new chats run it at once, no reinstall. Running chats keep theirs until they restart."),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(t.space.sm)
+                    .child(
+                        super::button::Button::ghost("engine-replace", "Replace engine…")
+                            .compact()
+                            .on_click(move |_, _, cx| replace.update(cx, |s, cx| s.replace_engine(cx))),
+                    )
+                    .when(mine, |d| {
+                        d.child(
+                            super::button::Button::ghost("engine-reset", "Use the bundled engine")
+                                .compact()
+                                .on_click(move |_, _, cx| reset.update(cx, |s, cx| s.reset_engine(cx))),
+                        )
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn about(
+        &self,
+        engine: Option<(std::path::PathBuf, Result<String, String>, bool)>,
+        t: &Theme,
+    ) -> AnyElement {
         let cli = crate::backend::find_cli();
         let row = |k: &str, v: String| {
             div()
@@ -2100,12 +2192,7 @@ impl Settings {
                             .child(format!("Version {}", env!("CARGO_PKG_VERSION"))),
                     ),
             )
-            .child(row(
-                "Engine",
-                cli.map(|p| p.display().to_string()).unwrap_or_else(|| {
-                    "KodAct CLI not found: put kodact.exe in the bin folder beside KodAct.exe".into()
-                }),
-            ))
+            .child(self.engine_card(cli, engine, t))
             .child(row(
                 "Config folder",
                 crate::profile::dir()
@@ -2239,7 +2326,14 @@ impl Render for Settings {
                 SettingsTab::Plugins => self.plugins.clone().into_any_element(),
                 SettingsTab::Profiles => self.profiles.clone().into_any_element(),
                 SettingsTab::Guide => super::guide::render(&t).into_any_element(),
-                SettingsTab::About => self.about(&t),
+                SettingsTab::About => {
+                    let engine = self.state.read(cx).engine_info.clone();
+                    if engine.is_none() {
+                        let st = self.state.clone();
+                        cx.defer(move |cx| st.update(cx, |s, cx| s.refresh_engine(cx)));
+                    }
+                    self.about(engine, &t)
+                }
             };
         let actions = (tab == SettingsTab::Models && self.form).then(|| self.form_actions(&t, cx));
         let close = div().absolute().top(px(8.)).right(px(8.)).child(

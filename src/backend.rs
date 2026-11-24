@@ -130,6 +130,10 @@ pub fn find_cli() -> Option<PathBuf> {
     {
         return Some(p);
     }
+    // An engine you put in from Settings → About, over the bundled one.
+    if let Some(p) = crate::engine::user_engine().filter(not_me) {
+        return Some(p);
+    }
     let name = if cfg!(windows) { "kodact.exe" } else { "kodact" };
     if let Some(dir) = std::env::current_exe()
         .ok()

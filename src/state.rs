@@ -2254,6 +2254,9 @@ pub struct AppState {
     pub deck_drag: Option<ShapeDrag>,
     /// The shape bar's fill menu is open.
     pub deck_fill_menu: bool,
+    /// The engine new chats run (`engine.rs`): its path, its version, and
+    /// whether it is one you put in (else the bundled one).
+    pub engine_info: Option<(std::path::PathBuf, Result<String, String>, bool)>,
     /// The plan version the Plan tab shows (from 0); None, the latest.
     pub plan_version: Option<usize>,
     /// The cells picked in a workbook in the panel (anchor, other end).
@@ -2691,6 +2694,7 @@ impl AppState {
             deck_sel: None,
             deck_drag: None,
             deck_fill_menu: false,
+            engine_info: None,
             plan_version: None,
             doc_pick: None,
             doc_show_changes: false,
@@ -4006,10 +4010,15 @@ impl AppState {
     }
 
     fn chat_project_dir(&self, id: usize) -> Option<std::path::PathBuf> {
-        let project = self.chats.iter().find(|c| c.id == id)?.project;
-        self.project(project)
-            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
-            .map(|p| p.path.clone())
+        let chat = self.chats.iter().find(|c| c.id == id)?;
+        let p = self
+            .project(chat.project)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())?;
+        Some(if p.scratch {
+            chat_folder(&p.path, &chat.session, chat.resumable)
+        } else {
+            p.path.clone()
+        })
     }
 
     /// Read what every chat in project `id` gets (off the UI thread).
@@ -4379,7 +4388,25 @@ impl AppState {
         if let Some(c) = self.chat_mut(id) {
             c.unread = false;
         }
+        self.follow_chat_folder(id);
         cx.notify();
+    }
+
+    /// A plain chat's own folder is where the app looks for its files (the
+    /// Files tab, `@`, a file's place on disk) while it is open.
+    fn follow_chat_folder(&mut self, id: usize) {
+        let plain = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| self.project(c.project))
+            .is_some_and(|p| p.scratch);
+        if let Some(dir) = self.chat_project_dir(id).filter(|_| plain) {
+            if self.project_dir != dir {
+                self.project_dir = dir;
+                self.file_index = None;
+            }
+        }
     }
 
     /// Plain chats' place.
@@ -6182,6 +6209,58 @@ impl AppState {
                 cx,
             );
         }
+    }
+
+    /// Read which engine new chats run, and its version (off the UI thread).
+    pub fn refresh_engine(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let info = cx
+                .background_spawn(async move {
+                    let path = crate::backend::find_cli()?;
+                    let mine = crate::engine::user_engine().is_some_and(|u| u == path);
+                    let v = crate::engine::version(&path);
+                    Some((path, v, mine))
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.engine_info = info;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Replace the engine with a `kodact.exe` you pick: new chats run it; a
+    /// chat already running keeps its own until it starts again.
+    pub fn replace_engine(&mut self, cx: &mut Context<Self>) {
+        let picked = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Use this KodAct CLI".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = picked.await else { return };
+            let Some(p) = paths.into_iter().next() else { return };
+            let done = cx.background_spawn(async move { crate::engine::install(&p) }).await;
+            let _ = this.update(cx, |s, cx| {
+                match done {
+                    Ok(v) => s.show_toast(format!("New chats now run {v}. Running chats keep theirs until they restart."), cx),
+                    Err(e) => s.show_toast(format!("Not used: {e}."), cx),
+                }
+                s.refresh_engine(cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Go back to the engine the installer put beside the app.
+    pub fn reset_engine(&mut self, cx: &mut Context<Self>) {
+        match crate::engine::reset() {
+            Ok(()) => self.show_toast("New chats run the bundled engine again.", cx),
+            Err(e) => self.show_toast(format!("Couldn't go back: {e}"), cx),
+        }
+        self.refresh_engine(cx);
     }
 
     /// Hold `anchor` for the comment box: the page editor's Comment.
@@ -10683,6 +10762,14 @@ fix everything under 8, render it again to check, then tell me the scores before
             cx.background_spawn(async move { crate::history::remove(&dir, &session) })
                 .detach();
         }
+        // A plain chat's own folder goes with it (never the shared one, or a
+        // folder of yours).
+        if let Some(dir) = self.chat_project_dir(id).filter(|d| d.starts_with(scratch_dir().join("chats"))) {
+            cx.background_spawn(async move {
+                let _ = std::fs::remove_dir_all(dir);
+            })
+            .detach();
+        }
         self.chats.retain(|c| c.id != id);
         if self.current == Some(id) {
             self.new_chat(cx);
@@ -12228,12 +12315,18 @@ fix everything under 8, render it again to check, then tell me the scores before
             crate::backend::Session::spawn_remote(remote, &ready.forge, &launch, &extra)?
         } else {
             let exe = crate::backend::find_cli().ok_or("KodAct CLI wasn't found. Reinstall KodAct (it puts kodact.exe in the bin folder beside the app), or set KODACT_CLI to its path.")?;
-            let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
-            let dir = project
-                .and_then(|p| self.project(p))
-                .map(|p| p.path.clone())
+            // A plain chat works in a folder of its own (made now, on its
+            // first message); a project's chat in the project.
+            let dir = self
+                .chat_project_dir(id)
+                .inspect(|d| {
+                    let _ = std::fs::create_dir_all(d);
+                })
                 .filter(|p| p.is_dir())
                 .unwrap_or_else(|| self.project_dir.clone());
+            if self.current == Some(id) {
+                self.follow_chat_folder(id);
+            }
             crate::backend::Session::spawn(&exe, &launch, &dir)?
         };
         let events = session.events.clone();
@@ -15503,6 +15596,22 @@ pub fn scratch_dir() -> std::path::PathBuf {
         .join("workspace")
 }
 
+/// A plain chat's folder, under plain chats' place (`root`): its own,
+/// `chats/<session>`, for a new chat or one that has it; the shared place
+/// for a chat KodAct CLI already wrote there (it files conversations by the
+/// folder they ran in, so moving one would lose it).
+pub fn chat_folder(root: &std::path::Path, session: &str, resumable: bool) -> std::path::PathBuf {
+    if session.is_empty() {
+        return root.to_path_buf();
+    }
+    let own = root.join("chats").join(session);
+    if own.is_dir() || !resumable {
+        own
+    } else {
+        root.to_path_buf()
+    }
+}
+
 /// The folder KodAct was started on: `KODACT_PROJECT_DIR`, or a folder given
 /// as its argument (`kodact .`). Opened from the Start menu or a shortcut, it
 /// was started on none, and opens on plain chats, as a chat app does.
@@ -15916,6 +16025,21 @@ fn mock_chats() -> Vec<Chat> {
     }
     chats.sort_by_key(|c| (!c.pinned, c.minutes_ago));
     chats
+}
+
+#[cfg(test)]
+mod chat_folder_tests {
+    use super::chat_folder;
+    use std::path::Path;
+
+    #[test]
+    fn a_new_plain_chat_gets_its_own_folder_and_an_old_one_keeps_the_shared() {
+        let root = Path::new("/ws");
+        assert_eq!(chat_folder(root, "abc", false), Path::new("/ws/chats/abc"));
+        // Already written by KodAct CLI in the shared place: it stays there.
+        assert_eq!(chat_folder(root, "old-chat-xyz", true), Path::new("/ws"));
+        assert_eq!(chat_folder(root, "", false), Path::new("/ws"));
+    }
 }
 
 #[cfg(test)]

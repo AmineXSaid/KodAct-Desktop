@@ -29,6 +29,7 @@ mod doc_zoom;
 mod downloads;
 mod draw;
 mod endpoints;
+mod engine;
 mod error_words;
 mod export;
 mod fonts;
