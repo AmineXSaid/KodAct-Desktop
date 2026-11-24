@@ -12049,10 +12049,6 @@ fix everything under 8, render it again to check, then tell me the scores before
         };
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
-        // A chat with no folder is a conversation, not a task on a project.
-        if self.chat_is_plain(id) {
-            launch.env.extend(crate::backend::plain_chat_env());
-        }
         // The web browser: KodAct's own browser tools (this executable, as
         // an MCP server) on the browser in the side panel. A remote agent
         // reaches them over HTTP, forwarded back to this machine.

@@ -564,19 +564,6 @@ impl Drop for Session {
     }
 }
 
-/// What a chat with no folder runs with: a conversation, not work on a
-/// project. KodAct CLI's project checks stay off: the verification loop
-/// (checks not run, the Finish check, parse errors after an edit) and the
-/// nudges (files a request names and that aren't there, and the like).
-/// They read a greeting's context as a task and answered it ("NN_topic.m
-/// isn't a file the greeting asks for").
-pub fn plain_chat_env() -> [(String, String); 2] {
-    [
-        ("KODACT_VERIFY".into(), "0".into()),
-        ("KODACT_NUDGES".into(), "none".into()),
-    ]
-}
-
 /// `set_max_thinking_tokens`: a number, or null for the model's default.
 pub fn thinking_budget_request(tokens: Option<u32>) -> Value {
     json!({ "subtype": "set_max_thinking_tokens", "max_thinking_tokens": tokens })
@@ -1633,10 +1620,6 @@ mod tests {
             json!({"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits"}),
         ]);
         assert_eq!(ev, vec![Event::ModeChanged("acceptEdits".into())]);
-        // A plain chat runs without the project checks.
-        let env = plain_chat_env();
-        assert!(env.contains(&("KODACT_VERIFY".into(), "0".into())));
-        assert!(env.contains(&("KODACT_NUDGES".into(), "none".into())));
         assert_eq!(
             thinking_budget_request(None),
             json!({"subtype": "set_max_thinking_tokens", "max_thinking_tokens": null})
