@@ -16,6 +16,18 @@ macro_rules! icons {
 }
 
 icons!(
+    "table",
+    "bold",
+    "italic",
+    "link",
+    "message-square-plus",
+    "list",
+    "list-ordered",
+    "heading-1",
+    "heading-2",
+    "heading-3",
+    "pilcrow",
+    "square-code",
     "panel-bottom",
     "zoom-in",
     "zoom-out",

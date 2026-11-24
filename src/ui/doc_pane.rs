@@ -74,6 +74,10 @@ pub struct Fit {
     /// The width a web page previews at.
     pub device: crate::state::Device,
     pub edit_text: Option<SharedString>,
+    /// How a Markdown file shows: a page to type on, as it reads, or source.
+    pub md_mode: crate::state::MdMode,
+    /// The page editor wrote the file a moment ago.
+    pub md_saved: bool,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -108,6 +112,7 @@ pub fn render(
     text_editor: AnyElement,
     browser: AnyElement,
     office_editor: AnyElement,
+    (md_page, md_rename): (AnyElement, AnyElement),
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -145,8 +150,12 @@ pub fn render(
     let from_panel = fit.from_panel;
     // Markdown and pages read as themselves, or as what was written.
     let html = file.is_html();
-    let two_views = office.is_none() && (diagram || html || file.is_markdown());
-    let source = two_views && fit.source;
+    // A Markdown file has its own three ways (the mode menu): a page to
+    // type on, as it reads, or its source.
+    let md = file.is_markdown() && !diagram;
+    let md_mode = fit.md_mode;
+    let two_views = office.is_none() && (diagram || html);
+    let source = (two_views && fit.source) || (md && md_mode == crate::state::MdMode::Markdown);
     let text_view = fit.text;
     let page_pick = fit.page_pick;
     // The pages as drawn: how many, and whether they are slides.
@@ -195,6 +204,7 @@ pub fn render(
     let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram && !html))
         && super::text_editor::editable(file)
         && !showing_changes;
+    let md_page_on = md && md_mode == crate::state::MdMode::Editing && !showing_changes;
     let full = fit.full;
     let full_t = fit.full_t;
     let fuller = state.clone();
@@ -225,6 +235,11 @@ pub fn render(
         _ if words_editable && text_view => {
             format!("Editing text{}", if fit.dirty { " · not saved" } else { "" })
         }
+        _ if md_page_on => format!(
+            "{}{}",
+            if fit.md_saved { "Saved · " } else { "" },
+            super::text_editor::counts(&file.content)
+        ),
         _ if editing => super::text_editor::counts(fit.edit_text.as_ref().unwrap_or(&file.content)),
         _ if image => file
             .bytes
@@ -287,6 +302,43 @@ pub fn render(
         .into_any_element(),
     };
     let chip_state = state.clone();
+    let title_text = div()
+        .min_w(px(48.))
+        .flex_shrink(1.)
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .text_size(t.text.body)
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(t.colors.text_strong)
+        .child(file.title());
+    // A Markdown file's title opens its menu: Rename, Versions.
+    let md_tools = md && !fit.live;
+    let title_el: AnyElement = if md_tools {
+        let st = state.clone();
+        div()
+            .id("doc-title-menu")
+            .min_w(px(48.))
+            .flex_shrink(1.)
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .px(px(6.))
+            .ml(px(-6.))
+            .h(px(28.))
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .hover(|s| s.bg(t.colors.hover))
+            .when(fit.menu == Some(crate::state::DocMenu::Title), |d| d.bg(t.colors.hover))
+            .child(title_text)
+            .child(icon("icons/chevron-down.svg", t.size.icon_xs, t.colors.text_muted))
+            .on_click(move |_, _, cx| {
+                st.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::Title, cx))
+            })
+            .into_any_element()
+    } else {
+        title_text.into_any_element()
+    };
     let title_block = div()
         .flex_1()
         .min_w_0()
@@ -294,18 +346,7 @@ pub fn render(
         .items_center()
         .gap(t.space.sm)
         .child(mark)
-        .child(
-            div()
-                .min_w(px(48.))
-                .flex_shrink(1.)
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_size(t.text.body)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.colors.text_strong)
-                .child(file.title()),
-        )
+        .child(title_el)
         .child(
             div()
                 .flex_none()
@@ -396,14 +437,54 @@ pub fn render(
         })
         .into_iter()
         .collect();
-    let trailing = vec![super::panel_chrome::window_controls(
+    let mut trailing: Vec<AnyElement> = Vec::new();
+    if md_tools {
+        let (outline, mode) = (state.clone(), state.clone());
+        trailing.push(
+            tool_button("doc-outline", "icons/list-tree.svg", "Outline")
+                .selected(fit.menu == Some(crate::state::DocMenu::Outline))
+                .on_click(move |_, _, cx| {
+                    outline.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::Outline, cx))
+                })
+                .into_any_element(),
+        );
+        let label = match md_mode {
+            crate::state::MdMode::Editing => "Editing",
+            crate::state::MdMode::Viewing => "Viewing",
+            crate::state::MdMode::Markdown => "Markdown",
+        };
+        trailing.push(
+            div()
+                .id("doc-md-mode")
+                .flex_none()
+                .h(px(28.))
+                .px(t.space.sm)
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_size(t.text.body_sm)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text)
+                .hover(|s| s.bg(t.colors.hover))
+                .when(fit.menu == Some(crate::state::DocMenu::MdMode), |d| d.bg(t.colors.hover))
+                .child(label)
+                .child(icon("icons/chevron-down.svg", t.size.icon_xs, t.colors.text_muted))
+                .on_click(move |_, _, cx| {
+                    mode.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::MdMode, cx))
+                })
+                .into_any_element(),
+        );
+    }
+    trailing.push(super::panel_chrome::window_controls(
         t,
         "doc",
         Some(full),
         fit.below,
         move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)),
         move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx)),
-    )];
+    ));
     let row1 = super::panel_chrome::header(t, title_block, leading, trailing);
 
     // Row 2: the tools, in groups.
@@ -724,6 +805,12 @@ pub fn render(
         gpui::deferred(super::motion::unfold(menu, "doc-zoom-menu", false, false, t))
             .with_priority(3)
     });
+    // A Markdown file's menus: its title's (Rename, Versions), the outline
+    // and the mode, hanging under the title row.
+    let md_menu = md_tools
+        .then_some(fit.menu)
+        .flatten()
+        .and_then(|m| md_menu(m, file, md_mode, md_rename, (at, total), &state, t));
     // The find bar sits under the toolbar.
     let header = div()
         .relative()
@@ -747,7 +834,8 @@ pub fn render(
             )
         })
         .child(find)
-        .children(zoom_menu);
+        .children(zoom_menu)
+        .children(md_menu);
     let wheel = state.clone();
     let body = div()
         .id("doc-body")
@@ -820,6 +908,9 @@ pub fn render(
     } else if previewing_html {
         // The page, in the panel's live browser.
         body.overflow_hidden().child(div().size_full().child(browser))
+    } else if md_page_on {
+        // A Markdown file as a page to type on; it scrolls itself.
+        body.overflow_hidden().child(md_page)
     } else if editing {
         // The source in an editor: a file that is only text, or a page or
         // Markdown file switched to its source. The editor scrolls itself.
@@ -1023,6 +1114,231 @@ pub fn render(
     };
 
     finish_at(&fit, full_t, file, header, body, footer(), fit.width, t)
+}
+
+/// The menu `m` of a Markdown file, under the title row.
+fn md_menu(
+    m: crate::state::DocMenu,
+    file: &FileRef,
+    mode: crate::state::MdMode,
+    rename: AnyElement,
+    (at, total): (usize, usize),
+    state: &Entity<AppState>,
+    t: &Theme,
+) -> Option<gpui::Deferred> {
+    use crate::state::{DocMenu, MdMode};
+    let item = |id: String, path: &'static str, label: String, note: &'static str, on: bool| {
+        div()
+            .id(SharedString::from(id))
+            .min_h(t.size.menu_row)
+            .px(t.space.sm)
+            .py(px(4.))
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .rounded(t.radius.small)
+            .cursor_pointer()
+            .text_size(t.text.body_sm)
+            .text_color(t.colors.text)
+            .when(on, |d| crate::theme::selected(t, d))
+            .when(!on, |d| d.hover(|s| s.bg(t.colors.hover)))
+            .child(icon(path, t.size.icon_sm, t.colors.text_muted))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .child(label)
+                    .when(!note.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child(note),
+                        )
+                    }),
+            )
+            .when(on, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text)))
+    };
+    let pop = |w: f32| {
+        div()
+            .absolute()
+            .top(t.size.panel_header)
+            .w(px(w))
+            .max_h(px(420.))
+            .flex()
+            .flex_col()
+            .p(t.space.xs)
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .rounded(t.radius.card)
+            .shadow(t.elevation_popover())
+    };
+    let menu = match m {
+        DocMenu::Title => {
+            let (rn, ver) = (state.clone(), state.clone());
+            let versions = if total > 1 {
+                format!("Versions · v{} of {total}", at + 1)
+            } else {
+                "Versions · only this one".to_string()
+            };
+            pop(300.)
+                .id("md-title-menu")
+                .left(t.space.md)
+                .child(
+                    div()
+                        .px(t.space.sm)
+                        .pt(t.space.xs)
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_muted)
+                        .child("Rename"),
+                )
+                .child(
+                    div()
+                        .p(t.space.xs)
+                        .flex()
+                        .items_center()
+                        .gap(t.space.sm)
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .h(px(30.))
+                                .px(t.space.sm)
+                                .flex()
+                                .items_center()
+                                .rounded(t.radius.button)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .text_size(t.text.body_sm)
+                                .child(rename),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child(
+                                    file.name
+                                        .rsplit_once('.')
+                                        .map(|(_, e)| format!(".{e}"))
+                                        .unwrap_or_default(),
+                                ),
+                        ),
+                )
+                .child(
+                    div()
+                        .px(t.space.sm)
+                        .pb(t.space.xs)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child("Enter renames it, on disk too."),
+                )
+                .child(div().h(px(1.)).my(t.space.xs).bg(t.colors.border))
+                .child(
+                    item("md-versions".into(), "icons/history.svg", versions, "", false).on_click(
+                        move |_, _, cx| {
+                            ver.update(cx, |s, cx| {
+                                s.doc_menu = None;
+                                if s.doc_versions().1 > 0 {
+                                    s.toggle_doc_changes(cx)
+                                } else {
+                                    s.show_toast("This file has one version so far.", cx)
+                                }
+                            })
+                        },
+                    ),
+                )
+                .on_mouse_down_out(move |_, _, cx| {
+                    rn.update(cx, |s, cx| {
+                        if s.doc_menu == Some(DocMenu::Title) {
+                            s.doc_menu = None;
+                            cx.notify();
+                        }
+                    })
+                })
+        }
+        DocMenu::Outline => {
+            let heads = crate::md_blocks::outline(&crate::md_blocks::parse(&file.content));
+            let mut p = pop(260.).id("md-outline").overflow_y_scroll().right(t.space.md + px(140.));
+            if heads.is_empty() {
+                p = p.child(
+                    div()
+                        .p(t.space.sm)
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text_muted)
+                        .child("No headings yet. Start a line with # to add one."),
+                );
+            }
+            for (k, (block, level, words)) in heads.into_iter().enumerate() {
+                let st = state.clone();
+                p = p.child(
+                    div()
+                        .id(SharedString::from(format!("md-head-{k}")))
+                        .h(t.size.menu_row)
+                        .pl(t.space.sm + px(12. * (level.saturating_sub(1)) as f32))
+                        .pr(t.space.sm)
+                        .flex()
+                        .items_center()
+                        .rounded(t.radius.small)
+                        .cursor_pointer()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.body_sm)
+                        .when(level == 1, |d| d.font_weight(FontWeight::MEDIUM))
+                        .text_color(if level == 1 { t.colors.text } else { t.colors.text_muted })
+                        .hover(|s| s.bg(t.colors.hover))
+                        .child(words)
+                        .on_click(move |_, _, cx| {
+                            st.update(cx, |s, cx| {
+                                s.md_jump = Some(block);
+                                s.set_md_mode(MdMode::Editing, cx);
+                            })
+                        }),
+                );
+            }
+            let st = state.clone();
+            p.on_mouse_down_out(move |_, _, cx| {
+                st.update(cx, |s, cx| {
+                    if s.doc_menu == Some(DocMenu::Outline) {
+                        s.doc_menu = None;
+                        cx.notify();
+                    }
+                })
+            })
+        }
+        DocMenu::MdMode => {
+            let mut p = pop(240.).id("md-mode-menu").right(t.space.md + px(104.));
+            for (k, (m, path, label, note)) in [
+                (MdMode::Editing, "icons/pencil.svg", "Editing", "Type on the page"),
+                (MdMode::Viewing, "icons/eye.svg", "Viewing", "Read, select and comment"),
+                (MdMode::Markdown, "icons/code-xml.svg", "Markdown", "Edit the source"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let st = state.clone();
+                p = p.child(
+                    item(format!("md-mode-{k}"), path, label.into(), note, mode == m)
+                        .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_md_mode(m, cx))),
+                );
+            }
+            let st = state.clone();
+            p.on_mouse_down_out(move |_, _, cx| {
+                st.update(cx, |s, cx| {
+                    if s.doc_menu == Some(DocMenu::MdMode) {
+                        s.doc_menu = None;
+                        cx.notify();
+                    }
+                })
+            })
+        }
+        _ => return None,
+    };
+    Some(gpui::deferred(super::motion::unfold(menu, "md-head-menu", false, false, t)).with_priority(3))
 }
 
 /// A document's text as you can select it, to comment on a passage or

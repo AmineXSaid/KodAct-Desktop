@@ -42,6 +42,7 @@ mod highlight;
 mod history;
 mod knowledge;
 mod mermaid;
+mod md_blocks;
 mod modes;
 mod names;
 mod office;

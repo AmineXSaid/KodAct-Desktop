@@ -1048,6 +1048,27 @@ impl Device {
 pub enum DocMenu {
     Zoom,
     More,
+    /// A Markdown file's title: Rename, Versions.
+    Title,
+    /// Its headings, to jump to.
+    Outline,
+    /// Editing, Viewing or Markdown.
+    MdMode,
+    /// The page toolbar's text style.
+    TextStyle,
+    /// The page toolbar's "…": bold, italic, link, code.
+    Format,
+}
+
+/// How the side panel shows a Markdown file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MdMode {
+    /// A page you type on, saved as Markdown as you go (`ui/md_page.rs`).
+    Editing,
+    /// The page as it reads, to select and comment on.
+    Viewing,
+    /// Its Markdown source in the code editor.
+    Markdown,
 }
 
 /// The title bar's menus, and the sidebar's (its More row, your name).
@@ -2129,6 +2150,15 @@ pub struct AppState {
     pub doc_text: bool,
     /// The panel's file or plan shows its source, not its preview.
     pub source_view: bool,
+    /// A Markdown file shows as it reads (else as a page to type on, or,
+    /// with `source_view`, its source).
+    pub md_viewing: bool,
+    /// A passage the page editor picked to comment on, for the comment box.
+    pub doc_comment_hold: Option<crate::doc_versions::Anchor>,
+    /// When the page editor last wrote the file.
+    pub md_saved_at: Option<std::time::Instant>,
+    /// The page editor scrolls to this block (the outline's pick).
+    pub md_jump: Option<usize>,
     /// The plan version the Plan tab shows (from 0); None, the latest.
     pub plan_version: Option<usize>,
     /// The cells picked in a workbook in the panel (anchor, other end).
@@ -2554,6 +2584,10 @@ impl AppState {
             card_thumbs: Default::default(),
             doc_text: false,
             source_view: false,
+            md_viewing: false,
+            doc_comment_hold: None,
+            md_saved_at: None,
+            md_jump: None,
             plan_version: None,
             doc_pick: None,
             doc_show_changes: false,
@@ -5651,6 +5685,139 @@ impl AppState {
         } else {
             self.project_dir.join(p)
         })
+    }
+
+    /// How the panel shows a Markdown file.
+    pub fn md_mode(&self) -> MdMode {
+        if self.source_view {
+            MdMode::Markdown
+        } else if self.md_viewing || self.doc_is_live() {
+            MdMode::Viewing
+        } else {
+            MdMode::Editing
+        }
+    }
+
+    pub fn set_md_mode(&mut self, mode: MdMode, cx: &mut Context<Self>) {
+        self.source_view = mode == MdMode::Markdown;
+        self.md_viewing = mode == MdMode::Viewing;
+        self.doc_menu = None;
+        cx.notify();
+    }
+
+    /// The page editor's text, written to the file as you type: on disk
+    /// (when it has a place there) and in its card in the chat, which keeps
+    /// its version rather than adding one per keystroke.
+    pub fn autosave_doc(&mut self, text: String, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone() else { return };
+        if file.content.as_ref() == text {
+            return;
+        }
+        let new = FileRef {
+            content: text.clone().into(),
+            ..file.clone()
+        };
+        if let Some(chat) = self.current {
+            if let Some(c) = self.chats.iter_mut().find(|c| c.id == chat) {
+                let card = c.messages.iter_mut().rev().find_map(|m| match m {
+                    Message::Assistant { blocks } => blocks.iter_mut().rev().find_map(|b| match b {
+                        Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                        _ => None,
+                    }),
+                    _ => None,
+                });
+                if let Some(f) = card {
+                    *f = new.clone();
+                }
+            }
+        }
+        self.doc = Some(new);
+        self.md_saved_at = Some(std::time::Instant::now());
+        if let Some(p) = self.doc_disk_path(&file) {
+            cx.background_spawn(async move {
+                if let Some(parent) = p.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::write(&p, text.as_bytes());
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// Give the panel's file a new name (its extension kept when left off):
+    /// on disk, and on its cards in the chat.
+    pub fn rename_doc(&mut self, name: String, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone() else { return };
+        let mut name = name.trim().replace(['/', '\\'], "-");
+        if name.is_empty() {
+            return;
+        }
+        let ext = file.name.rsplit_once('.').map(|(_, e)| e.to_string());
+        if let Some(ext) = ext {
+            if !name.to_ascii_lowercase().ends_with(&format!(".{}", ext.to_ascii_lowercase())) {
+                name = format!("{name}.{ext}");
+            }
+        }
+        if name == file.name.as_ref() {
+            self.doc_menu = None;
+            return cx.notify();
+        }
+        let path = file.path.as_ref().map(|p| {
+            let p = p.as_ref();
+            match p.rfind(['/', '\\']) {
+                Some(i) => format!("{}{name}", &p[..=i]),
+                None => name.clone(),
+            }
+        });
+        if let (Some(from), Some(to)) = (
+            self.doc_disk_path(&file),
+            path.as_ref().and_then(|p| {
+                self.doc_disk_path(&FileRef {
+                    path: Some(p.clone().into()),
+                    ..file.clone()
+                })
+            }),
+        ) {
+            if to.exists() {
+                return self.show_toast(format!("{name} already exists."), cx);
+            }
+            if from.exists() {
+                if let Err(e) = std::fs::rename(&from, &to) {
+                    return self.show_toast(format!("Could not rename: {e}"), cx);
+                }
+            }
+        }
+        let renamed = FileRef {
+            name: name.clone().into(),
+            path: path.map(Into::into),
+            ..file.clone()
+        };
+        if let Some(chat) = self.current {
+            if let Some(c) = self.chats.iter_mut().find(|c| c.id == chat) {
+                for m in c.messages.iter_mut() {
+                    if let Message::Assistant { blocks } = m {
+                        for b in blocks.iter_mut() {
+                            if let Block::File(f) = b {
+                                if crate::doc_versions::same_file(f, &file) {
+                                    f.name = renamed.name.clone();
+                                    f.path = renamed.path.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.doc = Some(renamed);
+        self.doc_menu = None;
+        self.show_toast(format!("Renamed to {name}"), cx);
+    }
+
+    /// Hold `anchor` for the comment box: the page editor's Comment.
+    pub fn hold_doc_comment(&mut self, anchor: crate::doc_versions::Anchor, cx: &mut Context<Self>) {
+        self.doc_comment_hold = Some(anchor);
+        cx.notify();
     }
 
     /// Save what is edited in the panel: cells of a workbook, or the text of

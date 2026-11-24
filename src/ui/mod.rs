@@ -52,6 +52,7 @@ pub mod image_view;
 pub mod kodact_mark;
 mod lens;
 pub mod markdown;
+pub mod md_page;
 pub mod marketplaces;
 pub mod mcp_editor;
 pub mod memory_view;

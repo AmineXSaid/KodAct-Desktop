@@ -151,7 +151,13 @@ fn short(quote: &str, max: usize) -> String {
 impl Render for DocComments {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        if let Some(now) = self.picked(window, cx) {
+        // The page editor's Comment hands its passage over; the box opens on it.
+        let hold = self.state.read(cx).doc_comment_hold.clone();
+        if let Some(a) = hold {
+            self.state.update(cx, |s, _| s.doc_comment_hold = None);
+            self.held = Some(a);
+            self.input.update(cx, |i, cx| i.focus(window, cx));
+        } else if let Some(now) = self.picked(window, cx) {
             self.held = Some(now);
         }
         let s = self.state.read(cx);

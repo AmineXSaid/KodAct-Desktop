@@ -59,6 +59,11 @@ pub struct Workspace {
     text_editor: Entity<super::text_editor::TextEditor>,
     /// A Word file's or deck's words as fields (`office_editor.rs`).
     office_editor: Entity<super::office_editor::OfficeEditor>,
+    /// A Markdown file as a page to type on (`md_page.rs`).
+    md_page: Entity<super::md_page::MdPage>,
+    /// The title menu's name field, and the file it was filled for.
+    md_rename: Entity<gpui::component::input::InputState>,
+    md_rename_for: Option<SharedString>,
     /// Interactive spreadsheet editor bar (`sheet_view.rs`).
     sheet_editor: Entity<super::sheet_view::SheetEditor>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
@@ -125,6 +130,19 @@ impl Workspace {
             cx.new(|cx| super::text_editor::TextEditor::new(state.clone(), window, cx));
         let office_editor =
             cx.new(|cx| super::office_editor::OfficeEditor::new(state.clone(), window, cx));
+        let md_page = cx.new(|cx| super::md_page::MdPage::new(state.clone(), window, cx));
+        let md_rename =
+            cx.new(|cx| gpui::component::input::InputState::new(window, cx).placeholder("Name"));
+        {
+            let st = state.clone();
+            cx.subscribe(&md_rename, move |_, input, ev: &gpui::component::input::InputEvent, cx| {
+                if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
+                    let name = input.read(cx).value().to_string();
+                    st.update(cx, |s, cx| s.rename_doc(name, cx));
+                }
+            })
+            .detach();
+        }
         let sheet_editor =
             cx.new(|cx| super::sheet_view::SheetEditor::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
@@ -154,6 +172,9 @@ impl Workspace {
             page_field,
             text_editor,
             office_editor,
+            md_page,
+            md_rename,
+            md_rename_for: None,
             sheet_editor,
             files,
             presence: Presences::default(),
@@ -1013,6 +1034,27 @@ impl Render for Workspace {
             t.size.window_in_ms,
             window,
         );
+        // The title menu's name field opens filled with the file's name.
+        {
+            let (menu, name) = {
+                let s = self.state.read(cx);
+                (s.doc_menu, s.doc.as_ref().map(|f| f.name.clone()))
+            };
+            if menu == Some(crate::state::DocMenu::Title) {
+                if self.md_rename_for != name {
+                    if let Some(n) = &name {
+                        let stem = n.rsplit_once('.').map_or(n.as_ref(), |(a, _)| a).to_string();
+                        self.md_rename.update(cx, |i, cx| {
+                            i.set_value(stem, window, cx);
+                            i.focus(window, cx);
+                        });
+                    }
+                    self.md_rename_for = name;
+                }
+            } else {
+                self.md_rename_for = None;
+            }
+        }
         // A file opened from a reply, or the setup guide, sits beside the session.
         let pane = {
             let s = self.state.read(cx);
@@ -1058,6 +1100,10 @@ impl Render for Workspace {
                 dirty: s.doc_dirty(),
                 device: s.web_device,
                 edit_text: s.doc_edit.as_ref().map(|(_, t)| t.clone()),
+                md_mode: s.md_mode(),
+                md_saved: s
+                    .md_saved_at
+                    .is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(4)),
             };
             let doc_changes = s
                 .doc_changes
@@ -1114,6 +1160,16 @@ impl Render for Workspace {
             let leaving_fit = fit.clone();
             let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
                 // A file leaving has nothing to edit or comment on any more.
+                let (md_page, md_rename) = if leaving {
+                    (div().into_any_element(), div().into_any_element())
+                } else {
+                    (
+                        self.md_page.clone().into_any_element(),
+                        gpui::component::input::Input::new(&self.md_rename)
+                            .appearance(false)
+                            .into_any_element(),
+                    )
+                };
                 let (editor, comments, find, page_field, text_editor, browser, office_editor) =
                     if leaving {
                         (
@@ -1154,6 +1210,7 @@ impl Render for Workspace {
                     text_editor,
                     browser,
                     office_editor,
+                    (md_page, md_rename),
                     &t,
                 )
             };
