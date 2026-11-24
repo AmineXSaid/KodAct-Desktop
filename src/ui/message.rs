@@ -762,14 +762,10 @@ fn user(
         )
         .child(
             action("attach", "icons/text-quote.svg", t.colors.text_muted)
-                .tooltip(|w, cx| {
-                    gpui::component::tooltip::Tooltip::new("Attach to your next message")
-                        .build(w, cx)
-                })
+                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Attach to your next message").build(w, cx))
                 .on_click(move |_, window, app| {
                     let text = to_attach.clone();
-                    state_attach
-                        .update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
+                    state_attach.update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
                     window.dispatch_action(Box::new(super::FocusComposer), app);
                 }),
         );

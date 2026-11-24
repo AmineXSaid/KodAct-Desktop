@@ -16,9 +16,9 @@ pub mod marks;
 pub mod od_subset;
 pub mod pets;
 pub mod pptx;
+pub mod services;
 pub mod prompt;
 pub mod routines;
-pub mod services;
 pub mod skill_meta;
 pub mod store;
 pub mod trace;
@@ -57,9 +57,7 @@ pub fn check(args: &[String]) -> i32 {
     #[cfg(windows)]
     attach_console();
     let Some(root) = root() else {
-        eprintln!(
-            "No design library: set KODACT_DESIGN_LIB, or put design-library beside the app."
-        );
+        eprintln!("No design library: set KODACT_DESIGN_LIB, or put design-library beside the app.");
         return 1;
     };
     let ix = Index::load(&root);
@@ -128,7 +126,5 @@ fn attach_console() {
 
 /// A `file://` address's path, its %-escapes decoded.
 pub fn inline_path(url_path: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(inline::decode(
-        url_path.split(['?', '#']).next().unwrap_or(url_path),
-    ))
+    std::path::PathBuf::from(inline::decode(url_path.split(['?', '#']).next().unwrap_or(url_path)))
 }

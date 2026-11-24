@@ -135,15 +135,12 @@ impl Workspace {
             cx.new(|cx| gpui::component::input::InputState::new(window, cx).placeholder("Name"));
         {
             let st = state.clone();
-            cx.subscribe(
-                &md_rename,
-                move |_, input, ev: &gpui::component::input::InputEvent, cx| {
-                    if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
-                        let name = input.read(cx).value().to_string();
-                        st.update(cx, |s, cx| s.rename_doc(name, cx));
-                    }
-                },
-            )
+            cx.subscribe(&md_rename, move |_, input, ev: &gpui::component::input::InputEvent, cx| {
+                if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
+                    let name = input.read(cx).value().to_string();
+                    st.update(cx, |s, cx| s.rename_doc(name, cx));
+                }
+            })
             .detach();
         }
         let sheet_editor =
@@ -1051,11 +1048,7 @@ impl Render for Workspace {
         // A deck's shapes, read for its version, to edit on its slides.
         {
             let s = self.state.read(cx);
-            let want = s
-                .doc
-                .as_ref()
-                .filter(|f| f.office() == Some(crate::office::Kind::Pptx))
-                .map(crate::state::doc_version_key);
+            let want = s.doc.as_ref().filter(|f| f.office() == Some(crate::office::Kind::Pptx)).map(crate::state::doc_version_key);
             if want.is_some() && s.deck_shapes.as_ref().map(|(k, ..)| k) != want.as_ref() {
                 let st = self.state.clone();
                 cx.defer(move |cx| st.update(cx, |s, cx| s.ensure_deck_shapes(cx)));
@@ -1070,10 +1063,7 @@ impl Render for Workspace {
             if menu == Some(crate::state::DocMenu::Title) {
                 if self.md_rename_for != name {
                     if let Some(n) = &name {
-                        let stem = n
-                            .rsplit_once('.')
-                            .map_or(n.as_ref(), |(a, _)| a)
-                            .to_string();
+                        let stem = n.rsplit_once('.').map_or(n.as_ref(), |(a, _)| a).to_string();
                         self.md_rename.update(cx, |i, cx| {
                             i.set_value(stem, window, cx);
                             i.focus(window, cx);
@@ -1134,11 +1124,7 @@ impl Render for Workspace {
                 deck: s
                     .deck_shapes
                     .as_ref()
-                    .filter(|(k, ..)| {
-                        side_doc
-                            .as_ref()
-                            .is_some_and(|f| crate::state::doc_version_key(f) == *k)
-                    })
+                    .filter(|(k, ..)| side_doc.as_ref().is_some_and(|f| crate::state::doc_version_key(f) == *k))
                     .map(|(_, shapes, size)| super::doc_pane::DeckView {
                         shapes: shapes.clone(),
                         size: *size,
@@ -1158,12 +1144,15 @@ impl Render for Workspace {
                                 out.push(n.to_string_lossy().to_string().into());
                             }
                         }
-                        out.extend(rel.components().filter_map(|c| match c {
-                            std::path::Component::Normal(n) => {
-                                Some(SharedString::from(n.to_string_lossy().to_string()))
-                            }
-                            _ => None,
-                        }));
+                        out.extend(
+                            rel.components()
+                                .filter_map(|c| match c {
+                                    std::path::Component::Normal(n) => {
+                                        Some(SharedString::from(n.to_string_lossy().to_string()))
+                                    }
+                                    _ => None,
+                                }),
+                        );
                         out
                     })
                     .unwrap_or_default(),

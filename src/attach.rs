@@ -1009,9 +1009,7 @@ mod tests {
         let blocks = content_blocks("What is this talking about?", &[a.clone()], true);
         let sent = blocks[1]["text"].as_str().unwrap();
         assert!(
-            sent.starts_with(
-                "<pasted_text index=\"1\" name=\"Pasted text 1\" lines=\"14\">\nLet us now"
-            ),
+            sent.starts_with("<pasted_text index=\"1\" name=\"Pasted text 1\" lines=\"14\">\nLet us now"),
             "{sent}"
         );
         assert!(!sent.contains("```"), "never fenced");

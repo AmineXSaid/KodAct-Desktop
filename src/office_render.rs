@@ -40,11 +40,7 @@ fn find() -> Option<PathBuf> {
             .parent()?
             .join("libreoffice")
             .join("program")
-            .join(if cfg!(windows) {
-                "soffice.exe"
-            } else {
-                "soffice"
-            });
+            .join(if cfg!(windows) { "soffice.exe" } else { "soffice" });
         p.is_file().then_some(p)
     });
     if beside.is_some() {

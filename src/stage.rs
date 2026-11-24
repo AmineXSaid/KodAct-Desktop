@@ -719,8 +719,7 @@ mod tests {
             s.rel
         );
         assert_eq!(
-            std::fs::read_to_string(project.join(staging_dir(&project)).join(".gitignore"))
-                .unwrap(),
+            std::fs::read_to_string(project.join(staging_dir(&project)).join(".gitignore")).unwrap(),
             "*\n"
         );
         let x = extract(&project, &s.abs, "in.zip").unwrap();

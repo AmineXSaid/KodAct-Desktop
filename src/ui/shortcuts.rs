@@ -20,11 +20,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("f2", "Rename this chat", "Chats"),
     ("secondary-shift-p", "Projects", "Chats"),
     ("secondary-shift-r", "Rules and memory", "Chats"),
-    (
-        "secondary-shift-d",
-        "Design: start from the library",
-        "Chats",
-    ),
+    ("secondary-shift-d", "Design: start from the library", "Chats"),
     ("secondary-shift-i", "Install a skill", "General"),
     ("secondary-l", "Focus the composer", "Conversation"),
     ("secondary-u", "Attach files and images", "Conversation"),
@@ -51,11 +47,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-2", "Side panel: Agents", "Conversation"),
     ("secondary-shift-j", "Jump to an agent", "Conversation"),
     ("secondary-alt-f", "Agents panel: full view", "Conversation"),
-    (
-        "secondary-alt-c",
-        "Copy the shown agent's output",
-        "Conversation",
-    ),
+    ("secondary-alt-c", "Copy the shown agent's output", "Conversation"),
     ("secondary-3", "Side panel: Files", "Conversation"),
     ("secondary-4", "Side panel: Browser", "Conversation"),
     ("alt-f", "Open file: full screen, or back", "Conversation"),
@@ -63,11 +55,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-=", "Open file: zoom in", "Conversation"),
     ("secondary-+", "Open file: zoom in", "Conversation"),
     ("secondary--", "Open file: zoom out", "Conversation"),
-    (
-        "secondary-0",
-        "Open file: fit to the panel's width",
-        "Conversation",
-    ),
+    ("secondary-0", "Open file: fit to the panel's width", "Conversation"),
     ("secondary-alt-t", "Open file: thumbnails", "Conversation"),
     ("secondary-g", "Open file: go to a page", "Conversation"),
     (

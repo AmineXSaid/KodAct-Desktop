@@ -77,8 +77,7 @@ pub fn ready() -> Option<PathBuf> {
 /// chat can't find it otherwise); then, once the document tools' Python is
 /// ready, PATH with its folder first and `KODACT_PYTHON`.
 pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
-    let soffice =
-        crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
+    let soffice = crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
     // How the skill's `render` draws pages: the route the panel uses, so the
     // model never looks for tools (`office`, `libreoffice` or `none`).
     let route = (

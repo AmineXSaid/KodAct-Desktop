@@ -16,8 +16,8 @@ use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context, Entity,
-    FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
+    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
+    Entity, FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
 use super::{icon, kodact_mark, motion};

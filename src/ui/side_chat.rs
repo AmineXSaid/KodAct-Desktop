@@ -332,16 +332,13 @@ impl Render for SideChat {
                                         "Copy the answer",
                                     )
                                     .compact()
-                                    .on_click(
-                                        move |_, _, cx| {
-                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                                                text.to_string(),
-                                            ));
-                                            copy_state.update(cx, |s, cx| {
-                                                s.mark_copied(key2.clone(), cx)
-                                            });
-                                        },
-                                    ),
+                                    .on_click(move |_, _, cx| {
+                                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                            text.to_string(),
+                                        ));
+                                        copy_state
+                                            .update(cx, |s, cx| s.mark_copied(key2.clone(), cx));
+                                    }),
                                 ),
                             )
                             .into_any_element(),
@@ -462,12 +459,12 @@ impl Render for SideChat {
                 this.state.update(cx, |s, cx| s.close_side(cx));
                 cx.stop_propagation();
             }))
-            .capture_action(
-                cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {
+            .capture_action(cx.listener(
+                |this, _: &gpui::component::input::Escape, _, cx| {
                     this.state.update(cx, |s, cx| s.close_side(cx));
                     cx.stop_propagation();
-                }),
-            )
+                },
+            ))
             .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
                 if ev.keystroke.key == "escape" {
                     this.state.update(cx, |s, cx| s.close_side(cx));

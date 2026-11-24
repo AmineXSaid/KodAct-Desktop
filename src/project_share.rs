@@ -42,7 +42,9 @@ pub fn setup_files(project: &Path, memory: bool) -> Vec<String> {
         let mut files: Vec<String> = dir
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
-            .map(|e| format!("{knowledge}/{}", e.file_name().to_string_lossy()))
+            .map(|e| {
+                format!("{knowledge}/{}", e.file_name().to_string_lossy())
+            })
             .collect();
         files.sort();
         out.extend(files);

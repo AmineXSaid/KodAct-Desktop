@@ -512,9 +512,7 @@ pub fn write_xlsx_edits(bytes: &[u8], edits: &CellEdits) -> Result<Vec<u8>, Stri
                     s
                 };
                 let patched = patch_sheet_xml(&xml, sheet_edits)?;
-                writer
-                    .start_file(&entry_name, opts)
-                    .map_err(|e| e.to_string())?;
+                writer.start_file(&entry_name, opts).map_err(|e| e.to_string())?;
                 writer
                     .write_all(patched.as_bytes())
                     .map_err(|e| e.to_string())?;
@@ -568,7 +566,13 @@ fn push_row_xml(
 ) {
     out.push_str(&format!("<row r=\"{}\">", r + 1));
     for (&c, val) in cells {
-        push_cell_xml(out, r, c, val, styles.get(&(r, c)).map(String::as_str));
+        push_cell_xml(
+            out,
+            r,
+            c,
+            val,
+            styles.get(&(r, c)).map(String::as_str),
+        );
     }
     out.push_str("</row>");
 }
@@ -658,7 +662,9 @@ fn patch_sheet_xml(
                         for (r, cells) in std::mem::take(&mut remaining) {
                             push_row_xml(&mut extra, r, &cells, &styles);
                         }
-                        writer.get_mut().extend_from_slice(extra.as_bytes());
+                        writer
+                            .get_mut()
+                            .extend_from_slice(extra.as_bytes());
                         write_xml_event(&mut writer, Event::End(BytesEnd::new("sheetData")))?;
                         continue;
                     }
@@ -717,10 +723,9 @@ fn patch_sheet_xml(
                         }
                     }
                     Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == b"c" => {
-                        if let (Some(ri), Some((cr, cc))) = (
-                            current_row,
-                            attr(e, b"r").and_then(|r| crate::xlsx_style::cell_ref(&r)),
-                        ) {
+                        if let (Some(ri), Some((cr, cc))) =
+                            (current_row, attr(e, b"r").and_then(|r| crate::xlsx_style::cell_ref(&r)))
+                        {
                             let earlier: Vec<usize> =
                                 row_remaining.range(..cc).map(|(&k, _)| k).collect();
                             if !earlier.is_empty() {
@@ -1416,10 +1421,7 @@ mod tests {
 
         let looks = crate::xlsx_style::read(&updated);
         assert_eq!(
-            looks["Notes"]
-                .cells
-                .get(&(1, 0))
-                .and_then(|l| l.formula.as_deref()),
+            looks["Notes"].cells.get(&(1, 0)).and_then(|l| l.formula.as_deref()),
             Some("=1+2")
         );
         // Preserves bold header style on A1
