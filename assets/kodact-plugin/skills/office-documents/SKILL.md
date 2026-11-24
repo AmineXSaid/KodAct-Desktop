@@ -112,7 +112,7 @@ found is an error, not a silent skip.
 Word blocks: `heading`, `text` (with **bold**, `lead` for an intro),
 `bullets`, `callout` (note, tip, info, warning, danger, success), `table`
 (numbers right-aligned, a `highlight` row, a header that repeats on each
-page), `kpis`, `cards`, `steps`, `timeline`, `compare` (with a `verdict`),
+page), `kpis`, `cards` (each with an `icon`), `steps`, `timeline`, `compare` (with a `verdict`),
 `quote`, `chart` (column, bar, line, area, pie, doughnut, in the theme's
 colours), `image`, `toc`, `pagebreak`. `docx_tool.py --help` shows each
 one's fields. They are real Word tables, styles and fields, so the person
@@ -165,6 +165,8 @@ each slide's layout from what it says, and vary them:
 
 | Layout | For | Fields |
 |:--|:--|:--|
+| `title` | the cover (made by `init`; `--style dark` for a deep cover with big friendly faces) | `title`, `subtitle`, `tag` |
+| `feature` | one big number and what it means, with icon cards | `stat`, `stat_text`, `note`, `items` [{"icon", "head", "text"}] |
 | `cards` | 2-6 points, numbered or marked | `items`, `marks`: number, heart, star, sun |
 | `steps` | a process or a cause and effect (2-4) | `items` as "Head: body", `footer` |
 | `statement` | the one sentence to remember | `statement`, `items`, `art` |
@@ -182,8 +184,15 @@ each slide's layout from what it says, and vary them:
 | `bullets` | a short plain list (last resort) | `items` |
 | `closing` | the last slide | `title`, `items` |
 
-Every slide takes `title`, `icon` (sun, star, heart, cloud, cell, none) and
-`notes` (speaker notes: write them for the person presenting). Moods: happy,
+Every slide takes `title`, `icon`, `section` (starts a section of the deck,
+as PowerPoint groups slides) and `notes` (speaker notes: write them for the
+person presenting). Icons are Lucide's 1,500+ (`python <skill-dir>/scripts/icons.py
+search WORD` finds names: hand, droplet, bone, brain, stethoscope, pill,
+shield-check, trending-up…), drawn as native PowerPoint shapes in a coloured
+circle; give every card or tile an icon that says what it is. The deck's
+theme (Design tab) carries the colours and fonts, so the person can restyle it
+in one place. To review, run `check_tool.py sheet deck.pptx sheet.png` and
+look at every slide at once; fix what you see, then look again. Moods: happy,
 sad, worried, angry, confused, surprised. Text is sized to fit its box, so
 keep each item to one short sentence. Render once at the end, look at the
 slides, and fix with `set-text`, or `slides` to drop and re-`add`.

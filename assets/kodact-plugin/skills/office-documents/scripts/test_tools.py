@@ -495,6 +495,43 @@ class Slides(Tmp):
             xlsx_tool.recalc(book, out)
             self.assertEqual(openpyxl.load_workbook(out, data_only=True)["Summary"]["D10"].value, 1990)
 
+    def test_icons_sections_theme_and_the_contact_sheet(self):
+        import icons
+        from lxml import etree
+        self.assertGreater(len(icons.names()), 1400)
+        self.assertEqual(icons.find("doctor"), "stethoscope")
+        self.assertEqual(icons.find("brain"), "brain")
+        for name in ("droplet", "bone", "brain", "hand", "dna", "chart-pie"):
+            self.assertTrue(icons.geometry(name), name)
+        png = self.path("brain.png")
+        icons.png("brain", png, 64, "9D4EDD")
+        self.assertTrue(os.path.getsize(png) > 200)
+        deck = self.path("k.pptx")
+        pptx_tool.init(deck, "kids", "What Is Cancer?", "For kids", "Ages 6-10", style="dark")
+        pptx_tool.add(deck, {"layout": "feature", "section": "Meet your cells", "title": "Cells",
+                             "stat": "Trillions", "stat_text": "of cells", "note": "Tiny.",
+                             "items": [{"icon": "hand", "head": "Skin", "text": "Keeps germs out"},
+                                       {"icon": "droplet", "head": "Blood", "text": "Carries air"}]})
+        pptx_tool.add(deck, {"layout": "grid", "title": "Words", "items": [{"icon": "pill", "head": "Medicine",
+                                                                          "text": "x"}]})
+        pptx_tool.add(deck, {"layout": "cards", "section": "Feelings", "title": "Help", "items": ["Ask"]})
+        self.assertEqual(check_tool.validate(deck), [])
+        prs = Presentation(deck)
+        self.assertEqual([n for n, ids in pptx_tool._sections(prs)], ["Opening", "Meet your cells", "Feelings"])
+        self.assertEqual(sum(len(ids) for _, ids in pptx_tool._sections(prs)), 4, "every slide is in a section")
+        icon_shapes = [s for s in prs.slides[1].shapes if s.name.startswith("Icon ")]
+        self.assertGreaterEqual(len(icon_shapes), 2, "icons are native shapes")
+        self.assertIsNotNone(icon_shapes[0]._element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}custGeom"))
+        theme = next(r.target_part for r in prs.slide_master.part.rels.values() if r.reltype.endswith("/theme"))
+        root = etree.fromstring(theme.blob)
+        A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+        self.assertEqual(root.find(f".//{A}accent1/{A}srgbClr").get("val"), "FF6B6B")
+        self.assertEqual(root.find(f".//{A}majorFont/{A}latin").get("typeface"), "Century Gothic")
+        if HAS_OFFICE:
+            out = self.path("sheet.png")
+            self.assertEqual(check_tool.sheet(deck, out), 4)
+            self.assertTrue(os.path.getsize(out) > 1000)
+
     def _outline(self):
         p = self.path("outline.md")
         with open(p, "w", encoding="utf-8") as f:

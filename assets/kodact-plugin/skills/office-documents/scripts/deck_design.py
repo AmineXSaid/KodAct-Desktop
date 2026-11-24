@@ -91,7 +91,7 @@ def for_audience(words):
     return "clean"
 
 
-LAYOUTS = ("title", "cards", "steps", "statement", "faces", "bullets", "closing",
+LAYOUTS = ("title", "cards", "steps", "statement", "faces", "bullets", "closing", "feature",
            "chart", "table", "timeline", "compare", "grid", "kpis", "quote", "image", "cycle", "pyramid")
 CHARTS = ("bar", "column", "line", "pie", "doughnut", "area", "stacked")
 ICONS = ("sun", "star", "heart", "cloud", "cell", "none")
@@ -238,7 +238,10 @@ def icon(slide, kind, x, y, d, color, ink="1F2A3A"):
     if kind == "none":
         return
     if kind not in ICONS:
-        raise SystemExit(f"no icon {kind!r}; choose one of {', '.join(ICONS)}")
+        # Any of Lucide's 1,500+ icons, as a native vector shape (icons.py).
+        import icons
+        icons.add_to_slide(slide, icons.require(kind), x, y, d, _hex(color), 2.2)
+        return
     if kind == "sun":
         shape(slide, MSO_SHAPE.SUN, x, y, d, d, fill=color)
     elif kind == "star":
@@ -249,6 +252,14 @@ def icon(slide, kind, x, y, d, color, ink="1F2A3A"):
         shape(slide, MSO_SHAPE.CLOUD, x, y + d * 0.2, d, d * 0.6, fill=tint(_hex(color), 0.55))
     elif kind == "cell":
         cell(slide, x + d / 2, y + d / 2, d / 2, color, ink)
+
+
+def badge(slide, kind, x, y, d, color, solid=True):
+    """An icon in a circle: white on the colour (solid), or the colour on its tint."""
+    hx = _hex(color)
+    shape(slide, MSO_SHAPE.OVAL, x, y, d, d, fill=hx if solid else tint(hx, 0.8))
+    pad = d * 0.24
+    icon(slide, kind, x + pad, y + pad, d - 2 * pad, "FFFFFF" if solid else hx)
 
 
 def cell(slide, cx, cy, r, color, ink="1F2A3A"):
@@ -323,7 +334,7 @@ def add_slide(prs, t, spec, n):
         {"cards": _cards, "steps": _steps, "statement": _statement, "faces": _faces,
          "bullets": _bullets, "chart": _chart, "table": _table, "timeline": _timeline,
          "compare": _compare, "grid": _grid, "kpis": _kpis, "quote": _quote, "image": _image,
-         "cycle": _cycle, "pyramid": _pyramid}[layout](slide, t, spec, accent)
+         "cycle": _cycle, "pyramid": _pyramid, "feature": _feature}[layout](slide, t, spec, accent)
     if spec.get("notes"):
         slide.notes_slide.notes_text_frame.text = spec["notes"]
     return slide
@@ -331,6 +342,8 @@ def add_slide(prs, t, spec, n):
 
 def _title(slide, t, spec, accent):
     a = t["accents"]
+    if spec.get("style") == "dark":
+        return _title_dark(slide, t, spec, accent)
     if t["decor"]:
         shape(slide, MSO_SHAPE.OVAL, -1.6, -1.6, 4.2, 4.2, fill=tint(a[2], 0.7, t["bg"]))
         shape(slide, MSO_SHAPE.OVAL, W - 2.6, H - 2.2, 4.0, 4.0, fill=tint(a[1], 0.8, t["bg"]))
@@ -696,17 +709,17 @@ def _grid(slide, t, spec, accent):
     gap = 0.25
     tw = (W - 2.05 - gap * (cols - 1)) / cols
     th = min(2.1, (5.15 - gap * (rws - 1)) / rws)
+    top = 1.8 if rws > 1 else 2.6  # one row sits in the middle of the space
     for i, item in enumerate(items):
         if isinstance(item, str):
             head, _, body = item.partition(":")
             item = {"head": head, "text": body}
         c = t["accents"][i % 6]
         x = 0.85 + (i % cols) * (tw + gap)
-        y = 1.8 + (i // cols) * (th + gap)
+        y = top + (i // cols) * (th + gap)
         shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, tw, th, fill=t["card"], line=tint(c, 0.5, t["bg"]),
               radius=0.12)
-        shape(slide, MSO_SHAPE.OVAL, x + 0.25, y + 0.25, 0.8, 0.8, fill=tint(c, 0.75, t["bg"]))
-        icon(slide, item.get("icon", "star"), x + 0.37, y + 0.37, 0.56, c, t["ink"])
+        badge(slide, item.get("icon", "star"), x + 0.25, y + 0.25, 0.8, c)
         text(slide, x + 1.2, y + 0.25, tw - 1.4, 0.8, item.get("head", "").strip(), 19, t["ink"], t["head"],
              bold=True, anchor=MSO_ANCHOR.MIDDLE)
         text(slide, x + 0.25, y + 1.15, tw - 0.5, th - 1.3, item.get("text", "").strip(), 17, t["soft"], t["body"])
@@ -822,3 +835,73 @@ def _pyramid(slide, t, spec, accent):
              t["body"], anchor=MSO_ANCHOR.MIDDLE)
         shape(slide, MSO_SHAPE.RECTANGLE, 0.85 + full / 2 + w / 2 + 0.1, y + h / 2 - 0.015,
               8.2 - (0.85 + full / 2 + w / 2 + 0.1), 0.03, fill=tint(c, 0.4, t["bg"]))
+
+
+def _title_dark(slide, t, spec, accent):
+    """A deep background, the title large on the left, and a cluster of
+    friendly faces (or an icon) on the right: a cover that sets the tone."""
+    a = t["accents"]
+    deep = _hex(shade(a[1], 0.62))
+    fill = slide.background.fill
+    fill.solid()
+    fill.fore_color.rgb = rgb(deep)
+    text(slide, 0.9, 2.3, 7.2, 1.6, spec.get("title", ""), 50, "FFFFFF", t["head"], bold=True,
+         anchor=MSO_ANCHOR.BOTTOM, name="Title")
+    if spec.get("subtitle"):
+        text(slide, 0.9, 4.05, 6.8, 1.0, spec["subtitle"], 20, tint(deep, 0.75), t["body"])
+    if spec.get("tag"):
+        pill = shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, 0.9, 5.3, min(4.5, 0.6 + len(spec["tag"]) * 0.12), 0.5,
+                     fill=a[0], radius=0.5)
+        _label(pill, spec["tag"], 14, "FFFFFF", t["body"])
+    art = spec.get("icon", "faces")
+    if art == "faces":
+        for (cx, cy, d, c, mood) in [(10.2, 2.9, 2.6, a[1], "happy"), (8.9, 5.2, 1.35, a[2], "happy"),
+                                     (11.8, 5.4, 1.05, mood_pink(a), "happy")]:
+            shape(slide, MSO_SHAPE.OVAL, cx - d / 2, cy - d / 2, d, d, fill=c)
+            face(slide, cx, cy, d, mood, _hex(shade(deep, 0.2)))
+        for (x, y, d, c) in [(9.3, 1.0, 0.22, a[2]), (12.2, 0.9, 0.3, a[0]), (12.6, 3.4, 0.18, a[3])]:
+            shape(slide, MSO_SHAPE.OVAL, x, y, d, d, fill=c)
+    elif art != "none":
+        badge(slide, art, 8.9, 1.7, 3.4, a[1])
+
+
+def mood_pink(a):
+    return "FF8FAB" if "FF6B6B" in a else a[3]
+
+
+def _feature(slide, t, spec, accent):
+    """One big number in a hero card, and icon cards beside it:
+    {"stat": "Trillions", "stat_text": "of cells…", "note": "…", "items": [{"icon", "head", "text"}]}."""
+    items = (spec.get("items") or [])[:4]
+    hero_w = 4.2 if items else W - 2.05
+    shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, 0.85, 1.8, hero_w, 5.05, fill=tint(accent, 0.86, t["bg"]),
+          radius=0.06)
+    text(slide, 1.2, 2.2, hero_w - 0.7, 1.4, str(spec.get("stat", "")), 60, accent, t["head"], bold=True,
+         anchor=MSO_ANCHOR.MIDDLE, name="Stat")
+    if spec.get("stat_text"):
+        text(slide, 1.2, 3.7, hero_w - 0.7, 1.3, spec["stat_text"], 20, t["ink"], t["body"])
+    if spec.get("note"):
+        text(slide, 1.2, 5.5, hero_w - 0.7, 1.1, spec["note"], 15, t["soft"], t["body"])
+        for r in slide.shapes[-1].text_frame.paragraphs[0].runs:
+            r.font.italic = True
+    if not items:
+        return
+    gap = 0.25
+    cols = 2
+    rows = (len(items) + 1) // 2
+    x0 = 0.85 + hero_w + gap
+    cw = (W - 1.2 - x0 - gap) / cols
+    ch = (5.05 - gap * (rows - 1)) / rows
+    for i, item in enumerate(items):
+        if isinstance(item, str):
+            head, _, body = item.partition(":")
+            item = {"head": head, "text": body}
+        c = t["accents"][i % 6]
+        x = x0 + (i % cols) * (cw + gap)
+        y = 1.8 + (i // cols) * (ch + gap)
+        shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, cw, ch, fill=t["card"], line=tint(c, 0.75, t["bg"]),
+              radius=0.06)
+        badge(slide, item.get("icon", "star"), x + 0.3, y + 0.3, 0.85, c)
+        text(slide, x + 0.3, y + 1.3, cw - 0.6, 0.55, item.get("head", "").strip(), 19, shade(c, 0.2), t["head"],
+             bold=True)
+        text(slide, x + 0.3, y + 1.8, cw - 0.6, ch - 1.95, item.get("text", "").strip(), 15, t["soft"], t["body"])

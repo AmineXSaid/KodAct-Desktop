@@ -230,13 +230,43 @@ def render(path, out_dir, dpi=80, pages=None):
                   key=lambda p: int(p.rsplit("-", 1)[1][:-4]))
 
 
+def sheet(path, out_png, cols=3, dpi=50):
+    """Every page or slide in one picture, numbered: the whole file at a glance
+    (a contact sheet), for one look instead of one per slide."""
+    from PIL import Image, ImageDraw
+    with tempfile.TemporaryDirectory() as tmp:
+        pages = render(path, tmp, dpi)
+        ims = [Image.open(p).convert("RGB") for p in pages]
+        if not ims:
+            raise SystemExit("nothing to put on the sheet")
+        w = max(i.width for i in ims)
+        h = max(i.height for i in ims)
+        pad, label = 16, 22
+        rows = (len(ims) + cols - 1) // cols
+        grid = Image.new("RGB", (cols * (w + pad) + pad, rows * (h + pad + label) + pad), (236, 238, 241))
+        d = ImageDraw.Draw(grid)
+        for i, im in enumerate(ims):
+            x = pad + (i % cols) * (w + pad)
+            y = pad + (i // cols) * (h + pad + label)
+            grid.paste(im, (x, y + label))
+            d.text((x, y + 4), str(i + 1), fill=(60, 64, 72))
+        grid.save(out_png)
+    return len(ims)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     v = sub.add_parser("validate"); v.add_argument("files", nargs="+")
     r = sub.add_parser("render"); r.add_argument("file"); r.add_argument("out_dir")
     r.add_argument("--dpi", type=int, default=80); r.add_argument("--pages")
+    sh = sub.add_parser("sheet"); sh.add_argument("file"); sh.add_argument("out_png")
+    sh.add_argument("--cols", type=int, default=3)
     args = ap.parse_args(argv)
+    if args.cmd == "sheet":
+        n = sheet(args.file, args.out_png, args.cols)
+        print(f"{n} page(s) on {args.out_png}")
+        return
     if args.cmd == "validate":
         bad = False
         for f in args.files:

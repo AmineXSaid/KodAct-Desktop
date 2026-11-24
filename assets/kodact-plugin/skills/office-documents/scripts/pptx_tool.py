@@ -19,10 +19,12 @@ saves, so they watch it grow. A slide is JSON:
      "items": ["Billions of tiny parts", "Each has a job"], "icon": "cell",
      "notes": "What to say."}
 
-Layouts: title (title, subtitle, tag, icon), cards (items; "marks":
+Layouts: title (title, subtitle, tag, icon, style: dark), feature (stat,
+stat_text, note, items [{"icon", "head", "text"}]), cards (items; "marks":
 number|heart|star|sun), steps (2-4 items, "Head: body"; footer), statement
 (statement, items, art), faces (items [{"label", "mood"}], lines), bullets
-(items), closing (title, items). Icons: sun star heart cloud cell none.
+(items), closing (title, items). Icons: any of Lucide's 1,500+ names (`python icons.py search WORD`), or sun
+star heart cloud cell. Any slide takes "section" to start a deck section.
 Moods: happy sad worried angry confused surprised. Text is sized to fit.
 
 `read --shapes` names each slide's shapes (`#0 Title 1: …`), which is what
@@ -89,17 +91,114 @@ def _finish(prs, title=None, new=False):
 THEME_MARK = "kodact-theme:"
 
 
-def init(out, theme="kids", title=None, subtitle=None, tag=None):
+def init(out, theme="kids", title=None, subtitle=None, tag=None, style=None):
     """A new 16:9 deck holding its designed title slide, saved at once."""
     t = deck_design.theme(theme)
     prs = Presentation()
     _widen(prs)
     deck_design.add_slide(prs, t, {"layout": "title", "title": title or "Untitled deck",
-                                   "subtitle": subtitle, "tag": tag}, 1)
+                                   "subtitle": subtitle, "tag": tag, "style": style}, 1)
     _finish(prs, title, new=True)
     prs.core_properties.category = THEME_MARK + theme
+    _write_theme(prs, t, theme)
     _save(prs, out)
     return 1
+
+
+A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+
+
+def _write_theme(prs, t, name):
+    """The deck's own theme (Design → Variants in PowerPoint): its colours and
+    fonts, so the person can restyle the whole deck from one place."""
+    from lxml import etree
+    part = next(r.target_part for r in prs.slide_master.part.rels.values() if r.reltype.endswith("/theme"))
+    root = etree.fromstring(part.blob)
+    el = root.find(f".//{A}themeElements")
+    root.set("name", f"KodAct {name}")
+    scheme = el.find(f"{A}clrScheme")
+    scheme.set("name", f"KodAct {name}")
+    colours = {"dk1": t["ink"], "lt1": "FFFFFF", "dk2": t["soft"], "lt2": t["bg"]}
+    for i, c in enumerate(t["accents"][:6], start=1):
+        colours[f"accent{i}"] = c
+    for key, hexv in colours.items():
+        slot = scheme.find(f"{A}{key}")
+        if slot is None:
+            continue
+        for child in list(slot):
+            slot.remove(child)
+        etree.SubElement(slot, f"{A}srgbClr").set("val", hexv.upper())
+    fonts = el.find(f"{A}fontScheme")
+    fonts.set("name", f"KodAct {name}")
+    for which, face in (("majorFont", t["head"]), ("minorFont", t["body"])):
+        latin = fonts.find(f"{A}{which}/{A}latin")
+        if latin is not None:
+            latin.set("typeface", face)
+    part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+
+P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+SECTIONS_EXT = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"
+
+
+def _sections(prs):
+    """The deck's sections (PowerPoint 2010+): [(name, [slide ids])]."""
+    ext = _section_ext(prs, create=False)
+    if ext is None:
+        return []
+    out = []
+    for sec in ext.iter(f"{{{P14}}}section"):
+        out.append((sec.get("name"), [int(i.get("id")) for i in sec.iter(f"{{{P14}}}sldId")]))
+    return out
+
+
+def _section_ext(prs, create=True):
+    from lxml import etree
+    pres = prs.part._element
+    PNS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    lst = pres.find(f"{{{PNS}}}extLst")
+    if lst is None:
+        if not create:
+            return None
+        lst = etree.SubElement(pres, f"{{{PNS}}}extLst")
+    for ext in lst.findall(f"{{{PNS}}}ext"):
+        if ext.get("uri") == SECTIONS_EXT:
+            return ext
+    if not create:
+        return None
+    ext = etree.SubElement(lst, f"{{{PNS}}}ext")
+    ext.set("uri", SECTIONS_EXT)
+    etree.SubElement(ext, f"{{{P14}}}sectionLst", nsmap={"p14": P14})
+    return ext
+
+
+def _place_in_section(prs, slide, section):
+    """Put the new slide in `section` (a new one when named), else in the last one."""
+    import uuid
+    from lxml import etree
+    sid = int(prs.slides._sldIdLst[-1].get("id"))
+    if section is None and _section_ext(prs, create=False) is None:
+        return
+    ext = _section_ext(prs)
+    lst = ext.find(f"{{{P14}}}sectionLst")
+    secs = lst.findall(f"{{{P14}}}section")
+    if section is not None or not secs:
+        sec = etree.SubElement(lst, f"{{{P14}}}section")
+        sec.set("name", section or "Slides")
+        sec.set("id", "{" + str(uuid.uuid4()).upper() + "}")
+        if not secs and len(prs.slides) > 1:
+            # Slides made before the first section join an opening one.
+            first = etree.Element(f"{{{P14}}}section")
+            first.set("name", "Opening")
+            first.set("id", "{" + str(uuid.uuid4()).upper() + "}")
+            ids = etree.SubElement(first, f"{{{P14}}}sldIdLst")
+            for e in list(prs.slides._sldIdLst)[:-1]:
+                etree.SubElement(ids, f"{{{P14}}}sldId").set("id", e.get("id"))
+            lst.insert(0, first)
+        etree.SubElement(sec, f"{{{P14}}}sldIdLst")
+    else:
+        sec = secs[-1]
+    sec.find(f"{{{P14}}}sldIdLst").append(etree.Element(f"{{{P14}}}sldId", id=str(sid)))
 
 
 def _theme_of(prs, override=None):
@@ -116,7 +215,8 @@ def add(path, spec, theme=None):
     prs = Presentation(path)
     t = deck_design.theme(_theme_of(prs, theme))
     n = len(prs.slides) + 1
-    deck_design.add_slide(prs, t, spec, n)
+    slide = deck_design.add_slide(prs, t, spec, n)
+    _place_in_section(prs, slide, spec.get("section"))
     _finish(prs)
     _save(prs, path)
     return n
@@ -353,6 +453,7 @@ def main(argv=None):
     i.add_argument("--theme", choices=sorted(deck_design.THEMES))
     i.add_argument("--audience", help="who it is for, in words; picks the theme when --theme is not given")
     i.add_argument("--title"); i.add_argument("--subtitle"); i.add_argument("--tag")
+    i.add_argument("--style", choices=["light", "dark"], help="dark: a deep cover with the title large")
     a = sub.add_parser("add"); a.add_argument("file"); a.add_argument("--json", required=True)
     a.add_argument("--theme", choices=sorted(deck_design.THEMES))
     r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--shapes", action="store_true")
@@ -368,7 +469,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.cmd == "init":
         theme = args.theme or deck_design.for_audience(args.audience)
-        init(args.out, theme, args.title, args.subtitle, args.tag)
+        init(args.out, theme, args.title, args.subtitle, args.tag, args.style)
         print(f"wrote {args.out}: its {theme} title slide; add slides with `add`")
     elif args.cmd == "add":
         spec = _spec(args.json)

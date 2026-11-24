@@ -464,6 +464,14 @@ def _cards(doc, t, spec):
         borders(c, top=("single", 24, col), left=("single", 36, "FFFFFF"), right=("single", 36, "FFFFFF"),
                 bottom=("single", 36, "FFFFFF"))
         p = c.paragraphs[0]
+        if item.get("icon"):
+            # A Lucide icon in the card's colour, drawn as a crisp picture.
+            import icons
+            with tempfile.TemporaryDirectory() as tmp:
+                png = os.path.join(tmp, "icon.png")
+                icons.png(icons.require(item["icon"]), png, 128, col, 2.2)
+                p.add_run().add_picture(png, width=Inches(0.32))
+            p = c.add_paragraph()
         run(p, item.get("head", "").strip(), t, size=12, color=t["ink"], bold=True, font=t["head"])
         spacing(p, 0, 3)
         q = c.add_paragraph()
