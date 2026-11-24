@@ -564,6 +564,7 @@ pub struct ExtraColors {
     pub code_inline_bg: Hsla,
     // Permission modes, as KodAct for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,   // Edit automatically
+    pub mode_auto: Hsla,   // Auto
     pub mode_plan: Hsla,   // Plan
     pub mode_bypass: Hsla, // Bypass permissions
     // A skill named in the composer (`/code-review`): bold, in its own colour.
@@ -635,6 +636,7 @@ impl ExtraColors {
                 code_inline_fg: rgb(0xf0f0f0).into(),
                 code_inline_bg: Hsla::from(rgb(0xf0f0f0)).opacity(0.09),
                 mode_edit: rgb(0x2da160).into(),
+                mode_auto: rgb(0xa08cf2).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
                 skill: rgb(0xb4a2ff).into(),
@@ -709,6 +711,7 @@ impl ExtraColors {
                 code_inline_fg: rgb(0x262626).into(),
                 code_inline_bg: Hsla::from(rgb(0x212121)).opacity(0.065),
                 mode_edit: rgb(0x108548).into(),
+                mode_auto: rgb(0x6247c7).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
                 skill: rgb(0x5a44c0).into(),

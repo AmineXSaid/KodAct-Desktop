@@ -344,7 +344,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 26] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 27] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -512,6 +512,13 @@ fn render() -> String {
             |t| t.extra.skill,
             |t| t.colors.surface,
             "a skill named in the composer, bold",
+        ),
+        (
+            "mode_auto",
+            |t| t.extra.mode_auto,
+            |t| t.extra.mode_auto,
+            |t| t.colors.surface,
+            "Auto mode",
         ),
         (
             "mode_plan",

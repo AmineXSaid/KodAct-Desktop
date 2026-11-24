@@ -23,6 +23,8 @@ enum Target {
     Chat(usize),
     Model(String),
     Mode(ModeId),
+    /// A thinking budget (tokens; None is the model's default).
+    Thinking(Option<u32>),
     /// A project file, by its path in the project.
     File(String),
     /// A chat where the query was said: it opens with the find bar on it.
@@ -1157,6 +1159,16 @@ impl CommandPalette {
                 target: Target::Mode(m),
             });
         }
+        for (tokens, label) in super::session_panel::BUDGETS {
+            out.push(Command {
+                label: format!("Thinking budget: {label}").into(),
+                group: "Models",
+                icon: "icons/lightbulb.svg",
+                hint: (s.thinking_budget == tokens).then(|| "current".into()),
+                detail: None,
+                target: Target::Thinking(tokens),
+            });
+        }
         let current = s.active_profile().map(|p| p.name.clone());
         for row in super::model_menu::rows(s, "").0 {
             if row.disabled {
@@ -1389,6 +1401,7 @@ impl CommandPalette {
                     None => s.select_profile(&name, cx),
                 }),
             Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
+            Target::Thinking(n) => self.state.update(cx, |s, cx| s.set_thinking_budget(n, cx)),
             Target::File(rel) => self.state.update(cx, |s, cx| s.open_project_file(rel, cx)),
             Target::Message(id, q) => {
                 self.state.update(cx, |s, cx| {

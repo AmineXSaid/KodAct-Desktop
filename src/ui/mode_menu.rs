@@ -15,8 +15,9 @@ use crate::theme::Theme;
 /// focus ring and send button.
 pub fn tint(t: &Theme, mode: ModeId) -> Option<Hsla> {
     match mode {
-        ModeId::Manual => None,
+        ModeId::Manual | ModeId::DontAsk => None,
         ModeId::AcceptEdits => Some(t.extra.mode_edit),
+        ModeId::Auto => Some(t.extra.mode_auto),
         ModeId::Plan => Some(t.extra.mode_plan),
         ModeId::Bypass => Some(t.extra.mode_bypass),
     }
@@ -131,7 +132,11 @@ pub fn menu(
     let mut rows = div().flex().flex_col().gap(px(2.));
     // One by one as the menu opens (`motion::cascade`).
     let mut n = 0;
-    for mode in ModeId::ALL {
+    // Don't ask is listed only while this chat is in it (KodAct CLI chose it).
+    let shown = ModeId::ALL
+        .into_iter()
+        .chain((current == ModeId::DontAsk).then_some(ModeId::DontAsk));
+    for mode in shown {
         let picked = mode == current;
         let st = state.clone();
         let row_fg = tint(t, mode).unwrap_or(t.colors.text);

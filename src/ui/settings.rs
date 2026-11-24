@@ -65,6 +65,7 @@ pub struct Settings {
     mcp: Entity<super::mcp_editor::McpEditor>,
     permissions: Entity<super::permissions_editor::PermissionsEditor>,
     sandbox: Entity<super::sandbox_editor::SandboxEditor>,
+    compaction: Entity<super::compaction_editor::CompactionEditor>,
     env: Entity<super::env_editor::EnvEditor>,
     plugins: Entity<super::plugins_editor::PluginsEditor>,
     memory: Entity<super::memory_view::MemoryView>,
@@ -118,6 +119,7 @@ const SECTIONS: &[Section] = &[
         "Workspace",
         &[
             (SettingsTab::Sandbox, "icons/box.svg", "Sandbox"),
+            (SettingsTab::Compaction, "icons/layers.svg", "Compaction"),
             // Network waits on KodAct CLI (a proxy, extra certificates): listed
             // once a setting there would change something (`planned.rs`).
             (
@@ -238,6 +240,8 @@ impl Settings {
             .new(|cx| super::permissions_editor::PermissionsEditor::new(state.clone(), window, cx));
         let sandbox =
             cx.new(|cx| super::sandbox_editor::SandboxEditor::new(state.clone(), window, cx));
+        let compaction =
+            cx.new(|cx| super::compaction_editor::CompactionEditor::new(state.clone(), window, cx));
         let env = cx.new(|cx| super::env_editor::EnvEditor::new(state.clone(), window, cx));
         let plugins =
             cx.new(|cx| super::plugins_editor::PluginsEditor::new(state.clone(), window, cx));
@@ -273,6 +277,7 @@ impl Settings {
             mcp,
             permissions,
             sandbox,
+            compaction,
             env,
             plugins,
             memory,
@@ -2225,6 +2230,7 @@ impl Render for Settings {
                 SettingsTab::Mcp => self.mcp.clone().into_any_element(),
                 SettingsTab::Permissions => self.permissions.clone().into_any_element(),
                 SettingsTab::Sandbox => self.sandbox.clone().into_any_element(),
+                SettingsTab::Compaction => self.compaction.clone().into_any_element(),
                 SettingsTab::Network => {
                     super::planned::render(&t, &super::planned::NETWORK).into_any_element()
                 }

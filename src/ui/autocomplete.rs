@@ -1,5 +1,7 @@
 //! The composer's autocomplete: type `/` at the start of a message for
-//! commands (KodAct CLI's, the project's own, the app's, the modes), or `@`
+//! commands (KodAct CLI's, the project's own, the app's, the modes), `/`
+//! after a space later in it for a skill or a project command (KodAct CLI
+//! runs those anywhere in a message: "check this with /simplify"), or `@`
 //! anywhere for a file in the project. A popover above the box lists the
 //! matches, best first, with the matched letters in bold; ↑/↓ move, Enter
 //! or Tab completes, Esc closes it until the word changes.
@@ -26,8 +28,10 @@ pub struct Trigger {
     pub query: String,
 }
 
-/// The word at the end of `text`, if it is one to complete: `/word` as the
-/// whole message so far, or `@word` after a space or at the start.
+/// The word at the end of `text`, if it is one to complete: `/word` or
+/// `@word`, at the start or after a space. A `/word` later in the message
+/// isn't one inside code (a fenced block or a `span`), which KodAct CLI
+/// leaves as it is.
 pub fn trigger(text: &str) -> Option<Trigger> {
     let start = text.rfind(char::is_whitespace).map_or(0, |i| {
         i + text[i..].chars().next().map_or(1, char::len_utf8)
@@ -36,10 +40,42 @@ pub fn trigger(text: &str) -> Option<Trigger> {
     let sign = word.chars().next()?;
     let query = word[sign.len_utf8()..].to_string();
     match sign {
-        '/' if start == 0 && !query.contains('/') => Some(Trigger { sign, start, query }),
+        '/' if query.contains('/') => None,
+        '/' if start == 0 || !in_code(&text[..start]) => Some(Trigger { sign, start, query }),
         '@' => Some(Trigger { sign, start, query }),
         _ => None,
     }
+}
+
+/// Whether the end of `before` is inside code: an open ``` or ~~~ fence, or
+/// an open `span` on its line.
+fn in_code(before: &str) -> bool {
+    let mut fence: Option<String> = None;
+    let mut last = "";
+    for line in before.split('\n') {
+        last = line;
+        let t = line.trim_start();
+        let run = |c: char| t.chars().take_while(|x| *x == c).count();
+        match &fence {
+            Some(f) if t.starts_with(f.as_str()) && t[f.len()..].trim().is_empty() => fence = None,
+            Some(_) => {}
+            None => {
+                for c in ['`', '~'] {
+                    if run(c) >= 3 {
+                        fence = Some(c.to_string().repeat(run(c)));
+                    }
+                }
+            }
+        }
+    }
+    fence.is_some() || last.matches('`').count() % 2 == 1
+}
+
+/// Whether a `/command` of this group runs where it is in the middle of a
+/// message: skills and the project's own commands do; KodAct CLI's built-in
+/// commands, the app's and the modes only lead a message.
+pub fn runs_mid_message(group: &str) -> bool {
+    group == "Skills" || group == "This project"
 }
 
 /// A mention in a message: a `/name` KodAct CLI runs leading it (a skill or
@@ -69,6 +105,32 @@ pub fn marks(text: &str, s: &AppState, sent: bool) -> Vec<(std::ops::Range<usize
                 };
                 out.push((0..end, mark));
             }
+        }
+    }
+    // Skills and project commands later in the message.
+    let commands = s.completion_commands();
+    let mut at = 0;
+    for word in text.split_inclusive(char::is_whitespace) {
+        let start = at;
+        at += word.len();
+        let word = word.trim_end();
+        let Some(name) = word.strip_prefix('/').filter(|_| start > 0) else {
+            continue;
+        };
+        let end = start + word.len();
+        if name.is_empty() || !finished(end) || in_code(&text[..start]) {
+            continue;
+        }
+        if let Some(c) = commands
+            .iter()
+            .find(|c| c.name == name && runs_mid_message(c.group))
+        {
+            let mark = if c.group == "Skills" {
+                Mark::Skill
+            } else {
+                Mark::Command
+            };
+            out.push((start..end, mark));
         }
     }
     let files = s.completion_files();
@@ -218,7 +280,35 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             ));
         }
     };
-    if trig.sign == '/' {
+    // Later in a message, only what KodAct CLI runs there.
+    if trig.sign == '/' && trig.start > 0 {
+        for (order, c) in s
+            .completion_commands()
+            .into_iter()
+            .filter(|c| runs_mid_message(c.group))
+            .enumerate()
+        {
+            let label = format!("/{}", c.name);
+            let detail = if c.args.is_empty() {
+                c.description.clone()
+            } else {
+                format!("{} · {}", c.args, c.description)
+            };
+            let icon = if c.group == "Skills" {
+                "icons/scroll-text.svg"
+            } else {
+                "icons/terminal.svg"
+            };
+            push(
+                order,
+                label,
+                detail,
+                c.group,
+                icon,
+                Pick::Text(format!("/{} ", c.name)),
+            );
+        }
+    } else if trig.sign == '/' {
         let mut order = 0;
         for c in s.completion_commands() {
             let label = format!("/{}", c.name);
@@ -711,8 +801,16 @@ mod tests {
             Some(('/', 0, "comp".into()))
         );
         assert_eq!(trigger("/").map(|t| t.query), Some(String::new()));
-        // A command only leads a message.
-        assert_eq!(trigger("run /comp"), None);
+        // Later in a message too (a skill or a project command runs there),
+        // but not inside code, nor a path.
+        assert_eq!(
+            trigger("check /simp").map(|t| (t.sign, t.start, t.query)),
+            Some(('/', 6, "simp".into()))
+        );
+        assert_eq!(trigger("run `ls /us"), None);
+        assert_eq!(trigger("```\ncd /us"), None);
+        assert!(trigger("```\ncode\n```\nthen /simp").is_some());
+        assert_eq!(trigger("open /usr/lo"), None);
         assert_eq!(
             trigger("look at @src/ma").map(|t| (t.sign, t.start, t.query)),
             Some(('@', 8, "src/ma".into()))

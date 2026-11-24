@@ -443,6 +443,32 @@ fn event_line(
         )
     } else if words.starts_with("Compact") {
         ("icons/layers.svg", t.colors.text_muted, t.colors.hover)
+    } else if words.starts_with("Finish check: met") || words.starts_with("Finished, verified") {
+        (
+            "icons/shield-check.svg",
+            t.extra.success,
+            t.extra.success_tint,
+        )
+    } else if words.starts_with("Finish")
+        || words.starts_with("Changes not checked")
+        || words.starts_with("Last check failed")
+        || words.starts_with("Built, not run")
+    {
+        (
+            "icons/list-todo.svg",
+            t.colors.primary,
+            t.colors.primary_tint,
+        )
+    } else if words.starts_with("Background command") {
+        (
+            "icons/file-terminal.svg",
+            t.colors.text_muted,
+            t.colors.hover,
+        )
+    } else if words.starts_with("File no longer parses") || words.starts_with("Errors after") {
+        ("icons/bug.svg", t.extra.danger, t.extra.danger_tint)
+    } else if words.starts_with("Loop guard") || words.starts_with("Tool call repaired") {
+        ("icons/refresh-cw.svg", t.colors.text_muted, t.colors.hover)
     } else {
         ("icons/info.svg", t.colors.text_muted, t.colors.hover)
     };

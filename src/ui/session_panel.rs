@@ -171,7 +171,7 @@ fn row(
 /// A small icon button at a row's end.
 fn end_button(
     t: &Theme,
-    id: &'static str,
+    id: impl Into<gpui::ElementId>,
     glyph: &'static str,
     tip: &'static str,
 ) -> gpui::Stateful<gpui::Div> {
@@ -247,6 +247,109 @@ fn environment(
             d.child(row(t, "icons/git-branch.svg", s.branch.clone(), None))
         })
         .into_any_element()
+}
+
+/// The thinking budgets offered: the model's default, none, then a few
+/// sizes (tokens).
+pub const BUDGETS: [(Option<u32>, &str); 5] = [
+    (None, "Auto"),
+    (Some(0), "Off"),
+    (Some(4_000), "4K"),
+    (Some(16_000), "16K"),
+    (Some(32_000), "32K"),
+];
+
+/// How long the model may think before it answers: KodAct CLI's
+/// `set_max_thinking_tokens`, for every chat from its next request.
+fn thinking(t: &Theme, state: &Entity<AppState>, s: &AppState) -> AnyElement {
+    let mut seg = super::button::Segmented::new("session-thinking", "Thinking budget");
+    for (tokens, label) in BUDGETS {
+        let st = state.clone();
+        seg = seg.option(label, s.thinking_budget == tokens, move |_, _, cx| {
+            st.update(cx, |s, cx| s.set_thinking_budget(tokens, cx))
+        });
+    }
+    div()
+        .flex()
+        .flex_col()
+        .gap(t.space.sm)
+        .child(div().flex().child(seg))
+        .child(
+            div()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child(match s.thinking_budget {
+                    None => "The model thinks as long as it usually does.".to_string(),
+                    Some(0) => "The model answers without thinking first.".to_string(),
+                    Some(n) => format!(
+                        "The model thinks for at most {} tokens a reply.",
+                        n / 1000 * 1000
+                    ),
+                }),
+        )
+        .into_any_element()
+}
+
+/// The chat's MCP servers, as its KodAct CLI reports them: each one's
+/// state and tools, and a restart for one that failed.
+fn mcp(
+    t: &Theme,
+    state: &Entity<AppState>,
+    servers: Option<&Vec<crate::backend::McpServer>>,
+) -> AnyElement {
+    let Some(servers) = servers.filter(|s| !s.is_empty()) else {
+        return div()
+            .text_size(t.text.body_sm)
+            .text_color(t.colors.text_muted)
+            .child(match servers {
+                Some(_) => "No MCP servers in this chat. Add one in Settings → MCP servers.",
+                None => "KodAct reports its MCP servers once the chat is running.",
+            })
+            .into_any_element();
+    };
+    let mut list = div().flex().flex_col();
+    for (i, srv) in servers.iter().enumerate() {
+        let (glyph, words) = match srv.status.as_str() {
+            "connected" => (
+                "icons/circle-check.svg",
+                format!(
+                    "{}: {} tool{}",
+                    srv.name,
+                    srv.tools,
+                    if srv.tools == 1 { "" } else { "s" }
+                ),
+            ),
+            "failed" => (
+                "icons/circle-x.svg",
+                format!(
+                    "{}: failed{}",
+                    srv.name,
+                    srv.error
+                        .as_deref()
+                        .map(|e| format!(", {e}"))
+                        .unwrap_or_default()
+                ),
+            ),
+            "disabled" => ("icons/circle-slash.svg", format!("{}: off", srv.name)),
+            _ => ("icons/clock.svg", format!("{}: starting", srv.name)),
+        };
+        let restart = (srv.status != "connected").then(|| {
+            let (st, name) = (state.clone(), srv.name.clone());
+            end_button(
+                t,
+                SharedString::from(format!("session-mcp-restart-{i}")),
+                "icons/refresh-cw.svg",
+                "Start it again",
+            )
+            .on_click(move |_, _, cx| {
+                let name = name.clone();
+                st.update(cx, |s, cx| s.mcp_reconnect(name, cx))
+            })
+            .into_any_element()
+        });
+        list = list.child(row(t, glyph, words, restart));
+    }
+    list.into_any_element()
 }
 
 fn context(t: &Theme, state: &Entity<AppState>, s: &AppState, u: &ContextUsage) -> AnyElement {
@@ -575,6 +678,20 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
                     .child("KodAct counts what fills the context once the chat has a reply.")
                     .into_any_element(),
             },
+        ))
+        .child(card(
+            t,
+            state,
+            "Thinking",
+            folded("Thinking"),
+            thinking(t, state, s),
+        ))
+        .child(card(
+            t,
+            state,
+            "MCP servers",
+            folded("MCP servers"),
+            mcp(t, state, s.mcp_servers.get(&chat)),
         ))
         .child(card(
             t,

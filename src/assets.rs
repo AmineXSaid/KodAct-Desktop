@@ -79,6 +79,7 @@ icons!(
     "code-xml",
     "graduation-cap",
     "route",
+    "zap",
     "scroll-text",
     "circle-slash",
     "circle-x",

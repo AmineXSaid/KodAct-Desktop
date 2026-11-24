@@ -1410,6 +1410,7 @@ pub enum SettingsTab {
     Mcp,
     Permissions,
     Sandbox,
+    Compaction,
     /// Not listed until KodAct CLI reads a proxy and extra certificates
     /// (`planned::NETWORK`): a page there would change nothing yet.
     #[allow(dead_code)]
@@ -1434,6 +1435,7 @@ impl SettingsTab {
                 | SettingsTab::Mcp
                 | SettingsTab::Permissions
                 | SettingsTab::Sandbox
+                | SettingsTab::Compaction
                 | SettingsTab::Environments
                 | SettingsTab::Memory
                 | SettingsTab::Plugins
@@ -1923,6 +1925,10 @@ pub enum Request {
     Revert { chat: usize, msg: usize },
     /// Stop these sub-agents (every running one when you chose "Stop all").
     StopAgents { chat: usize, ids: Vec<String> },
+    /// Each MCP server's state, for the Session column.
+    McpStatus { chat: usize },
+    /// An MCP server started again.
+    McpReconnect { chat: usize, server: String },
     /// Take back a queued message; `edit` puts it back in the box.
     CancelQueued {
         chat: usize,
@@ -2051,6 +2057,12 @@ pub struct AppState {
     pub show_failed_models: bool,
     /// The effort level, when the model takes one; None is Auto.
     pub effort: Option<crate::endpoints::Effort>,
+    /// The most tokens the model may think for (`set_max_thinking_tokens`):
+    /// None is the model's default, `Some(0)` no thinking. Sent to each
+    /// chat's KodAct CLI as it starts, and to the live one when changed.
+    pub thinking_budget: Option<u32>,
+    /// Each chat's MCP servers, as its KodAct CLI last reported them.
+    pub mcp_servers: std::collections::HashMap<usize, Vec<crate::backend::McpServer>>,
     /// Checks waiting for a slot, and how many are running.
     check_queue: std::collections::VecDeque<(String, bool)>,
     checks_running: usize,
@@ -2586,6 +2598,8 @@ impl AppState {
             tests_running: Default::default(),
             show_failed_models: false,
             effort: None,
+            thinking_budget: None,
+            mcp_servers: Default::default(),
             check_queue: Default::default(),
             checks_running: 0,
             check_gen: Default::default(),
@@ -3982,6 +3996,15 @@ impl AppState {
     }
 
     /// The local folder chat `id` works in (None for a remote one).
+    /// A chat with no folder of yours: it works in KodAct's scratch place.
+    fn chat_is_plain(&self, id: usize) -> bool {
+        self.chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| self.project(c.project))
+            .is_some_and(|p| p.scratch)
+    }
+
     fn chat_project_dir(&self, id: usize) -> Option<std::path::PathBuf> {
         let project = self.chats.iter().find(|c| c.id == id)?.project;
         self.project(project)
@@ -4503,9 +4526,11 @@ impl AppState {
             ask.tool_name.as_str(),
             "Edit" | "MultiEdit" | "Write" | "NotebookEdit"
         );
+        // Auto lets edits through as Edit automatically does; a command
+        // KodAct CLI still asks about in Auto is one it judged risky.
         let allowed = match mode.permission().cli_name() {
             "bypassPermissions" => ask.tool_name != "ExitPlanMode",
-            "acceptEdits" if edit => true,
+            "acceptEdits" | "auto" if edit => true,
             _ => self.auto_approves(chat, &ask.tool_name, &ask.input),
         };
         allowed.then_some((ask.msg, ask.block))
@@ -9838,6 +9863,21 @@ fix everything under 8, render it again to check, then tell me the scores before
         if let Request::StopAgents { chat, ids } = req {
             return self.on_stop_reply(chat, &ids, result, cx);
         }
+        if let Request::McpStatus { chat } = req {
+            if let Ok(v) = result {
+                self.mcp_servers
+                    .insert(chat, crate::backend::McpServer::list(&v));
+                cx.notify();
+            }
+            return;
+        }
+        if let Request::McpReconnect { chat, server } = req {
+            if let Err(e) = result {
+                self.show_toast(format!("Couldn't restart {server}: {e}"), cx);
+            }
+            self.ask_mcp_status(chat);
+            return;
+        }
         if let Request::ContextUsage { chat } = req {
             // An older KodAct CLI doesn't know the request: the card keeps
             // the composer's measure.
@@ -9925,6 +9965,8 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
             (
                 Request::StopAgents { .. }
+                | Request::McpStatus { .. }
+                | Request::McpReconnect { .. }
                 | Request::CancelQueued { .. }
                 | Request::SendQueuedNow { .. }
                 | Request::ContextUsage { .. },
@@ -10038,6 +10080,41 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Ask chat `chat`'s KodAct CLI what fills its context; the answer lands
     /// in `context_usage`. Nothing to ask without a running session.
+    /// Ask a chat's KodAct CLI how its MCP servers are.
+    pub fn ask_mcp_status(&mut self, chat: usize) {
+        if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.mcp_status()) {
+            self.requests.insert(id, Request::McpStatus { chat });
+        }
+    }
+
+    /// Start one of the current chat's MCP servers again.
+    pub fn mcp_reconnect(&mut self, server: String, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        match self
+            .sessions
+            .get(&chat)
+            .map(|l| l.session.mcp_reconnect(&server))
+        {
+            Some(Ok(id)) => {
+                self.requests
+                    .insert(id, Request::McpReconnect { chat, server });
+            }
+            Some(Err(e)) => self.show_toast(format!("Couldn't restart {server}: {e}"), cx),
+            None => {}
+        }
+        cx.notify();
+    }
+
+    /// Set how long the model may think: every running chat's KodAct CLI
+    /// uses it from its next request, and chats started later get it too.
+    pub fn set_thinking_budget(&mut self, tokens: Option<u32>, cx: &mut Context<Self>) {
+        self.thinking_budget = tokens;
+        for live in self.sessions.values() {
+            let _ = live.session.set_thinking_budget(tokens);
+        }
+        cx.notify();
+    }
+
     pub fn ask_context_usage(&mut self, chat: usize) {
         if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.context_usage()) {
             self.requests.insert(id, Request::ContextUsage { chat });
@@ -10050,6 +10127,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         if self.session_open {
             if let Some(chat) = self.current {
                 self.ask_context_usage(chat);
+                self.ask_mcp_status(chat);
             }
         }
         cx.notify();
@@ -11892,19 +11970,22 @@ fix everything under 8, render it again to check, then tell me the scores before
             .find(|c| c.id == id)
             .and_then(|c| self.project(c.project))
             .is_some_and(|p| p.memory_on);
-        let knowledge = (!resumable && !text.trim_start().starts_with('/'))
-            .then_some(dir.as_ref())
-            .flatten()
-            .and_then(|dir| {
-                let mut block = crate::knowledge::block(dir).unwrap_or_default();
-                if memory_on {
-                    block.push_str(&crate::project_memory::prompt(
-                        &crate::project_memory::read(dir),
-                        &crate::project_memory::file(dir),
-                    ));
-                }
-                (!block.trim().is_empty()).then_some(block)
-            });
+        // A plain chat (no folder) carries none: the scratch place's memory
+        // is no project's, and one chat's notes there would reach the next.
+        let knowledge =
+            (!resumable && !text.trim_start().starts_with('/') && !self.chat_is_plain(id))
+                .then_some(dir.as_ref())
+                .flatten()
+                .and_then(|dir| {
+                    let mut block = crate::knowledge::block(dir).unwrap_or_default();
+                    if memory_on {
+                        block.push_str(&crate::project_memory::prompt(
+                            &crate::project_memory::read(dir),
+                            &crate::project_memory::file(dir),
+                        ));
+                    }
+                    (!block.trim().is_empty()).then_some(block)
+                });
         self.snapshot_memory(id);
         let sent = self
             .sessions
@@ -11917,7 +11998,10 @@ fix everything under 8, render it again to check, then tell me the scores before
                         l.profile.wire != crate::endpoints::Wire::Openai,
                     );
                     if let Some(blocks) = content.as_array_mut() {
-                        blocks.insert(0, serde_json::json!({ "type": "text", "text": k }));
+                        blocks.insert(
+                            0,
+                            serde_json::json!({ "type": "text", "text": context_block(k) }),
+                        );
                     }
                     l.session.send_content(content)
                 } else if attachments.is_empty() {
@@ -11965,6 +12049,10 @@ fix everything under 8, render it again to check, then tell me the scores before
         };
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        // A chat with no folder is a conversation, not a task on a project.
+        if self.chat_is_plain(id) {
+            launch.env.extend(crate::backend::plain_chat_env());
+        }
         // The web browser: KodAct's own browser tools (this executable, as
         // an MCP server) on the browser in the side panel. A remote agent
         // reaches them over HTTP, forwarded back to this machine.
@@ -12153,6 +12241,10 @@ fix everything under 8, render it again to check, then tell me the scores before
             crate::backend::Session::spawn(&exe, &launch, &dir)?
         };
         let events = session.events.clone();
+        // The thinking budget you set reaches each chat's KodAct CLI.
+        if self.thinking_budget.is_some() {
+            let _ = session.set_thinking_budget(self.thinking_budget);
+        }
         self.generations += 1;
         let generation = self.generations;
         let pump = cx.spawn(async move |this, cx| {
@@ -12324,15 +12416,15 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
                 cx.notify();
             }
+            // What KodAct CLI did on its own (a check, a summary, a nudge):
+            // a quiet line in the chat, where it happened.
+            Event::Status(line) => {
+                self.notice(chat, line, false);
+                self.fresh_block.insert(chat);
+                cx.notify();
+            }
             Event::ModeChanged(m) => {
-                let mode = match m.as_str() {
-                    "acceptEdits" => Some(ModeId::AcceptEdits),
-                    "plan" => Some(ModeId::Plan),
-                    "bypassPermissions" => Some(ModeId::Bypass),
-                    "default" => Some(ModeId::Manual),
-                    _ => None,
-                };
-                if let Some(mode) = mode {
+                if let Some(mode) = ModeId::from_cli(&m) {
                     self.mode_reported(chat, mode);
                     cx.notify();
                 }
@@ -15396,6 +15488,16 @@ fn initial_projects_from(
     out
 }
 
+/// The project's knowledge and memory, as they ride ahead of a first
+/// message: a `<system-reminder>`, so KodAct CLI reads them as context and
+/// not as your request. Its checks of what a request names (files to make,
+/// commands to run) read only your words; as plain text, a file name in the
+/// memory (`NN_topic.m`) read as a file you asked for, and a "hi" got a
+/// reply about it.
+fn context_block(k: &str) -> String {
+    format!("<system-reminder>\n{}\n</system-reminder>", k.trim_end())
+}
+
 /// Where a chat with no folder works: KodAct's own folder, so a question or
 /// a lesson never runs in (or reads) a folder of yours. Files it writes
 /// there still come back as cards in the reply.
@@ -15876,6 +15978,16 @@ mod tests {
         assert_eq!(super::parent_dir("/"), "/");
         assert_eq!(super::parent_dir("~/work"), "~");
         assert_eq!(super::parent_dir("~"), "~");
+    }
+
+    #[test]
+    fn knowledge_rides_as_context_not_as_the_request() {
+        let b = super::context_block(
+            "<project_memory file=\"M.md\">\n- NN_topic.m\n</project_memory>\n",
+        );
+        // KodAct CLI leaves out of "what you asked" any text block that starts so.
+        assert!(b.starts_with("<system-reminder>\n<project_memory"));
+        assert!(b.ends_with("</project_memory>\n</system-reminder>"));
     }
 
     #[test]

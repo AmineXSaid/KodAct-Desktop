@@ -336,6 +336,7 @@ fn coloured_text_reads_on_its_tint() {
         // A mode's colour marks the composer's edge and its icon (UI parts).
         for (name, c) in [
             ("edit", x.mode_edit),
+            ("auto", x.mode_auto),
             ("plan", x.mode_plan),
             ("bypass", x.mode_bypass),
         ] {

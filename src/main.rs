@@ -64,6 +64,7 @@ mod setting_profiles;
 mod shell_prompt;
 mod skill_install;
 mod stage;
+mod status_words;
 mod state;
 mod stubs;
 #[cfg(test)]

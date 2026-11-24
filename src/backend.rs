@@ -35,6 +35,10 @@ pub enum Event {
     /// KodAct CLI changed the permission mode itself (a plan approved, plan mode
     /// entered, an answer that set a mode): `system/status`, `permissionMode`.
     ModeChanged(String),
+    /// A line of what KodAct CLI did on its own: a check's verdict, a
+    /// summary written, a background command finishing, a nudge
+    /// (`system/<subtype>`, in `status_words.rs`).
+    Status(String),
     /// The chat's `/goal` changed: set, checked, paused, met, given up or
     /// cleared (`system/goal`).
     Goal(crate::state::Goal),
@@ -443,6 +447,22 @@ impl Session {
         self.control(json!({ "subtype": "get_context_usage" }))
     }
 
+    /// The most tokens the model may think for, from the next request on;
+    /// `None` is the model's own default, `Some(0)` no thinking.
+    pub fn set_thinking_budget(&self, tokens: Option<u32>) -> Result<(), String> {
+        self.control(thinking_budget_request(tokens)).map(drop)
+    }
+
+    /// Each MCP server's state (`mcp_status`); the answer is `McpServer::list`'s.
+    pub fn mcp_status(&self) -> Result<String, String> {
+        self.control(json!({ "subtype": "mcp_status" }))
+    }
+
+    /// Start an MCP server again (one that failed, or to pick up a change).
+    pub fn mcp_reconnect(&self, server: &str) -> Result<String, String> {
+        self.control(json!({ "subtype": "mcp_reconnect", "serverName": server }))
+    }
+
     /// Your message with its attachments (`attach::content_blocks`).
     pub fn send_content(&self, content: Value) -> Result<(), String> {
         self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "" }))
@@ -541,6 +561,53 @@ impl Drop for Session {
         // Closing stdin ends the session; kill makes sure.
         self.stdin.lock().unwrap().take();
         let _ = self.child.lock().unwrap().kill();
+    }
+}
+
+/// What a chat with no folder runs with: a conversation, not work on a
+/// project. KodAct CLI's project checks stay off: the verification loop
+/// (checks not run, the Finish check, parse errors after an edit) and the
+/// nudges (files a request names and that aren't there, and the like).
+/// They read a greeting's context as a task and answered it ("NN_topic.m
+/// isn't a file the greeting asks for").
+pub fn plain_chat_env() -> [(String, String); 2] {
+    [
+        ("KODACT_VERIFY".into(), "0".into()),
+        ("KODACT_NUDGES".into(), "none".into()),
+    ]
+}
+
+/// `set_max_thinking_tokens`: a number, or null for the model's default.
+pub fn thinking_budget_request(tokens: Option<u32>) -> Value {
+    json!({ "subtype": "set_max_thinking_tokens", "max_thinking_tokens": tokens })
+}
+
+/// One MCP server as KodAct CLI reports it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct McpServer {
+    pub name: String,
+    /// `connected`, `failed`, `disabled` or `pending`.
+    pub status: String,
+    pub tools: usize,
+    pub error: Option<String>,
+}
+
+impl McpServer {
+    /// `mcp_status`'s answer: `{"mcpServers": [...]}`.
+    pub fn list(answer: &Value) -> Vec<McpServer> {
+        answer["mcpServers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| {
+                Some(McpServer {
+                    name: s["name"].as_str()?.to_string(),
+                    status: s["status"].as_str().unwrap_or("pending").to_string(),
+                    tools: s["tools"].as_array().map_or(0, Vec::len),
+                    error: s["error"].as_str().map(str::to_string),
+                })
+            })
+            .collect()
     }
 }
 
@@ -964,6 +1031,12 @@ impl Parser {
             Some("system") if v["subtype"] == "status" => {
                 if let Some(m) = v["permissionMode"].as_str() {
                     out.push(Event::ModeChanged(m.to_string()));
+                }
+            }
+            Some("system") => {
+                let subtype = v["subtype"].as_str().unwrap_or_default();
+                if let Some(line) = crate::status_words::words(subtype, &v) {
+                    out.push(Event::Status(line));
                 }
             }
             Some("user") if !nested => {
@@ -1560,6 +1633,32 @@ mod tests {
             json!({"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits"}),
         ]);
         assert_eq!(ev, vec![Event::ModeChanged("acceptEdits".into())]);
+        // A plain chat runs without the project checks.
+        let env = plain_chat_env();
+        assert!(env.contains(&("KODACT_VERIFY".into(), "0".into())));
+        assert!(env.contains(&("KODACT_NUDGES".into(), "none".into())));
+        assert_eq!(
+            thinking_budget_request(None),
+            json!({"subtype": "set_max_thinking_tokens", "max_thinking_tokens": null})
+        );
+        assert_eq!(thinking_budget_request(Some(0))["max_thinking_tokens"], 0);
+        let servers = McpServer::list(&json!({"mcpServers": [
+            {"name": "github", "status": "connected", "scope": "user", "tools": [{"name": "a"}, {"name": "b"}]},
+            {"name": "db", "status": "failed", "scope": "project", "error": "spawn failed"}
+        ]}));
+        assert_eq!(servers[0].tools, 2);
+        assert_eq!(servers[1].error.as_deref(), Some("spawn failed"));
+        // So does Auto, which the desktop now offers too.
+        let ev = parse(&[
+            json!({"type":"system","subtype":"status","status":null,"permissionMode":"auto"}),
+        ]);
+        assert_eq!(ev, vec![Event::ModeChanged("auto".into())]);
+        // And what it did on its own, as a line of the chat.
+        let ev = parse(&[
+            json!({"type":"system","subtype":"loop_guard","kind":"error_streak","count":4,"session_id":"s","uuid":"u"}),
+        ]);
+        assert!(matches!(&ev[..], [Event::Status(l)] if l.starts_with("Loop guard:")));
+        assert!(parse(&[json!({"type":"system","subtype":"init","session_id":"s"})]).is_empty());
     }
 
     #[test]

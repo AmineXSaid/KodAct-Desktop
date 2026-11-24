@@ -85,6 +85,7 @@ pub mod queued;
 pub mod remote_menu;
 pub mod rules_view;
 pub mod sandbox_editor;
+pub mod compaction_editor;
 pub mod select;
 pub mod session_panel;
 pub mod settings;
