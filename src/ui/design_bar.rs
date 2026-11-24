@@ -837,11 +837,45 @@ pub fn render(
         // The other exports (`design::export`), in a browser of their own.
         .children(
             [
-                (Format::Png, "share-png", "icons/image.svg", if deck.is_some() { crate::i18n::tr("Save slides as PNG") } else { crate::i18n::tr("Save as PNG") }, true),
-                (Format::Pptx, "share-pptx", "icons/presentation.svg", crate::i18n::tr("Save as PowerPoint"), deck.is_some()),
-                (Format::PptxEditable, "share-pptx-edit", "icons/file-pen.svg", crate::i18n::tr("Save as editable PowerPoint"), deck.is_some()),
-                (Format::Html, "share-html", "icons/file-code.svg", crate::i18n::tr("Save as one HTML file"), true),
-                (Format::Figma, "share-figma", "icons/layers.svg", crate::i18n::tr("Save for Figma (editable layers)"), true),
+                (
+                    Format::Png,
+                    "share-png",
+                    "icons/image.svg",
+                    if deck.is_some() {
+                        crate::i18n::tr("Save slides as PNG")
+                    } else {
+                        crate::i18n::tr("Save as PNG")
+                    },
+                    true,
+                ),
+                (
+                    Format::Pptx,
+                    "share-pptx",
+                    "icons/presentation.svg",
+                    crate::i18n::tr("Save as PowerPoint"),
+                    deck.is_some(),
+                ),
+                (
+                    Format::PptxEditable,
+                    "share-pptx-edit",
+                    "icons/file-pen.svg",
+                    crate::i18n::tr("Save as editable PowerPoint"),
+                    deck.is_some(),
+                ),
+                (
+                    Format::Html,
+                    "share-html",
+                    "icons/file-code.svg",
+                    crate::i18n::tr("Save as one HTML file"),
+                    true,
+                ),
+                (
+                    Format::Figma,
+                    "share-figma",
+                    "icons/layers.svg",
+                    crate::i18n::tr("Save for Figma (editable layers)"),
+                    true,
+                ),
             ]
             .into_iter()
             .filter(|r| r.4)

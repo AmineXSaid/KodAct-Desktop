@@ -125,7 +125,11 @@ const SECTIONS: &[Section] = &[
                 "icons/server.svg",
                 "Environments",
             ),
-            (SettingsTab::Memory, "icons/notebook-pen.svg", "Memory and rules"),
+            (
+                SettingsTab::Memory,
+                "icons/notebook-pen.svg",
+                "Memory and rules",
+            ),
             (SettingsTab::Plugins, "icons/puzzle.svg", "Plugins"),
         ],
     ),
@@ -156,11 +160,14 @@ impl Settings {
         let subs = vec![
             // The name saves on Enter; its Save shows only while it differs.
             cx.observe(&name, |_, _, cx| cx.notify()),
-            cx.subscribe(&name, |this, _, ev: &gpui::component::input::InputEvent, cx| {
-                if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
-                    this.save_name(cx);
-                }
-            }),
+            cx.subscribe(
+                &name,
+                |this, _, ev: &gpui::component::input::InputEvent, cx| {
+                    if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
+                        this.save_name(cx);
+                    }
+                },
+            ),
             cx.observe_in(&state, window, |this, state, window, cx| {
                 let (open, add) = (state.read(cx).settings_open, state.read(cx).settings_add);
                 if add {
@@ -815,10 +822,11 @@ impl Settings {
         if n.trim().is_empty() {
             return;
         }
-        self.state.update(cx, |s, cx| match s.set_user_name(&n, cx) {
-            Ok(()) => s.show_toast("Saved your name.", cx),
-            Err(e) => s.show_toast(e, cx),
-        });
+        self.state
+            .update(cx, |s, cx| match s.set_user_name(&n, cx) {
+                Ok(()) => s.show_toast("Saved your name.", cx),
+                Err(e) => s.show_toast(e, cx),
+            });
     }
 
     fn general(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
@@ -842,13 +850,13 @@ impl Settings {
             .when(
                 {
                     let typed = self.name.read(cx).value().trim().to_string();
-                    !typed.is_empty() && Some(typed.as_str()) != s.user_name.as_deref().map(str::trim)
+                    !typed.is_empty()
+                        && Some(typed.as_str()) != s.user_name.as_deref().map(str::trim)
                 },
                 |d| {
                     d.child(
-                        super::button::Button::secondary("save-name", "Save").on_click(
-                            cx.listener(|this, _, _, cx| this.save_name(cx)),
-                        ),
+                        super::button::Button::secondary("save-name", "Save")
+                            .on_click(cx.listener(|this, _, _, cx| this.save_name(cx))),
                     )
                 },
             );
@@ -918,9 +926,7 @@ impl Settings {
             use crate::doc_tools::Python;
             let set_up = |label: &'static str| {
                 super::button::Button::secondary("doc-tools-set-up", label).on_click(
-                    |_, window, cx| {
-                        window.dispatch_action(Box::new(super::SetUpDocumentTools), cx)
-                    },
+                    |_, window, cx| window.dispatch_action(Box::new(super::SetUpDocumentTools), cx),
                 )
             };
             let row = div().flex().items_center().gap(t.space.sm);
@@ -928,9 +934,7 @@ impl Settings {
                 Python::Ready(_) => row.child(said("Ready", true)),
                 Python::Installing => row.child(said("Setting up…", false)),
                 Python::Unknown => row.child(said("Checking…", false)),
-                Python::Missing(_) => row
-                    .child(said("Not set up", false))
-                    .child(set_up("Set up")),
+                Python::Missing(_) => row.child(said("Not set up", false)).child(set_up("Set up")),
                 Python::NoPython => row
                     .child(said("Needs Python 3", false))
                     .child(set_up("Try again")),
@@ -1135,11 +1139,7 @@ impl Settings {
                             .bg(t.extra.sunk)
                             .border_1()
                             .border_color(t.colors.border)
-                            .child(icon(
-                                "icons/model.svg",
-                                t.size.icon,
-                                t.colors.text_muted,
-                            )),
+                            .child(icon("icons/model.svg", t.size.icon, t.colors.text_muted)),
                     )
                     .child(
                         div()
@@ -2098,7 +2098,8 @@ impl Settings {
             .child(row(
                 "Engine",
                 cli.map(|p| p.display().to_string()).unwrap_or_else(|| {
-                    "KodAct CLI not found: put kodact.exe in the bin folder beside KodAct.exe".into()
+                    "KodAct CLI not found: put kodact.exe in the bin folder beside KodAct.exe"
+                        .into()
                 }),
             ))
             .child(row(
@@ -2276,11 +2277,20 @@ impl Render for Settings {
                             .bg(gpui::linear_gradient(
                                 180.,
                                 gpui::linear_color_stop(
-                                    (if t.is_dark { t.extra.sunk } else { t.extra.pane }).opacity(0.),
+                                    (if t.is_dark {
+                                        t.extra.sunk
+                                    } else {
+                                        t.extra.pane
+                                    })
+                                    .opacity(0.),
                                     0.,
                                 ),
                                 gpui::linear_color_stop(
-                                    if t.is_dark { t.extra.sunk } else { t.extra.pane },
+                                    if t.is_dark {
+                                        t.extra.sunk
+                                    } else {
+                                        t.extra.pane
+                                    },
                                     1.,
                                 ),
                             )),
@@ -2292,7 +2302,11 @@ impl Render for Settings {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .bg(if t.is_dark { t.extra.pane } else { t.colors.canvas })
+                    .bg(if t.is_dark {
+                        t.extra.pane
+                    } else {
+                        t.colors.canvas
+                    })
                     .rounded_tr(PANEL_RADIUS - t.size.hairline)
                     .rounded_br(PANEL_RADIUS - t.size.hairline)
                     .child(

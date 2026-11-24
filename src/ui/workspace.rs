@@ -667,21 +667,26 @@ impl Workspace {
             let cards: Vec<gpui::AnyElement> = recent
                 .into_iter()
                 .enumerate()
-                .map(|(i, (f, _chat, _chat_title))| {
+                .map(|(i, (f, chat, _chat_title))| {
                     let thumb = f
                         .bytes
                         .as_ref()
                         .and_then(|b| s.card_thumbs.get(&crate::office_render::key(b)).cloned())
                         .flatten();
-                    super::file_card::tile(
+                    let when = s
+                        .chats
+                        .iter()
+                        .find(|c| c.id == chat)
+                        .map(|c| super::file_card::when_label(c.updated))
+                        .unwrap_or_default();
+                    super::file_card::artifact(
                         super::file_card::Tile {
                             file: f,
                             key: format!("welcome-{i}"),
                             thumb,
                         },
+                        when,
                         self.state.clone(),
-                        false,
-                        None,
                         scale,
                         &t,
                     )

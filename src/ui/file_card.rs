@@ -9,7 +9,6 @@ use super::icon;
 use crate::state::{AppState, FileRef};
 use crate::theme::Theme;
 
-
 /// The tile for a file that is not an Office file or a PDF: its type's
 /// icon on a quiet square the size of an app's mark, so every card lines up.
 fn page(file: &FileRef, t: &Theme) -> AnyElement {
@@ -157,13 +156,10 @@ pub fn render(
         .rounded(t.radius.card)
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
-        // No preview in the chat: an Office file or PDF shows its app's
-        // mark, anything else its type's icon; the file opens beside the
-        // chat. (The welcome page's Recent artifacts show previews.)
-        .child(match file.office() {
-            Some(kind) => super::file_mark::render(kind, MARK, scale),
-            None => page(file, t),
-        })
+        // No preview in the chat: the file's VS Code icon on a quiet
+        // square; it opens beside the chat. (The welcome page's Recent
+        // artifacts show previews.)
+        .child(page(file, t))
         .child(
             label_row(file, key, state, file.label(), t)
                 .flex_1()
@@ -474,18 +470,31 @@ pub struct Tile {
     pub thumb: Option<std::sync::Arc<gpui::Image>>,
 }
 
-/// How wide a gallery tile is: three to the reading column.
-pub const TILE_W: f32 = 236.;
-/// The preview's height inside a tile: a landscape window onto the page's top.
-const TILE_PREVIEW_H: f32 = 148.;
+/// How long ago, as the welcome page's artifact cards date themselves:
+/// "now", "5m ago", "3h ago", "2d ago" within the week, then "Nov 17".
+pub fn when_label(at: std::time::SystemTime) -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(at)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    match secs {
+        0..=59 => "now".into(),
+        60..=3599 => format!("{}m ago", secs / 60),
+        3600..=86_399 => format!("{}h ago", secs / 3600),
+        86_400..=604_799 => format!("{}d ago", secs / 86_400),
+        _ => chrono::DateTime::<chrono::Local>::from(at)
+            .format("%b %-d")
+            .to_string(),
+    }
+}
 
-/// A gallery tile: the preview on top, the name and type under it; `width`
-/// fixed, or None to share its row's width with the tiles beside it.
-pub fn tile(
+/// One of the welcome page's Recent artifacts: the file's first page as a
+/// sheet of paper rising from the card's well, cut by the footer, which
+/// holds its title and when it was made. Nothing else: no type, no mark.
+pub fn artifact(
     tile: Tile,
+    when: String,
     state: Entity<AppState>,
-    open: bool,
-    width: Option<f32>,
     scale: f32,
     t: &Theme,
 ) -> AnyElement {
@@ -493,8 +502,8 @@ pub fn tile(
     let opener = state.clone();
     let to_open = file.clone();
     let edge = t.colors.text_subtle.opacity(0.5);
-    let group = SharedString::from(format!("tile-{key}"));
-    let preview: AnyElement = match (&thumb, file.office()) {
+    let group = SharedString::from(format!("artifact-{key}"));
+    let sheet: AnyElement = match (&thumb, file.office()) {
         (Some(img), _) => gpui::img(img.clone())
             .size_full()
             .object_fit(gpui::ObjectFit::Cover)
@@ -502,16 +511,16 @@ pub fn tile(
         (None, Some(kind)) => div()
             .size_full()
             .flex()
-            .items_center()
             .justify_center()
+            .pt(t.space.lg)
             .child(super::file_mark::render(kind, MARK, scale))
             .into_any_element(),
-        // A diagram drawn, as it opens; a web page as its words read.
+        // A diagram drawn, as it opens.
         (None, None) if file.is_diagram() => crate::diagram::extract_svg(&file.content)
             .and_then(|svg| {
                 super::diagram_view::fluid(
                     &super::diagram_view::themed(svg, t.is_dark),
-                    width.unwrap_or(TILE_W) - 2.,
+                    180.,
                     scale,
                 )
             })
@@ -519,8 +528,8 @@ pub fn tile(
                 div()
                     .size_full()
                     .flex()
-                    .items_center()
                     .justify_center()
+                    .pt(t.space.sm)
                     .overflow_hidden()
                     .child(d)
                     .into_any_element()
@@ -530,41 +539,49 @@ pub fn tile(
         (None, None) => text_preview(&file, t),
     };
     div()
-        .id(SharedString::from(format!("tile-{key}")))
+        .id(SharedString::from(format!("artifact-{key}")))
         .group(group.clone())
-        .map(|d| match width {
-            Some(w) => d.flex_none().w(px(w)),
-            None => d.flex_1().min_w_0(),
-        })
+        .flex_1()
+        .min_w_0()
         .flex()
         .flex_col()
         .bg(t.colors.surface)
         .border_1()
-        .border_color(if open {
-            t.colors.primary.opacity(0.6)
-        } else {
-            t.colors.border
-        })
+        .border_color(t.colors.border)
         .rounded(t.radius.card)
         .overflow_hidden()
-        .shadow(t.elevation_grain())
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
         .child(
             div()
                 .relative()
                 .w_full()
-                .h(px(TILE_PREVIEW_H))
+                .h(px(ARTIFACT_WELL_H))
                 .overflow_hidden()
-                .bg(if thumb.is_some() {
-                    gpui::white()
-                } else {
-                    t.extra.stage
-                })
+                .bg(t.extra.sunk)
                 .border_b_1()
                 .border_color(t.colors.border)
-                .child(preview)
-                // Download, in the corner, while the tile is hovered.
+                // The page, inset at the top and sides, running on past
+                // the well's foot.
+                .child(
+                    div()
+                        .absolute()
+                        .top(t.space.lg)
+                        .left(t.space.lg + px(2.))
+                        .right(t.space.lg + px(2.))
+                        .h(px(ARTIFACT_WELL_H * 2.))
+                        .overflow_hidden()
+                        .rounded_t(t.radius.small)
+                        .bg(if thumb.is_some() {
+                            gpui::white()
+                        } else {
+                            t.colors.surface
+                        })
+                        .border_1()
+                        .border_color(t.colors.border)
+                        .shadow(t.elevation_grain())
+                        .child(sheet),
+                )
                 .child(
                     div()
                         .absolute()
@@ -574,7 +591,7 @@ pub fn tile(
                         .group_hover(group, |st| st.visible())
                         .child(
                             super::button::Button::icon(
-                                SharedString::from(format!("tile-dl-{key}")),
+                                SharedString::from(format!("artifact-dl-{key}")),
                                 "icons/download.svg",
                                 "Download",
                             )
@@ -595,45 +612,34 @@ pub fn tile(
                 .items_center()
                 .gap(t.space.sm)
                 .px(t.space.md)
-                .py(t.space.sm)
-                .child(match file.office() {
-                    Some(kind) => super::file_mark::render(kind, 20., scale),
-                    None => gpui::img(super::file_icon::asset(
-                        &file.name,
-                        false,
-                        file.path.as_deref().unwrap_or(&file.name),
-                    ))
-                    .flex_none()
-                    .size(t.size.icon)
-                    .into_any_element(),
-                })
+                .py(t.space.sm + px(2.))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.body_sm)
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text_strong)
-                                .child(file.title()),
-                        )
-                        .child(
-                            div()
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_muted)
-                                .child(format!("{} · {}", file.label(), file.kind())),
-                        ),
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.body_sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_strong)
+                        .child(file.title()),
+                )
+                .child(
+                    div()
+                        .flex_none()
+                        .whitespace_nowrap()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(when),
                 ),
         )
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
 }
+
+/// The height of an artifact card's well, where its page shows.
+const ARTIFACT_WELL_H: f32 = 84.;
 
 /// A text file's top in a tile: its first lines at a size that reads, a
 /// Markdown file's first heading set larger.
@@ -805,14 +811,13 @@ mod page_tests {
 }
 
 /// Several files a reply made, framed as one list rather than a stack of
-/// cards: a quiet count over rows a hairline apart, each its app's mark (or
-/// its type's icon), its name and type, and Download, a quiet icon. A row
+/// cards: a quiet count over rows a hairline apart, each its type's VS Code
+/// icon, its name and type, and Download, a quiet icon. A row
 /// opens its file beside the chat; the open one carries the selected wash.
 pub fn list(
     files: Vec<(FileRef, String)>,
     state: Entity<AppState>,
     open: Option<&FileRef>,
-    scale: f32,
     t: &Theme,
 ) -> AnyElement {
     let n = files.len();
@@ -821,27 +826,15 @@ pub fn list(
         let (opener, to_open) = (state.clone(), file.clone());
         let (saver, to_save) = (state.clone(), file.clone());
         let hover = t.colors.hover;
-        let mark: AnyElement = match file.office() {
-            Some(kind) => super::file_mark::render(kind, 28., scale),
-            None => div()
-                .flex_none()
-                .size(px(28.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(t.radius.small)
-                .bg(t.extra.sunk)
-                .child(
-                    gpui::img(super::file_icon::asset(
-                        &file.name,
-                        false,
-                        file.path.as_deref().unwrap_or(&file.name),
-                    ))
-                    .flex_none()
-                    .size(t.size.icon),
-                )
-                .into_any_element(),
-        };
+        // Every type in the VS Code explorer's icons (Material Icon Theme),
+        // bare, as a file list in an editor shows them.
+        let mark = gpui::img(super::file_icon::asset(
+            &file.name,
+            false,
+            file.path.as_deref().unwrap_or(&file.name),
+        ))
+        .flex_none()
+        .size(t.size.icon_lg);
         let row = div()
             .id(SharedString::from(format!("file-row-{key}")))
             .flex()
@@ -920,9 +913,18 @@ pub fn list(
                 .text_size(t.text.caption)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text_muted)
-                .child(icon("icons/folder.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(icon(
+                    "icons/folder.svg",
+                    t.size.icon_xs,
+                    t.colors.text_muted,
+                ))
                 .child(format!("{n} files")),
         )
-        .child(div().border_t_1().border_color(t.colors.border).children(rows))
+        .child(
+            div()
+                .border_t_1()
+                .border_color(t.colors.border)
+                .children(rows),
+        )
         .into_any_element()
 }

@@ -849,7 +849,6 @@ fn assistant_row(
             list,
             cx.state.clone(),
             cx.open_doc.as_ref(),
-            cx.scale,
             t,
         ));
         *b += files;
