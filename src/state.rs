@@ -999,6 +999,9 @@ pub struct Chat {
     /// Its KodAct CLI conversation's id (`--session-id`, then `--resume`) and
     /// its file name in the history (`history.rs`).
     pub session: String,
+    /// Stable working folder id under `workspace/chats/` for plain chats, kept
+    /// across `new_conversation()`.
+    pub folder: Option<String>,
     /// KodAct CLI has written this conversation: the next process resumes it.
     pub resumable: bool,
     /// When it last changed, for the sidebar's dates and the history's order.
@@ -1284,6 +1287,7 @@ impl Chat {
 
     /// A new, empty chat with a fresh conversation id.
     pub fn new(id: usize, project: usize, title: SharedString) -> Self {
+        let session = crate::history::new_id();
         Self {
             id,
             project,
@@ -1293,7 +1297,8 @@ impl Chat {
             messages: vec![],
             version: 0,
             unread: false,
-            session: crate::history::new_id(),
+            folder: Some(session.clone()),
+            session,
             resumable: false,
             updated: SystemTime::now(),
             versions: vec![],
@@ -1304,10 +1309,29 @@ impl Chat {
     }
 
     /// Start a new KodAct CLI conversation for this chat (its old one can't
-    /// follow: the transcript was cut back).
+    /// follow: the transcript was cut back or couldn't be resumed), keeping
+    /// its plain-chat working folder stable.
     pub fn new_conversation(&mut self) {
+        if self.folder.is_none() {
+            self.folder = Some(self.session.clone());
+        }
         self.session = crate::history::new_id();
         self.resumable = false;
+    }
+
+    /// Record the end of a turn; only a turn that succeeded without an error
+    /// guarantees KodAct CLI wrote a resumable session file.
+    pub fn record_turn_end(
+        &mut self,
+        seconds: f32,
+        usage: Option<crate::context::Usage>,
+        succeeded: bool,
+    ) {
+        self.messages.push(Message::TurnEnd { seconds, usage });
+        self.version += 1;
+        if succeeded {
+            self.resumable = true;
+        }
     }
 
     pub fn group(&self) -> &'static str {
@@ -1678,6 +1702,8 @@ struct Live {
     session: crate::backend::Session,
     _pump: Task<()>,
     profile: crate::endpoints::Profile,
+    /// Effective `--effort` passed when this process started (`None` = Auto).
+    effort: Option<crate::endpoints::Effort>,
     /// Which process this is: events from one that was replaced are dropped.
     generation: u64,
     /// Started as a design chat with this setup (its prompt and tools are
@@ -2454,6 +2480,9 @@ pub struct AppState {
     /// Chats whose process is resuming a conversation and hasn't spoken yet:
     /// if it ends first, the conversation couldn't be reopened.
     resuming: std::collections::HashSet<usize>,
+    /// Chats whose KodAct CLI process was started afresh mid-conversation and
+    /// still needs `<conversation_history>` prepended on the next non-command turn.
+    history_unseeded: std::collections::HashSet<usize>,
     /// Keeps the sidebar's "5m" / "2h" true as time passes.
     clock: Option<Task<()>>,
     /// Counts KodAct CLI processes started, to tell their events apart.
@@ -2799,6 +2828,7 @@ impl AppState {
             live_task: None,
             live_opened: Default::default(),
             resuming: Default::default(),
+            history_unseeded: Default::default(),
             clock: None,
             generations: 0,
             attachments: vec![],
@@ -3337,6 +3367,7 @@ impl AppState {
                 archived: c.archived,
                 detailed: c.detailed,
                 messages,
+                folder: c.folder,
                 session: c.session,
                 resumable: c.resumable,
                 updated,
@@ -4037,7 +4068,8 @@ impl AppState {
             .project(chat.project)
             .filter(|p| crate::remote::Remote::parse(&p.path).is_none())?;
         Some(if p.scratch {
-            chat_folder(&p.path, &chat.session, chat.resumable)
+            let folder_id = chat.folder.as_deref().unwrap_or(&chat.session);
+            chat_folder(&p.path, folder_id, chat.resumable && chat.folder.is_none())
         } else {
             p.path.clone()
         })
@@ -4701,29 +4733,27 @@ impl AppState {
     }
 
     /// Cut the chat back to before message `msg` (one of yours), returning
-    /// its text. Stops a reply in progress first.
-    fn take_from(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) -> Option<String> {
-        self.replies.remove(&chat);
-        // KodAct's conversation can't be cut back: the next message starts a new one.
-        self.sessions.remove(&chat);
-        while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
-            self.answer_side(
-                chat,
-                "The conversation was restarted before it answered.".into(),
-                true,
-            );
-        }
+    /// its text and the superseded session id.
+    fn truncate_chat_from(&mut self, chat: usize, msg: usize) -> Option<(String, String)> {
         self.asks.remove(&chat);
         self.stale_turns.remove(&chat);
         self.turn_started.remove(&chat);
         self.tool_rows.retain(|(c, _), _| *c != chat);
         // Ratings of the replies being cut go with them.
         self.ratings.retain(|(c, m), _| *c != chat || *m < msg);
+        let scratch_root = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| self.project(c.project))
+            .filter(|p| p.scratch)
+            .map(|p| p.path.clone());
         let c = self.chat_mut(chat)?;
         let Some(Message::User { text, .. }) = c.messages.get(msg) else {
             return None;
         };
         let text = text.to_string();
+        let old_session = c.session.clone();
         // What is cut is kept as a version, to view or restore.
         c.versions.push(Version {
             at: msg,
@@ -4736,7 +4766,39 @@ impl AppState {
         c.versions.drain(..over);
         c.messages.truncate(msg);
         c.version += 1;
+        if let Some(root) = scratch_root {
+            if c.folder.is_none() && chat_folder(&root, &c.session, c.resumable) == root {
+                c.folder = Some(String::new());
+            }
+        }
         c.new_conversation();
+        let has_prior = prior_conversation_block(&c.messages).is_some();
+        if has_prior {
+            self.history_unseeded.insert(chat);
+        } else {
+            self.history_unseeded.remove(&chat);
+        }
+        Some((text, old_session))
+    }
+
+    /// Cut the chat back to before message `msg` (one of yours), returning
+    /// its text. Stops a reply in progress first.
+    fn take_from(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) -> Option<String> {
+        self.replies.remove(&chat);
+        // KodAct's conversation can't be cut back: the next message starts a new one.
+        self.sessions.remove(&chat);
+        while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
+            self.answer_side(
+                chat,
+                "The conversation was restarted before it answered.".into(),
+                true,
+            );
+        }
+        let (text, old_session) = self.truncate_chat_from(chat, msg)?;
+        if let Some(dir) = self.history.clone() {
+            cx.background_spawn(async move { crate::history::remove(&dir, &old_session) })
+                .detach();
+        }
         self.touch(chat, cx);
         cx.notify();
         Some(text)
@@ -9430,11 +9492,25 @@ fix everything under 8, render it again to check, then tell me the scores before
         if !now.tail.is_empty() {
             c.versions.push(now);
         }
+        let prev_session = c.session.clone();
         c.messages.truncate(at);
         c.messages.extend(old.tail);
         c.session = old.session;
         c.resumable = old.resumable;
         c.version += 1;
+        let seed_needed = !c.resumable && prior_conversation_block(&c.messages).is_some();
+        let same_session = prev_session == c.session;
+        if seed_needed {
+            self.history_unseeded.insert(chat);
+        } else {
+            self.history_unseeded.remove(&chat);
+        }
+        if !same_session {
+            if let Some(dir) = self.history.clone() {
+                cx.background_spawn(async move { crate::history::remove(&dir, &prev_session) })
+                    .detach();
+            }
+        }
         self.touch(chat, cx);
         self.show_toast("Restored that version.", cx);
         cx.notify();
@@ -10879,6 +10955,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.tool_rows.retain(|(c, _), _| *c != id);
         self.side.remove(&id);
         self.kept_modes.remove(&id);
+        self.history_unseeded.remove(&id);
         self.ratings.retain(|(c, _), _| *c != id);
         let title = self
             .chats
@@ -12179,8 +12256,13 @@ fix everything under 8, render it again to check, then tell me the scores before
         let Some(profile) = self.active_profile().cloned() else {
             return self.notice(id, "Set up an endpoint first: KodAct needs a model to answer. Open the model menu to add one.", true);
         };
+        let effective_effort = self
+            .effort
+            .filter(|e| profile.effort_levels().contains(e));
         if let Some(live) = self.sessions.get(&id) {
-            if live.profile != profile {
+            if live.effort != effective_effort {
+                self.sessions.remove(&id);
+            } else if live.profile != profile {
                 let same_endpoint = live.profile.base_url == profile.base_url
                     && live.profile.wire == profile.wire
                     && live.profile.auth == profile.auth
@@ -12215,7 +12297,8 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
             }
         }
-        if !self.sessions.contains_key(&id) {
+        let had_live_session = self.sessions.contains_key(&id);
+        if !had_live_session {
             if let Err(e) = self.start_session(id, profile, cx) {
                 return self.notice(id, e, true);
             }
@@ -12246,22 +12329,34 @@ fix everything under 8, render it again to check, then tell me the scores before
                     }
                     (!block.trim().is_empty()).then_some(block)
                 });
+        let fresh_unresumed = !had_live_session && !resumable;
+        let history_block = self.take_outgoing_history(id, &text, fresh_unresumed);
         self.snapshot_memory(id);
         let sent = self
             .sessions
             .get(&id)
             .map(|l| {
-                if let Some(k) = &knowledge {
+                if knowledge.is_some() || history_block.is_some() {
                     let mut content = crate::attach::content_blocks(
                         &text,
                         &attachments,
                         l.profile.wire != crate::endpoints::Wire::Openai,
                     );
                     if let Some(blocks) = content.as_array_mut() {
-                        blocks.insert(
-                            0,
-                            serde_json::json!({ "type": "text", "text": context_block(k) }),
-                        );
+                        let mut at = 0;
+                        if let Some(k) = &knowledge {
+                            blocks.insert(
+                                at,
+                                serde_json::json!({ "type": "text", "text": context_block(k) }),
+                            );
+                            at += 1;
+                        }
+                        if let Some(h) = &history_block {
+                            blocks.insert(
+                                at,
+                                serde_json::json!({ "type": "text", "text": h }),
+                            );
+                        }
                     }
                     l.session.send_content(content)
                 } else if attachments.is_empty() {
@@ -12276,6 +12371,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             })
             .unwrap_or(Err("KodAct isn't running.".into()));
         if let Err(e) = sent {
+            if history_block.is_some() {
+                self.history_unseeded.insert(id);
+            }
             self.sessions.remove(&id);
             return self.notice(id, e, true);
         }
@@ -12287,6 +12385,38 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
         self.replies.insert(id, Task::ready(()));
         self.turn_started.insert(id, std::time::Instant::now());
+    }
+
+    /// Take `<conversation_history>` to prepend on `id`'s outgoing message when
+    /// its KodAct CLI process started fresh mid-conversation. Slash commands
+    /// (`/reload-plugins`) go out bare while keeping `history_unseeded` armed
+    /// for the next normal message.
+    fn take_outgoing_history(
+        &mut self,
+        id: usize,
+        text: &str,
+        fresh_unresumed: bool,
+    ) -> Option<String> {
+        let needs_seed = fresh_unresumed || self.history_unseeded.contains(&id);
+        if !needs_seed {
+            return None;
+        }
+        let prior = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| prior_conversation_block(prior_messages(&c.messages)));
+        let Some(block) = prior else {
+            self.history_unseeded.remove(&id);
+            return None;
+        };
+        if text.trim_start().starts_with('/') {
+            self.history_unseeded.insert(id);
+            None
+        } else {
+            self.history_unseeded.remove(&id);
+            Some(block)
+        }
     }
 
     fn start_session(
@@ -12307,8 +12437,23 @@ fix everything under 8, render it again to check, then tell me the scores before
         } else {
             crate::backend::Conversation::New(&session_id)
         };
-        let mut launch =
-            crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        let effective_effort = self
+            .effort
+            .filter(|e| profile.effort_levels().contains(e));
+        let local_project_dir = self.chat_project_dir(id);
+        let profile_path = self
+            .settings_profile
+            .as_deref()
+            .and_then(crate::setting_profiles::path_of);
+        let mut launch = crate::backend::launch(
+            &profile,
+            effective_effort,
+            self.mode,
+            self.bypass_allowed,
+            conversation,
+            local_project_dir.as_deref(),
+            profile_path.as_deref(),
+        )?;
         // The web browser: KodAct's own browser tools (this executable, as
         // an MCP server) on the browser in the side panel. A remote agent
         // reaches them over HTTP, forwarded back to this machine.
@@ -12405,10 +12550,6 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
         }
         // The settings profile, layered above the other settings files.
-        let profile_path = self
-            .settings_profile
-            .as_deref()
-            .and_then(crate::setting_profiles::path_of);
         if let Some(mut flag) = crate::modes::flag_settings(profile_path.as_deref()) {
             // A remote KodAct CLI can't read this machine's file: send its settings.
             if remote.is_some() && !flag.trim_start().starts_with('{') {
@@ -12526,6 +12667,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 session,
                 _pump: pump,
                 profile,
+                effort: effective_effort,
                 generation,
                 design: self
                     .chats
@@ -12560,9 +12702,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             self.resuming.remove(&chat);
         } else if self.resuming.remove(&chat) {
             // It failed before saying anything ("no session …", then exit):
-            // the conversation couldn't be reopened (removed, or written on
-            // another machine). Go on in a new one, sending the message
-            // again. Dropping the process drops its events too.
+            // the conversation couldn't be reopened on disk. Start a fresh
+            // CLI conversation seeded with the chat's earlier transcript,
+            // keeping its working folder intact.
             self.sessions.remove(&chat);
             self.asks.remove(&chat);
             self.stale_turns.remove(&chat);
@@ -12584,10 +12726,37 @@ fix everything under 8, render it again to check, then tell me the scores before
                     })
                 })
                 .flatten();
+            let scratch_root = self
+                .chats
+                .iter()
+                .find(|c| c.id == chat)
+                .and_then(|c| self.project(c.project))
+                .filter(|p| p.scratch)
+                .map(|p| p.path.clone());
+            let mut old_session = None;
+            let mut has_prior = false;
             if let Some(c) = self.chat_mut(chat) {
+                has_prior = prior_conversation_block(prior_messages(&c.messages)).is_some();
+                if let Some(root) = scratch_root {
+                    if c.folder.is_none() && chat_folder(&root, &c.session, c.resumable) == root {
+                        c.folder = Some(String::new());
+                    }
+                }
+                old_session = Some(c.session.clone());
                 c.new_conversation();
             }
-            self.notice(chat, "KodAct couldn't reopen this conversation's earlier context, so it goes on as a new conversation.", false);
+            if let (Some(dir), Some(old)) = (self.history.clone(), old_session) {
+                cx.background_spawn(async move { crate::history::remove(&dir, &old) })
+                    .detach();
+            }
+            if has_prior {
+                self.history_unseeded.insert(chat);
+                self.notice(
+                    chat,
+                    "Reopened this conversation from your chat history.",
+                    false,
+                );
+            }
             if let Some((text, attachments)) = pending {
                 self.replies.remove(&chat);
                 self.send_to_forge(chat, text, attachments, cx);
@@ -12905,9 +13074,12 @@ fix everything under 8, render it again to check, then tell me the scores before
                 // A compaction's turn ends in its notice, not a reply's end:
                 // "Compacted" when it worked, its error when it didn't.
                 if self.compacting.remove(&chat) {
+                    let ok = error.is_none();
                     if let Some(c) = self.chat_mut(chat) {
                         c.messages.retain(|m| !matches!(m, Message::Notice { text, .. } if text.as_ref() == COMPACTING));
-                        c.resumable = true;
+                        if ok {
+                            c.resumable = true;
+                        }
                     }
                     match error {
                         Some(e) => self.notice(chat, e, true),
@@ -12915,6 +13087,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                     }
                     return self.finish_turn(chat, cx);
                 }
+                let ok = error.is_none();
                 if let Some(e) = error {
                     self.notice(chat, e, true);
                 }
@@ -12929,10 +13102,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         .unwrap_or(0.)
                 };
                 if let Some(c) = self.chat_mut(chat) {
-                    c.messages.push(Message::TurnEnd { seconds, usage });
-                    c.version += 1;
-                    // KodAct CLI has written the conversation: it can be resumed.
-                    c.resumable = true;
+                    c.record_turn_end(seconds, usage, ok);
                 }
                 self.finish_turn(chat, cx);
                 // A goal at work: KodAct CLI checks it now and goes on until it
@@ -15907,6 +16077,120 @@ pub fn chat_folder(root: &std::path::Path, session: &str, resumable: bool) -> st
     }
 }
 
+const MAX_PRIOR_CONVERSATION_BYTES: usize = 48 * 1024;
+
+/// Messages in `messages` preceding the newest `Message::User` (the turn now
+/// going out).
+pub fn prior_messages(messages: &[Message]) -> &[Message] {
+    match messages
+        .iter()
+        .rposition(|m| matches!(m, Message::User { .. }))
+    {
+        Some(at) => &messages[..at],
+        None => messages,
+    }
+}
+
+/// Format earlier turns of a conversation as a `<conversation_history>` block
+/// when a fresh KodAct CLI process starts mid-chat (after Edit/Retry or when
+/// `--resume` could not reopen the session file).
+pub fn prior_conversation_block(messages: &[Message]) -> Option<String> {
+    let mut entries: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < messages.len() {
+        match &messages[i] {
+            Message::User {
+                text, attachments, ..
+            } => {
+                let next_user = messages[i + 1..]
+                    .iter()
+                    .position(|m| matches!(m, Message::User { .. }))
+                    .map(|d| i + 1 + d)
+                    .unwrap_or(messages.len());
+                let between = &messages[i + 1..next_user];
+                let has_reply = between.iter().any(|m| match m {
+                    Message::Assistant { blocks } => blocks.iter().any(|b| match b {
+                        Block::Text(t) => !t.trim().is_empty(),
+                        Block::Tool(_) | Block::File(_) => true,
+                        _ => false,
+                    }),
+                    _ => false,
+                });
+                let trimmed = text.trim();
+                // Skip bare slash commands that produced no assistant reply (e.g.
+                // an unknown `/command` error or `/reload-plugins`).
+                if trimmed.starts_with('/') && !has_reply {
+                    i += 1;
+                    continue;
+                }
+                let mut line = String::from("User: ");
+                line.push_str(trimmed);
+                if !attachments.is_empty() {
+                    let names: Vec<&str> = attachments.iter().map(|a| a.name.as_ref()).collect();
+                    line.push_str(&format!("\n[Attached: {}]", names.join(", ")));
+                }
+                if !trimmed.is_empty() || !attachments.is_empty() {
+                    entries.push(line);
+                }
+            }
+            Message::Assistant { blocks } => {
+                let mut parts: Vec<String> = Vec::new();
+                for b in blocks {
+                    match b {
+                        Block::Text(t) if !t.trim().is_empty() => {
+                            parts.push(t.trim().to_string());
+                        }
+                        Block::Tool(tc) => {
+                            let status = match tc.status {
+                                ToolStatus::Done => "done",
+                                ToolStatus::Failed => "failed",
+                                ToolStatus::Declined => "declined",
+                                ToolStatus::Running | ToolStatus::Interrupted => "interrupted",
+                            };
+                            let target: String = tc.target.chars().take(160).collect();
+                            parts.push(format!("[Tool {:?}: {} ({status})]", tc.kind, target));
+                        }
+                        Block::File(f) => {
+                            parts.push(format!("[File: {}]", f.name));
+                        }
+                        _ => {}
+                    }
+                }
+                if !parts.is_empty() {
+                    entries.push(format!("Assistant:\n{}", parts.join("\n")));
+                }
+            }
+            Message::TurnEnd { .. } | Message::Notice { .. } => {}
+        }
+        i += 1;
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    let mut total: usize = entries.iter().map(|e| e.len() + 2).sum();
+    let mut dropped = false;
+    while entries.len() > 1 && total > MAX_PRIOR_CONVERSATION_BYTES {
+        let removed = entries.remove(0);
+        total = total.saturating_sub(removed.len() + 2);
+        dropped = true;
+    }
+    let mut body = entries.join("\n\n");
+    if body.len() > MAX_PRIOR_CONVERSATION_BYTES {
+        let cut = body.len() - MAX_PRIOR_CONVERSATION_BYTES;
+        let cut = (cut..body.len())
+            .find(|&ix| body.is_char_boundary(ix))
+            .unwrap_or(0);
+        body = body[cut..].to_string();
+        dropped = true;
+    }
+    if dropped {
+        body = format!("[…earlier messages omitted…]\n\n{body}");
+    }
+    Some(format!(
+        "<conversation_history>\nEarlier messages in this conversation (treat this as the active conversation context):\n\n{body}\n</conversation_history>"
+    ))
+}
+
 /// The folder KodAct was started on: `KODACT_PROJECT_DIR`, or a folder given
 /// as its argument (`kodact .`). Opened from the Start menu or a shortcut, it
 /// was started on none, and opens on plain chats, as a chat app does.
@@ -17037,6 +17321,101 @@ mod tests {
         assert!(s.session_open);
         assert_eq!(s.current, None);
         assert_eq!(s.session_open.then_some(s.current).flatten(), None);
+    }
+
+    #[test]
+    fn failed_first_turn_does_not_mark_chat_resumable() {
+        let mut c = Chat::new(1, 0, "Greeting".into());
+        assert!(!c.resumable);
+        // Turn 1 fails (e.g. Unknown command: /i-have-adhd): session file not written.
+        c.record_turn_end(1.6, None, false);
+        assert!(!c.resumable);
+        // Once a real turn succeeds, it becomes resumable and stays resumable on a later error.
+        c.record_turn_end(2.4, None, true);
+        assert!(c.resumable);
+        c.record_turn_end(0.5, None, false);
+        assert!(c.resumable);
+    }
+
+    #[test]
+    fn edit_and_new_conversation_preserve_plain_chat_folder_and_prior_context() {
+        let mut s = AppState::new();
+        let scratch_proj = s.scratch_project().expect("scratch project");
+        let mut c = Chat::new(42, scratch_proj, "Context test".into());
+        let initial_folder_id = c.folder.clone().expect("initial folder");
+        c.messages = vec![
+            Message::user("My project codename is Aurora.".into(), SystemTime::now()),
+            Message::Assistant {
+                blocks: vec![
+                    Block::Tool(ToolCall {
+                        kind: ToolKind::Read,
+                        target: "notes.md".into(),
+                        note: None,
+                        status: ToolStatus::Done,
+                        output: "ok".into(),
+                        diff: vec![],
+                        open: false,
+                        full: false,
+                        review: Review::Open,
+                        images: vec![],
+                    }),
+                    Block::Text("Got it — Aurora noted.".into()),
+                ],
+            },
+            Message::TurnEnd {
+                seconds: 1.2,
+                usage: None,
+            },
+            Message::user("Draft the summary".into(), SystemTime::now()),
+        ];
+        c.resumable = true;
+        s.chats.push(c);
+
+        let dir_before = s.chat_project_dir(42).expect("plain chat dir");
+        assert!(dir_before.ends_with(&initial_folder_id));
+
+        // Cut back at message index 3 (editing/retrying Turn 2).
+        let (cut_text, _old_session) = s.truncate_chat_from(42, 3).expect("truncated");
+        assert_eq!(cut_text, "Draft the summary");
+        assert!(s.history_unseeded.contains(&42));
+
+        // Plain-chat folder remains identical even though `session` rotated!
+        let dir_after = s.chat_project_dir(42).expect("plain chat dir after cut");
+        assert_eq!(dir_after, dir_before);
+        assert_ne!(s.chats[0].session, initial_folder_id);
+        assert!(!s.chats[0].resumable);
+
+        // Next outgoing turn is `/reload-plugins`: goes bare, keeps history_unseeded armed!
+        s.chats[0]
+            .messages
+            .push(Message::user("/reload-plugins".into(), SystemTime::now()));
+        assert!(s
+            .take_outgoing_history(42, "/reload-plugins", true)
+            .is_none());
+        assert!(s.history_unseeded.contains(&42));
+        // `/reload-plugins` finishes without assistant text, marking resumable = true.
+        s.chats[0].record_turn_end(1.8, None, true);
+        assert!(s.chats[0].resumable);
+
+        // Next normal user message receives `<conversation_history>` with Aurora and clears flag!
+        s.chats[0].messages.push(Message::user(
+            "what is this conversation context?".into(),
+            SystemTime::now(),
+        ));
+        let seeded = s
+            .take_outgoing_history(42, "what is this conversation context?", false)
+            .expect("seeded history");
+        assert!(!s.history_unseeded.contains(&42));
+        assert!(seeded.starts_with("<conversation_history>"));
+        assert!(seeded.contains("Aurora"));
+        assert!(seeded.contains("Got it — Aurora noted."));
+        assert!(seeded.contains("[Tool Read: notes.md (done)]"));
+        assert!(!seeded.contains("/reload-plugins"));
+        // Subsequent turns do not re-send `<conversation_history>`.
+        s.chats[0]
+            .messages
+            .push(Message::user("and next?".into(), SystemTime::now()));
+        assert!(s.take_outgoing_history(42, "and next?", false).is_none());
     }
 }
 

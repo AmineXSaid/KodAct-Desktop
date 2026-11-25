@@ -1510,6 +1510,7 @@ impl Render for Workspace {
                     .flex()
                     .justify_center()
                     .px(t.space.xl)
+                    .pt(t.space.sm)
                     .pb(t.space.lg)
                     .child(
                         div()
@@ -1559,6 +1560,7 @@ impl Render for Workspace {
                         .flex()
                         .justify_center()
                         .px(t.space.xl)
+                        .pt(t.space.sm)
                         .pb(t.space.lg)
                         .child(
                             div()

@@ -30,6 +30,9 @@ const MODE_PREFIX: &str = "mode:";
 pub struct SavedChat {
     pub version: u32,
     pub session: String,
+    /// Stable plain-chat workspace folder id across `new_conversation()`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
     /// The KodAct CLI conversation exists on disk: the next message resumes it.
     #[serde(default)]
     pub resumable: bool,
@@ -380,6 +383,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
     SavedChat {
         version: VERSION,
         session: chat.session.clone(),
+        folder: chat.folder.clone(),
         resumable: chat.resumable,
         project: project.to_path_buf(),
         title: chat.title.to_string(),

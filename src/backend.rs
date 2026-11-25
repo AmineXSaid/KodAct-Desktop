@@ -151,8 +151,8 @@ pub fn find_cli() -> Option<PathBuf> {
         .find(not_me)
 }
 
-/// The endpoint's variables, after `KODACT_` (or ForgeCLI's `FORGE_`).
-const ENDPOINT_VARS: [&str; 10] = [
+/// The endpoint's and engine's variables, after `KODACT_` (or ForgeCLI's `FORGE_`).
+const ENDPOINT_VARS: [&str; 11] = [
     "BASE_URL",
     "API_KEY",
     "AUTH_TOKEN",
@@ -163,7 +163,238 @@ const ENDPOINT_VARS: [&str; 10] = [
     "GEMINI_AUTH_HEADER",
     "CUSTOM_HEADERS",
     "MODEL",
+    "NUDGES",
 ];
+
+/// Fact-based nudges safe on every model (excludes `adaptiveEffort`, which
+/// defaults to `reasoning_effort: "high"` on Turn 1 when effort is `Auto`).
+pub const SAFE_NUDGES: &str = "shellEdit,constraints,namedChecks,passingSnapshots,limitVerdicts,staleDeliverables,thinkingTimeBox,todoTracking,clock,unpinnedInstalls";
+
+const ALL_NUDGES: [&str; 11] = [
+    "shellEdit",
+    "constraints",
+    "namedChecks",
+    "passingSnapshots",
+    "limitVerdicts",
+    "staleDeliverables",
+    "adaptiveEffort",
+    "thinkingTimeBox",
+    "todoTracking",
+    "clock",
+    "unpinnedInstalls",
+];
+
+fn is_adaptive_nudge(name: &str) -> bool {
+    name.eq_ignore_ascii_case("adaptiveEffort") || name.eq_ignore_ascii_case("adaptive_effort")
+}
+
+/// `adaptiveEffort` shifts between `low`, `medium` and `high`: allow it only
+/// when an explicit effort level was chosen (never `Auto`) and the profile
+/// supports all three levels.
+pub fn allows_adaptive_effort(
+    profile: &Profile,
+    effort: Option<crate::endpoints::Effort>,
+) -> bool {
+    use crate::endpoints::Effort;
+    let levels = profile.effort_levels();
+    effort.is_some_and(|e| levels.contains(&e))
+        && [Effort::Low, Effort::Medium, Effort::High]
+            .iter()
+            .all(|l| levels.contains(l))
+}
+
+/// Sanitize a `KODACT_NUDGES` / `FORGE_NUDGES` value, expanding `all` and
+/// stripping `adaptiveEffort` whenever `!allow_adaptive`.
+pub fn sanitized_nudges(raw_env: Option<&str>, allow_adaptive: bool) -> Option<String> {
+    let raw = raw_env?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if matches!(
+        raw.to_ascii_lowercase().as_str(),
+        "none" | "0" | "off" | "false"
+    ) {
+        return Some("none".to_string());
+    }
+    if matches!(raw.to_ascii_lowercase().as_str(), "all" | "true" | "1" | "on") && !allow_adaptive {
+        return Some(SAFE_NUDGES.to_string());
+    }
+    let mut enabled: Vec<String> = Vec::new();
+    let push_unique = |list: &mut Vec<String>, name: &str| {
+        if !list.iter().any(|x| x.eq_ignore_ascii_case(name)) {
+            list.push(name.to_string());
+        }
+    };
+    for part in raw.split(',') {
+        let tok = part.trim();
+        if tok.is_empty() {
+            continue;
+        }
+        if matches!(
+            tok.to_ascii_lowercase().as_str(),
+            "none" | "off" | "false" | "0"
+        ) {
+            enabled.clear();
+        } else if matches!(
+            tok.to_ascii_lowercase().as_str(),
+            "all" | "true" | "1" | "on"
+        ) {
+            for n in ALL_NUDGES {
+                push_unique(&mut enabled, n);
+            }
+        } else if let Some(rest) = tok.strip_prefix('-').or_else(|| tok.strip_prefix('!')) {
+            let name = rest.trim();
+            enabled.retain(|x| !x.eq_ignore_ascii_case(name));
+        } else {
+            push_unique(&mut enabled, tok);
+        }
+    }
+    if !allow_adaptive {
+        enabled.retain(|n| !is_adaptive_nudge(n));
+    }
+    Some(if enabled.is_empty() {
+        "none".to_string()
+    } else {
+        enabled.join(",")
+    })
+}
+
+/// Compute the `KODACT_NUDGES` value for a process given `raw_env`
+/// (`KODACT_NUDGES` / `FORGE_NUDGES`) and layered `settings.json` objects.
+pub fn nudges_for_settings(
+    raw_env: Option<&str>,
+    layers: &[Value],
+    allow_adaptive: bool,
+) -> Option<String> {
+    if let Some(v) = sanitized_nudges(raw_env, allow_adaptive) {
+        return Some(v);
+    }
+    if allow_adaptive {
+        return None;
+    }
+    let mut state: Vec<(String, bool)> = Vec::new();
+    let set_nudge = |state: &mut Vec<(String, bool)>, name: &str, on: bool| {
+        let canonical = if is_adaptive_nudge(name) {
+            "adaptiveEffort"
+        } else {
+            ALL_NUDGES
+                .iter()
+                .copied()
+                .find(|n| n.eq_ignore_ascii_case(name))
+                .unwrap_or(name)
+        };
+        if let Some((_, v)) = state
+            .iter_mut()
+            .find(|(k, _)| k.eq_ignore_ascii_case(canonical))
+        {
+            *v = on;
+        } else {
+            state.push((canonical.to_string(), on));
+        }
+    };
+    for layer in layers {
+        let Some(nudges) = layer.get("nudges") else {
+            continue;
+        };
+        match nudges {
+            Value::Bool(on) => {
+                for n in ALL_NUDGES {
+                    set_nudge(&mut state, n, *on);
+                }
+            }
+            Value::String(s) => {
+                for part in s.split(',') {
+                    let tok = part.trim();
+                    if tok.is_empty() {
+                        continue;
+                    }
+                    if matches!(
+                        tok.to_ascii_lowercase().as_str(),
+                        "none" | "off" | "false" | "0"
+                    ) {
+                        for (_, v) in &mut state {
+                            *v = false;
+                        }
+                    } else if matches!(
+                        tok.to_ascii_lowercase().as_str(),
+                        "all" | "true" | "1" | "on"
+                    ) {
+                        for n in ALL_NUDGES {
+                            set_nudge(&mut state, n, true);
+                        }
+                    } else if let Some(rest) =
+                        tok.strip_prefix('-').or_else(|| tok.strip_prefix('!'))
+                    {
+                        set_nudge(&mut state, rest.trim(), false);
+                    } else {
+                        set_nudge(&mut state, tok, true);
+                    }
+                }
+            }
+            Value::Array(arr) => {
+                for item in arr.iter().filter_map(Value::as_str) {
+                    let tok = item.trim();
+                    if tok.eq_ignore_ascii_case("all") {
+                        for n in ALL_NUDGES {
+                            set_nudge(&mut state, n, true);
+                        }
+                    } else if !tok.is_empty() {
+                        set_nudge(&mut state, tok, true);
+                    }
+                }
+            }
+            Value::Object(obj) => {
+                if let Some(all_on) = obj.get("all").and_then(Value::as_bool) {
+                    for n in ALL_NUDGES {
+                        set_nudge(&mut state, n, all_on);
+                    }
+                }
+                for (k, v) in obj {
+                    if k != "all" {
+                        if let Some(on) = v.as_bool() {
+                            set_nudge(&mut state, k, on);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let adaptive_on = state.iter().any(|(k, v)| is_adaptive_nudge(k) && *v);
+    if !adaptive_on {
+        return None;
+    }
+    let kept: Vec<&str> = state
+        .iter()
+        .filter(|(k, v)| *v && !is_adaptive_nudge(k))
+        .map(|(k, _)| k.as_str())
+        .collect();
+    Some(if kept.is_empty() {
+        "none".to_string()
+    } else {
+        kept.join(",")
+    })
+}
+
+fn read_settings_layers(project: Option<&Path>, settings_profile: Option<&Path>) -> Vec<Value> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    if let Some(home) = crate::forge_files::cli_home() {
+        paths.push(home.join("settings.json"));
+    }
+    if let Some(proj) = project {
+        let dir = crate::names::project_dir(proj);
+        paths.push(dir.join("settings.json"));
+        paths.push(dir.join("settings.local.json"));
+    }
+    if let Some(p) = settings_profile {
+        paths.push(p.to_path_buf());
+    }
+    paths
+        .into_iter()
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .filter_map(|t| serde_json::from_str::<Value>(&t).ok())
+        .collect()
+}
 
 /// How a chat's process starts: its arguments and the endpoint variables.
 #[derive(Debug, Clone, PartialEq)]
@@ -225,11 +456,16 @@ pub enum Conversation<'a> {
 
 pub fn launch(
     profile: &Profile,
+    effort: Option<crate::endpoints::Effort>,
     mode: ModeId,
     bypass_allowed: bool,
     conversation: Conversation,
+    project: Option<&Path>,
+    settings_profile: Option<&Path>,
 ) -> Result<Launch, String> {
     let token = crate::health::token(&profile.auth)?;
+    let levels = profile.effort_levels();
+    let effective_effort = effort.filter(|e| levels.contains(e));
     let mut args: Vec<String> = [
         "-p",
         "--input-format",
@@ -245,6 +481,9 @@ pub fn launch(
     .map(|s| s.to_string())
     .collect();
     args.push(profile.model.clone());
+    if let Some(e) = effective_effort {
+        args.extend(["--effort".to_string(), e.cli_name().to_string()]);
+    }
     args.extend(crate::modes::cli_args(mode, bypass_allowed));
     args.extend([
         "--append-system-prompt".to_string(),
@@ -297,6 +536,23 @@ pub fn launch(
     }
     if let Some(w) = profile.capabilities.context_window.filter(|w| *w > 0) {
         env.push(("KODACT_CONTEXT_WINDOW".into(), w.to_string()));
+    }
+    let allow_adaptive = allows_adaptive_effort(profile, effective_effort);
+    let raw_nudges = std::env::var("KODACT_NUDGES")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            std::env::var("FORGE_NUDGES")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        });
+    let layers = if raw_nudges.is_none() && !allow_adaptive {
+        read_settings_layers(project, settings_profile)
+    } else {
+        Vec::new()
+    };
+    if let Some(nudges) = nudges_for_settings(raw_nudges.as_deref(), &layers, allow_adaptive) {
+        env.push(("KODACT_NUDGES".into(), nudges));
     }
     Ok(Launch { args, env })
 }
@@ -1797,9 +2053,11 @@ mod tests {
         let p: Profile = serde_json::from_value(json!({"name":"x","baseUrl":"https://gw.example/v1","wire":"anthropic","model":"m1","auth":{"type":"bearer","token":"${env:KODACT_GPUI_TEST_KEY}"}})).unwrap();
         std::env::set_var("KODACT_GPUI_TEST_KEY", "sk-test");
         let id = "0b9a1f2e-3c4d-4e5f-8a6b-7c8d9e0f1a2b";
-        let l = launch(&p, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        let launch = |p: &Profile, e, m, b, c| super::launch(p, e, m, b, c, None, None);
+        let l = launch(&p, None, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.args.windows(2).any(|w| w == ["--session-id", id]));
-        let r = launch(&p, ModeId::Manual, false, Conversation::Resume(id)).unwrap();
+        assert!(!l.args.iter().any(|a| a == "--effort"));
+        let r = launch(&p, None, ModeId::Manual, false, Conversation::Resume(id)).unwrap();
         assert!(
             r.args.windows(2).any(|w| w == ["--resume", id])
                 && !r.args.iter().any(|a| a == "--session-id")
@@ -1833,7 +2091,7 @@ mod tests {
             json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"}),
         )
         .unwrap();
-        let l = launch(&o, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        let l = launch(&o, None, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.env.contains(&(
             "KODACT_OPENAI_BASE_URL".into(),
             "http://127.0.0.1:11434/v1".into()
@@ -1841,7 +2099,7 @@ mod tests {
         // Gemini: KodAct CLI's native wire, the base URL as written.
         let g: Profile = serde_json::from_value(json!({"name":"g","baseUrl":"https://generativelanguage.googleapis.com/v1beta/","wire":"gemini","model":"gemini-3-flash-preview"}))
         .unwrap();
-        let l = launch(&g, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        let l = launch(&g, None, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.env.contains(&(
             "KODACT_GEMINI_BASE_URL".into(),
             "https://generativelanguage.googleapis.com/v1beta".into()
@@ -1850,6 +2108,99 @@ mod tests {
             .env
             .iter()
             .any(|(k, _)| k == "KODACT_BASE_URL" || k == "KODACT_OPENAI_BASE_URL"));
+    }
+
+    #[test]
+    fn effort_flag_and_adaptive_nudge_guard_openai_models() {
+        use crate::endpoints::Effort;
+        let launch = |p: &Profile, e, m, b, c| super::launch(p, e, m, b, c, None, None);
+        let id = "0b9a1f2e-3c4d-4e5f-8a6b-7c8d9e0f1a2b";
+        // Qwen38-27B style model: supports low, medium, xhigh (NOT high).
+        let qwen: Profile = serde_json::from_value(json!({
+            "name": "qwen",
+            "baseUrl": "https://gpt.example/api/v1",
+            "wire": "openai",
+            "model": "Qwen38-27B",
+            "capabilities": { "effort": true, "effortLevels": ["low", "medium", "xhigh"] }
+        }))
+        .unwrap();
+        // Auto (None) never passes --effort and never allows adaptiveEffort.
+        assert!(!allows_adaptive_effort(&qwen, None));
+        assert!(!allows_adaptive_effort(&qwen, Some(Effort::Xhigh)));
+        let auto = launch(&qwen, None, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        assert!(!auto.args.iter().any(|a| a == "--effort"));
+        let xhigh = launch(
+            &qwen,
+            Some(Effort::Xhigh),
+            ModeId::Manual,
+            false,
+            Conversation::New(id),
+        )
+        .unwrap();
+        assert!(xhigh.args.windows(2).any(|w| w == ["--effort", "xhigh"]));
+        // Unsupported effort level (High on Qwen) is dropped cleanly.
+        let unsupported = launch(
+            &qwen,
+            Some(Effort::High),
+            ModeId::Manual,
+            false,
+            Conversation::New(id),
+        )
+        .unwrap();
+        assert!(!unsupported.args.iter().any(|a| a == "--effort"));
+
+        // Full low/medium/high model allows adaptiveEffort only when explicit effort is set.
+        let full: Profile = serde_json::from_value(json!({
+            "name": "full",
+            "baseUrl": "https://api.anthropic.com",
+            "wire": "anthropic",
+            "model": "claude-sonnet-4-6",
+            "capabilities": { "effort": true, "effortLevels": ["low", "medium", "high"] }
+        }))
+        .unwrap();
+        assert!(!allows_adaptive_effort(&full, None));
+        assert!(allows_adaptive_effort(&full, Some(Effort::Medium)));
+
+        // Sanitizer strips adaptiveEffort from `all` when disallowed, keeps other 10.
+        assert_eq!(
+            sanitized_nudges(Some("all"), false).as_deref(),
+            Some(SAFE_NUDGES)
+        );
+        assert!(sanitized_nudges(Some("all"), true)
+            .unwrap()
+            .contains("adaptiveEffort"));
+        assert_eq!(
+            sanitized_nudges(Some("adaptiveEffort"), false).as_deref(),
+            Some("none")
+        );
+        assert_eq!(
+            sanitized_nudges(Some("clock, adaptiveEffort, todoTracking"), false).as_deref(),
+            Some("clock,todoTracking")
+        );
+
+        // Settings layers: only override when adaptiveEffort was enabled in settings.json.
+        assert_eq!(
+            nudges_for_settings(None, &[json!({"nudges": {"clock": true}})], false),
+            None
+        );
+        assert_eq!(
+            nudges_for_settings(
+                None,
+                &[json!({"nudges": {"adaptiveEffort": true, "clock": true, "todoTracking": true}})],
+                false,
+            )
+            .as_deref(),
+            Some("clock,todoTracking")
+        );
+        assert_eq!(
+            nudges_for_settings(
+                None,
+                &[json!({"nudges": {"adaptiveEffort": true}})],
+                false,
+            )
+            .as_deref(),
+            Some("none")
+        );
     }
 
     #[test]

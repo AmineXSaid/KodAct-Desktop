@@ -166,6 +166,16 @@ impl Effort {
             Effort::Max => "Max",
         }
     }
+
+    pub fn cli_name(self) -> &'static str {
+        match self {
+            Effort::Low => "low",
+            Effort::Medium => "medium",
+            Effort::High => "high",
+            Effort::Xhigh => "xhigh",
+            Effort::Max => "max",
+        }
+    }
 }
 
 /// The setup guide (`docs/endpoints.md`), shown in the side panel.

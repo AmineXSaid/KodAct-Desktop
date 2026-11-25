@@ -306,6 +306,7 @@ d=$(x "$1"); f=$(x "$2"); shift 2
 n=$#
 while [ "$n" -gt 0 ]; do a=$(x "$1"); shift; set -- "$@" "$a"; n=$((n-1)); done
 t=
+unset FORGE_NUDGES
 while IFS= read -r l && [ -n "$l" ]; do
   case $l in
     {HOST_TEXT}=*) t=$(printf '%b' "${{l#{HOST_TEXT}=}}");;

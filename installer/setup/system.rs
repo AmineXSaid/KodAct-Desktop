@@ -147,12 +147,20 @@ pub fn path_without(path: &str, dir: &str) -> String {
         .join(";")
 }
 
-/// `KODACT_NUDGES=all` for the user, unless a value is set already. Returns whether it was set.
+/// Fact-based nudges enabled by default (excludes `adaptiveEffort`, which sends
+/// unrequested `reasoning_effort: "high"` on OpenAI-compatible models when effort is Auto).
+pub const SAFE_NUDGES: &str = "shellEdit,constraints,namedChecks,passingSnapshots,limitVerdicts,staleDeliverables,thinkingTimeBox,todoTracking,clock,unpinnedInstalls";
+
+/// `KODACT_NUDGES` set to the safe nudges for the user, unless a custom value is set already
+/// (migrates a previous installer-written `all` value too). Returns whether it was set.
 pub fn turn_on_nudges() -> Result<bool, String> {
-    if reg_get(ENV_KEY, "KODACT_NUDGES").is_some_and(|v| !v.trim().is_empty()) {
+    let cur = reg_get(ENV_KEY, "KODACT_NUDGES");
+    let installer_all = cur.as_deref().map(str::trim) == Some("all")
+        && reg_get(APP_KEY, "SetNudges").as_deref() == Some("1");
+    if cur.is_some_and(|v| !v.trim().is_empty()) && !installer_all {
         return Ok(false);
     }
-    reg_set(ENV_KEY, "KODACT_NUDGES", "REG_SZ", "all")?;
+    reg_set(ENV_KEY, "KODACT_NUDGES", "REG_SZ", SAFE_NUDGES)?;
     environment_changed();
     Ok(true)
 }

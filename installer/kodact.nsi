@@ -198,16 +198,23 @@ Section "Add kodact to PATH" SecPath
   Call AddToPath
 SectionEnd
 
-Section "Turn on all KodAct nudges" SecNudges
-  ; KODACT_NUDGES=all in the user's environment: every nudge KodAct CLI has
+Section "Turn on KodAct nudges" SecNudges
+  ; KODACT_NUDGES in the user's environment: the 10 fact-based nudges
   ; (shellEdit, constraints, namedChecks, passingSnapshots, limitVerdicts,
-  ; staleDeliverables, adaptiveEffort, thinkingTimeBox, todoTracking, clock)
-  ; is on, in the app's chats and in a terminal. A value already set is kept.
+  ; staleDeliverables, thinkingTimeBox, todoTracking, clock, unpinnedInstalls),
+  ; excluding adaptiveEffort so Auto effort never sends unrequested reasoning_effort.
   ReadRegStr $0 HKCU "${ENV_KEY}" "KODACT_NUDGES"
+  ReadRegStr $1 HKCU "Software\KodAct" "SetNudges"
   ${If} $0 == ""
-    WriteRegStr HKCU "${ENV_KEY}" "KODACT_NUDGES" "all"
-    WriteRegStr HKCU "Software\KodAct" "SetNudges" "1"
-    SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=2000
+  ${OrIf} $0 == "all"
+    ${If} $0 == ""
+    ${OrIf} $1 == "1"
+      WriteRegStr HKCU "${ENV_KEY}" "KODACT_NUDGES" "shellEdit,constraints,namedChecks,passingSnapshots,limitVerdicts,staleDeliverables,thinkingTimeBox,todoTracking,clock,unpinnedInstalls"
+      WriteRegStr HKCU "Software\KodAct" "SetNudges" "1"
+      SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=2000
+    ${Else}
+      DetailPrint "KODACT_NUDGES is already set to $0; left as it is."
+    ${EndIf}
   ${Else}
     DetailPrint "KODACT_NUDGES is already set to $0; left as it is."
   ${EndIf}
@@ -227,7 +234,7 @@ SectionEnd
 !ifdef LIBREOFFICE_DIR
   !insertmacro MUI_DESCRIPTION_TEXT ${SecOffice} "Shows Word, Excel and PowerPoint files exactly as they print, exports them to PDF, recalculates workbooks. About 860 MB."
 !endif
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecNudges} "Every KodAct CLI nudge on (KODACT_NUDGES=all in your user's environment)."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecNudges} "Fact-based KodAct CLI nudges on in your user's environment."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run kodact from any terminal (your user's PATH)."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A KodAct icon on the desktop."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END

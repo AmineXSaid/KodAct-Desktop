@@ -738,13 +738,15 @@ impl Render for ChatView {
             } else {
                 px(0.)
             };
+            let is_very_last = ix + 1 == chat.messages.len() + usize::from(s.busy());
             let bot_pad = if is_turn_end {
                 t.space.lg
             } else if is_user || has_turn_footer_next {
                 t.space.sm
             } else {
                 t.space.md
-            };
+            }
+            .max(if is_very_last { t.space.xl } else { px(0.) });
             // Find: every match gets a faint bar at its left, the one shown a strong one.
             let mark = s
                 .find
@@ -814,7 +816,7 @@ impl Render for ChatView {
             // Scrolled up, the words fade out where the composer starts, so
             // text running under it reads as "there's more". At the end
             // nothing covers the newest lines.
-            .when(self.away, |d| {
+            .when(self.away && below, |d| {
                 d.child(
                     div()
                         .absolute()

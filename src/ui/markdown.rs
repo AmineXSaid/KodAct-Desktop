@@ -136,13 +136,15 @@ struct TableBuild {
     in_head: bool,
 }
 
-/// Box-drawing, block, shape and arrow characters: only drawings use them.
+/// Box-drawing and block characters (`U+2500..=U+259F`) plus diagram pointer
+/// triangles (`▲▼◀▶`): prose arrows (`→`, `←`, `⇒`) are excluded so bullet
+/// lists and navigation paths (`Security → Your devices`) stay Markdown prose.
 fn drawing_char(c: char) -> bool {
-    matches!(c, '\u{2190}'..='\u{21FF}' | '\u{2500}'..='\u{25FF}' | '\u{27F5}'..='\u{27FF}')
+    matches!(c, '\u{2500}'..='\u{259F}' | '▲' | '▼' | '◀' | '▶')
 }
 
 /// A line that only a drawing would have: box drawing, `+--+` corners or
-/// ASCII arrows.
+/// multi-character ASCII diagram connectors.
 fn drawing_line(l: &str) -> bool {
     l.chars().any(drawing_char)
         || [
@@ -150,6 +152,192 @@ fn drawing_line(l: &str) -> bool {
         ]
         .iter()
         .any(|p| l.contains(p))
+}
+
+/// Width of a leading Markdown list marker (`- `, `* `, `+ `, `1. `, `1) `)
+/// on an already left-trimmed line.
+fn list_marker_width(trimmed: &str) -> Option<usize> {
+    if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+        return Some(2);
+    }
+    let digits = trimmed.bytes().take_while(|b| b.is_ascii_digit()).count();
+    if (1..=9).contains(&digits)
+        && (trimmed[digits..].starts_with(". ") || trimmed[digits..].starts_with(") "))
+    {
+        return Some(digits + 2);
+    }
+    None
+}
+
+/// Whether a line carries Markdown list, heading, quote or inline formatting
+/// syntax that should never be auto-wrapped as raw ASCII art.
+fn markdown_prose_line(l: &str) -> bool {
+    let t = l.trim_start();
+    list_marker_width(t).is_some()
+        || t.starts_with("• ")
+        || t.starts_with('#')
+        || t.starts_with("> ")
+        || t == ">"
+        || l.contains("**")
+        || l.contains('`')
+        || l.contains("](")
+}
+
+/// Leading indentation width in spaces (tabs count as 4 spaces).
+fn indent_cols(l: &str) -> usize {
+    let mut cols = 0;
+    for b in l.bytes() {
+        match b {
+            b' ' => cols += 1,
+            b'\t' => cols += 4,
+            _ => break,
+        }
+    }
+    cols
+}
+
+fn strip_indent_cols(l: &str, mut drop_cols: usize) -> String {
+    let mut idx = 0;
+    let mut extra_spaces = 0usize;
+    for (i, ch) in l.char_indices() {
+        if drop_cols == 0 {
+            break;
+        }
+        match ch {
+            ' ' => {
+                drop_cols -= 1;
+                idx = i + 1;
+            }
+            '\t' => {
+                if drop_cols >= 4 {
+                    drop_cols -= 4;
+                } else {
+                    extra_spaces = 4 - drop_cols;
+                    drop_cols = 0;
+                }
+                idx = i + 1;
+            }
+            _ => break,
+        }
+    }
+    if extra_spaces > 0 {
+        format!("{}{}", " ".repeat(extra_spaces), &l[idx..])
+    } else {
+        l[idx..].to_string()
+    }
+}
+
+/// Models often indent bullet or numbered lists by 4 spaces after a paragraph
+/// (which CommonMark otherwise turns into an indented `text` code block).
+/// Dedent such list blocks outside fenced code so they render as real lists.
+fn dedent_indented_lists(src: &str) -> std::borrow::Cow<'_, str> {
+    let lines: Vec<&str> = src.split('\n').collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut changed = false;
+    let mut fence: Option<&str> = None;
+    let mut parent_list_col: Option<usize> = None;
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        let trimmed = line.trim_start();
+        if let Some(f) = fence {
+            if trimmed.starts_with(f) {
+                fence = None;
+            }
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        }
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fence = Some(&trimmed[..3]);
+            parent_list_col = None;
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        }
+        if trimmed.is_empty() {
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        }
+        let ind = indent_cols(line);
+        if ind < 4 {
+            if let Some(mw) = list_marker_width(trimmed) {
+                parent_list_col = Some(ind + mw);
+            } else if ind == 0 {
+                parent_list_col = None;
+            }
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        }
+        // Under an active list item, CommonMark already treats `ind < parent_col + 4`
+        // as a nested list or item continuation; only `parent_list_col.is_none()` or
+        // `ind >= parent_col + 4` would trigger `CodeBlockKind::Indented`.
+        let triggers_indented_code = match parent_list_col {
+            None => true,
+            Some(pcol) => ind >= pcol + 4,
+        };
+        if triggers_indented_code && list_marker_width(trimmed).is_some() && !drawing_line(line) {
+            let base_ind = ind;
+            let mut j = i + 1;
+            while j < lines.len() {
+                let lj = lines[j];
+                let tj = lj.trim_start();
+                if tj.starts_with("```") || tj.starts_with("~~~") {
+                    break;
+                }
+                if tj.is_empty() || indent_cols(lj) >= 4 {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            // Trim trailing blank lines from the span so they stay outside.
+            let mut end = j;
+            while end > i && lines[end - 1].trim().is_empty() {
+                end -= 1;
+            }
+            let block = &lines[i..end];
+            let looks_like_list = block.iter().all(|l| {
+                let t = l.trim_start();
+                if t.is_empty() {
+                    return true;
+                }
+                if drawing_line(l) {
+                    return false;
+                }
+                let c = indent_cols(l);
+                c > base_ind || list_marker_width(t).is_some()
+            });
+            if looks_like_list {
+                let target = parent_list_col.unwrap_or(0);
+                let shift = base_ind.saturating_sub(target);
+                if shift > 0 {
+                    changed = true;
+                    for &bl in block {
+                        if bl.trim().is_empty() {
+                            out.push(bl.to_string());
+                        } else {
+                            out.push(strip_indent_cols(bl, shift));
+                        }
+                    }
+                    if let Some(mw) = list_marker_width(trimmed) {
+                        parent_list_col = Some(target + mw);
+                    }
+                    i = end;
+                    continue;
+                }
+            }
+        }
+        out.push(line.to_string());
+        i += 1;
+    }
+    if changed {
+        out.join("\n").into()
+    } else {
+        src.into()
+    }
 }
 
 /// A line laid out in columns: a drawing's line, a run of three spaces
@@ -212,6 +400,7 @@ fn fence_ascii_art(src: &str) -> std::borrow::Cow<'_, str> {
             && laid * 5 >= para.len() * 3
             && para.iter().any(|l| drawing_line(l))
             && !para.iter().any(|l| table_rule(l))
+            && !para.iter().any(|l| markdown_prose_line(l))
             && !para
                 .iter()
                 .all(|l| l.starts_with("    ") || l.starts_with('\t'));
@@ -291,6 +480,7 @@ fn parse(src: &str) -> Vec<Block> {
     };
 
     let src = fence_front_matter(src);
+    let src = dedent_indented_lists(&src);
     let src = fence_ascii_art(&src);
     for ev in Parser::new_ext(
         &src,
@@ -605,7 +795,7 @@ fn linked(
 /// How far an inline code chip reaches past its first and last glyph. No
 /// padding characters: the wrapper breaks at any space (a no-break one
 /// too), so padding made stray gaps before punctuation and empty rows.
-const CODE_REACH: f32 = 1.5;
+const CODE_REACH: f32 = 2.0;
 
 /// A span's text as it is laid out: exactly its text (code too).
 fn shown(s: &Span) -> std::borrow::Cow<'_, str> {
@@ -630,7 +820,11 @@ fn code_ranges(spans: &[Span]) -> Vec<std::ops::Range<usize>> {
 /// runs can only fill square, so these are painted from the laid-out
 /// glyph positions, under the text.
 fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> impl IntoElement {
-    let (bg, edge, radius) = (t.extra.code_inline_bg, t.colors.border, t.radius.small);
+    let (bg, edge, radius) = (
+        t.extra.code_inline_bg,
+        t.colors.border.opacity(0.4),
+        t.radius.small,
+    );
     canvas(
         |_, _, _| {},
         move |_, _, window, _| {
@@ -638,7 +832,7 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
             let text = layout.text();
             for r in &ranges {
                 for b in rows(&layout, &text, r.clone(), line) {
-                    // A faint ground with a hairline, reaching a little past the glyphs.
+                    // A soft pill wash with a whisper hairline, reaching slightly past the glyphs.
                     let b = Bounds::new(
                         point(b.origin.x - px(CODE_REACH), b.origin.y),
                         size(b.size.width + px(CODE_REACH * 2.), b.size.height),
@@ -657,70 +851,101 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
     .size_full()
 }
 
+/// Group per-character `(ch, start_pos, end_pos)` pairs into `(x0, y, x1)` ink
+/// spans per visual line.
+///
+/// In GPUI's `WrappedLineLayout::position_for_index`, a soft wrap right before
+/// `char_start` returns `p0` at the end of the previous row (`p0.y`) while
+/// `char_end` advances to the new row (`p1.y`, where `char_start` starts at
+/// `origin_x`). Comparing `p0.y` and `p1.y` places wrapped glyphs cleanly on
+/// `p1.y` from `origin_x..p1.x` and never paints a phantom box on `p0.y`.
+fn glyph_rows(
+    origin_x: f32,
+    glyphs: &[(char, (f32, f32), (f32, f32))],
+) -> Vec<(f32, f32, f32)> {
+    let mut out: Vec<(f32, f32, f32)> = Vec::new();
+    let mut cur: Option<(f32, f32, f32)> = None;
+    for &(ch, p0, p1) in glyphs {
+        let (y, x0, x1) = if (p0.1 - p1.1).abs() < 0.5 {
+            (p0.1, p0.0, p1.0)
+        } else {
+            (p1.1, origin_x.min(p1.0), p1.0)
+        };
+        if ch.is_whitespace() {
+            if let Some((cy, rx0, rx1)) = cur {
+                if (cy - y).abs() >= 0.5 {
+                    if rx1 > rx0 {
+                        out.push((rx0, cy, rx1));
+                    }
+                    cur = None;
+                }
+            }
+            continue;
+        }
+        if x1 <= x0 {
+            continue;
+        }
+        match cur {
+            Some((cy, rx0, rx1)) if (cy - y).abs() < 0.5 => {
+                cur = Some((cy, rx0.min(x0), rx1.max(x1)));
+            }
+            Some((cy, rx0, rx1)) => {
+                if rx1 > rx0 {
+                    out.push((rx0, cy, rx1));
+                }
+                cur = Some((y, x0, x1));
+            }
+            None => {
+                cur = Some((y, x0, x1));
+            }
+        }
+    }
+    if let Some((cy, rx0, rx1)) = cur {
+        if rx1 > rx0 {
+            out.push((rx0, cy, rx1));
+        }
+    }
+    out
+}
+
 /// The bounds a range covers on each row it wraps onto, trimmed to sit
-/// inside the line's height. A row holding only the padding (the wrapper
-/// breaks at any space, a no-break one too) gets none.
+/// inside the line's height.
 fn rows(
     layout: &TextLayout,
     text: &str,
     r: std::ops::Range<usize>,
     line: gpui::Pixels,
 ) -> Vec<Bounds<gpui::Pixels>> {
-    let mut out: Vec<Bounds<gpui::Pixels>> = vec![];
-    let inset = line * 0.12;
-    // (where the row starts, its last glyph's x, glyphs, any besides padding)
-    let mut row: Option<(gpui::Point<gpui::Pixels>, gpui::Pixels, usize, bool)> = None;
-    let close = |start: gpui::Point<gpui::Pixels>,
-                 end: gpui::Pixels,
-                 ink: bool,
-                 out: &mut Vec<Bounds<gpui::Pixels>>| {
-        if ink && end > start.x {
-            out.push(Bounds::new(
-                point(start.x, start.y + inset),
-                size(end - start.x, line - inset * 2.),
-            ));
-        }
+    let Some(slice) = text.get(r.clone()) else {
+        return vec![];
     };
-    let starts: Vec<usize> = text
-        .get(r.clone())
-        .map(|s| s.char_indices().map(|(i, _)| r.start + i).collect())
-        .unwrap_or_default();
-    for i in starts {
-        let Some(p) = layout.position_for_index(i) else {
+    let origin_x = f32::from(layout.bounds().origin.x);
+    let mut glyphs: Vec<(char, (f32, f32), (f32, f32))> = Vec::new();
+    for (rel, ch) in slice.char_indices() {
+        let start = r.start + rel;
+        let end = start + ch.len_utf8();
+        let (Some(p0), Some(p1)) = (
+            layout.position_for_index(start),
+            layout.position_for_index(end),
+        ) else {
             continue;
         };
-        let ink = !text[i..].starts_with(char::is_whitespace);
-        row = match row {
-            Some((start, last, n, had)) if start.y == p.y => {
-                Some((start, p.x.max(last), n + 1, had || ink))
-            }
-            Some((start, last, n, had)) => {
-                // Wrapped: the row ends a character past its last start.
-                let step = if n > 1 {
-                    (last - start.x) / (n - 1) as f32
-                } else {
-                    line * 0.5
-                };
-                close(start, last + step, had, &mut out);
-                Some((p, p.x, 1, ink))
-            }
-            None => Some((p, p.x, 1, ink)),
-        };
+        glyphs.push((
+            ch,
+            (f32::from(p0.x), f32::from(p0.y)),
+            (f32::from(p1.x), f32::from(p1.y)),
+        ));
     }
-    if let Some((start, last, n, ink)) = row {
-        let end = match layout.position_for_index(r.end) {
-            Some(e) if e.y == start.y => e.x,
-            _ => {
-                last + if n > 1 {
-                    (last - start.x) / (n - 1) as f32
-                } else {
-                    line * 0.5
-                }
-            }
-        };
-        close(start, end, ink, &mut out);
-    }
-    out
+    let inset = line * 0.13;
+    glyph_rows(origin_x, &glyphs)
+        .into_iter()
+        .map(|(x0, y, x1)| {
+            Bounds::new(
+                point(px(x0), px(y) + inset),
+                size(px(x1 - x0), line - inset * 2.),
+            )
+        })
+        .collect()
 }
 
 fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
@@ -1295,10 +1520,13 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                         }),
                 ),
         )
-        .child(
+        .child({
+            let wrap_plain =
+                matches!(lang.to_ascii_lowercase().as_str(), "" | "text" | "plaintext")
+                    && !shown.lines().any(drawing_line);
             div()
                 .id(SharedString::from(format!("code-{key}")))
-                .overflow_x_scroll()
+                .when(!wrap_plain, |d| d.overflow_x_scroll().whitespace_nowrap())
                 .px(t.space.md)
                 .py(t.space.sm)
                 .bg(t.extra.inset)
@@ -1306,9 +1534,8 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                 .text_size(t.text.caption)
                 .line_height(relative(1.5))
                 .text_color(t.colors.text)
-                .whitespace_nowrap()
-                .child(code_text(&shown, lang, t)),
-        )
+                .child(code_text(&shown, lang, t))
+        })
         .into_any_element()
 }
 
@@ -1765,14 +1992,73 @@ mod tests {
         assert!(matches!(&parse(boxed)[0], Block::Code { lang, .. } if lang == "text"));
         let fenced = format!("```\n{art}\n```");
         assert_eq!(fence_ascii_art(&fenced), fenced);
-        // Prose, lists and tables are not drawings.
+        // Prose, lists with Unicode arrows, and tables are not drawings.
         for md in [
             "Run it, then --> check the log.\nIt should pass.",
             "- one --> two\n- three",
+            "- Go to **myaccount.google.com → Security → Your devices** and sign out.\n- Check **Security → Recent activity** for anything unfamiliar.",
             "| a   | b |\n|---|---|\n| 1 --> 2 | 3 |",
         ] {
             assert_eq!(fence_ascii_art(md), md);
         }
+    }
+
+    #[test]
+    fn indented_lists_and_arrow_bullets_render_as_items_not_code_blocks() {
+        let md = "Since they've now been pasted, treat them as compromised:\n\n    - Go to **myaccount.google.com → Security → Your devices** and sign out of all sessions (this invalidates the `SID` family).\n    - Change the account password, which revokes the rest.\n    - Check **Security → Recent activity** for anything you don't recognise.\n\nWhat I can help with instead:\n\n  - **You're building an in-product assistant** → I can show you the supported path (`grpc-web`).\n  - **You're debugging a client** → tell me the error and I'll trace it.";
+        let blocks = parse(md);
+        assert!(
+            !blocks.iter().any(|b| matches!(b, Block::Code { .. })),
+            "expected native Markdown items, got: {blocks:?}"
+        );
+        let items: Vec<&Vec<Span>> = blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Item { spans, .. } => Some(spans),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(items.len(), 5);
+        assert!(items[0]
+            .iter()
+            .any(|s| s.bold && s.text.contains("myaccount.google.com → Security")));
+        assert!(items[0].iter().any(|s| s.code && s.text == "SID"));
+        assert!(items[3]
+            .iter()
+            .any(|s| s.code && s.text == "grpc-web"));
+
+        // A real 4-space indented code block stays a code block.
+        let code_md = "Example:\n\n    fn main() {\n        println!(\"hi\");\n    }";
+        let code_blocks = parse(code_md);
+        assert!(matches!(&code_blocks[1], Block::Code { code, .. } if code.contains("fn main()")));
+    }
+
+    #[test]
+    fn wrapped_inline_code_never_emits_phantom_box_on_previous_line() {
+        // Simulate GPUI's `WrappedLineLayout::position_for_index` when
+        // `x-sec-ch-ua` wraps right before `x`: `p0` for `x` is at `(845, 100)`
+        // on the previous line, while `p1` is at `(328, 124)` on the new line.
+        let origin_x = 320.0;
+        let glyphs = vec![
+            ('x', (845.0, 100.0), (328.0, 124.0)),
+            ('-', (328.0, 124.0), (336.0, 124.0)),
+            ('s', (336.0, 124.0), (344.0, 124.0)),
+        ];
+        assert_eq!(glyph_rows(origin_x, &glyphs), vec![(320.0, 124.0, 344.0)]);
+
+        // Mid-span wrap after `a-` (`a-` on y=100, `b` wrapping to y=124), plus
+        // trailing space before wrap ignored.
+        let mid_wrap = vec![
+            ('a', (820.0, 100.0), (828.0, 100.0)),
+            ('-', (828.0, 100.0), (836.0, 100.0)),
+            (' ', (836.0, 100.0), (842.0, 100.0)),
+            ('b', (842.0, 100.0), (328.0, 124.0)),
+            ('c', (328.0, 124.0), (336.0, 124.0)),
+        ];
+        assert_eq!(
+            glyph_rows(origin_x, &mid_wrap),
+            vec![(820.0, 100.0, 836.0), (320.0, 124.0, 336.0)]
+        );
     }
 
     #[test]
