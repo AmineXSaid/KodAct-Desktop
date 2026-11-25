@@ -764,8 +764,6 @@ impl Render for BrowserView {
                     .child(icon(
                         if blank {
                             "icons/search.svg"
-                        } else if secure {
-                            "icons/shield-check.svg"
                         } else {
                             "icons/globe.svg"
                         },

@@ -126,7 +126,7 @@ impl ModeId {
             ModeId::Auto => "icons/zap.svg",
             ModeId::Plan => "icons/scroll-text.svg",
             ModeId::Bypass => "icons/route.svg",
-            ModeId::DontAsk => "icons/shield-x.svg",
+            ModeId::DontAsk => "icons/sliders-horizontal.svg",
         }
     }
 

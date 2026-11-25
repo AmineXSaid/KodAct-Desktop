@@ -66,9 +66,21 @@ done
 rm -rf "$dest/share/extensions/wiki-publisher" "$dest/share/extensions/nlpsolver"
 rm -rf "$dest/help" "$dest/readmes"
 
-# Its fonts, where it looks for its own; the VC++ runtime beside the program.
+# Its fonts, where it looks for its own; every VC++ / UCRT DLL unpacked outside
+# the LibreOffice tree (System64, System64Folder, WinSxS, etc.) goes beside
+# soffice.exe so Windows never mixes Python's vcruntime140.dll with an older
+# System32 msvcp140.dll (which crashes with STATUS_DLL_INIT_FAILED 0xc0000142).
 mkdir -p "$dest/share/fonts/truetype"
-cp "$work"/Fonts/* "$dest/share/fonts/truetype/" 2>/dev/null || true
-cp -n "$work"/System64/*.dll "$dest/program/" 2>/dev/null || true
+find "$work" -path "$dest" -prune -o -type f \( -iname '*.ttf' -o -iname '*.otf' \) \
+  -exec cp -f {} "$dest/share/fonts/truetype/" \;
+find "$work" -path "$dest" -prune -o -type f -iname '*.dll' \
+  -exec cp -f {} "$dest/program/" \;
+
+for crt in vcruntime140.dll vcruntime140_1.dll msvcp140.dll; do
+  if [ ! -f "$dest/program/$crt" ]; then
+    echo "error: missing required VC++ runtime $crt in $dest/program (would trigger 0xc0000142 on Windows)" >&2
+    exit 1
+  fi
+done
 
 echo "$dest: LibreOffice $version, $(du -sh "$dest" | cut -f1)"

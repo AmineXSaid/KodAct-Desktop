@@ -207,7 +207,24 @@ fn adopt_forge_env() {
     }
 }
 
+#[cfg(windows)]
+fn suppress_windows_error_dialogs() {
+    extern "system" {
+        fn SetErrorMode(uMode: u32) -> u32;
+    }
+    // SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX:
+    // inherited by child processes (such as soffice.exe) so a broken DLL never
+    // blocks background document rendering behind a modal Windows error popup.
+    const MODE: u32 = 0x0001 | 0x0002 | 0x8000;
+    unsafe {
+        let prev = SetErrorMode(MODE);
+        SetErrorMode(prev | MODE);
+    }
+}
+
 fn main() {
+    #[cfg(windows)]
+    suppress_windows_error_dialogs();
     adopt_forge_env();
     // Whether Microsoft Office can draw decks for the side panel: asked once,
     // off the UI thread (it starts PowerShell).

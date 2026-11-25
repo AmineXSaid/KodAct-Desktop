@@ -138,24 +138,9 @@ pub fn slot(blocks: &[Block], b: usize) -> Option<usize> {
 pub fn mark(state: TodoState, key: SharedString, t: &Theme) -> AnyElement {
     let size = t.size.icon_sm;
     match state {
-        TodoState::Done => div()
-            .flex_none()
-            .size(size)
-            .rounded(t.radius.pill)
-            .bg(t.colors.text_muted)
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(icon("icons/check.svg", px(9.), t.colors.surface))
-            .into_any_element(),
+        TodoState::Done => icon("icons/circle-check.svg", size, t.colors.text_muted).into_any_element(),
         TodoState::Active => super::turning_logo(f32::from(size), key),
-        TodoState::Pending => div()
-            .flex_none()
-            .size(size)
-            .rounded(t.radius.pill)
-            .border_1()
-            .border_color(t.colors.text_subtle)
-            .into_any_element(),
+        TodoState::Pending => icon("icons/circle.svg", size, t.colors.text_subtle).into_any_element(),
     }
 }
 

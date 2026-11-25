@@ -24,30 +24,56 @@ use std::time::{Duration, Instant};
 /// The longest one file may take; a stuck LibreOffice is stopped.
 const TIME_LIMIT: Duration = Duration::from_secs(90);
 
-/// LibreOffice's program, if this computer has it.
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Set if `soffice` fails with a fatal DLL/init crash (e.g. `0xc0000142`), so we stop retrying it.
+static SOFFICE_BROKEN: AtomicBool = AtomicBool::new(false);
+
+/// LibreOffice's program, if this computer has it and it hasn't fatally crashed.
 pub fn soffice() -> Option<PathBuf> {
+    if SOFFICE_BROKEN.load(Ordering::Relaxed) {
+        return None;
+    }
     static FOUND: OnceLock<Option<PathBuf>> = OnceLock::new();
     FOUND.get_or_init(find).clone()
 }
 
+/// On Windows, `soffice.com` is LibreOffice's console-subsystem headless entry point
+/// (avoids GUI wrapper pipe/desktop issues in `soffice.exe` when present).
+fn prefer_console_binary(p: PathBuf) -> PathBuf {
+    if cfg!(windows) && p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("soffice.exe")) {
+        let com = p.with_file_name("soffice.com");
+        if com.is_file() {
+            return com;
+        }
+    }
+    p
+}
+
 fn find() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("KODACT_SOFFICE").map(PathBuf::from) {
-        return p.is_file().then_some(p);
+        return p.is_file().then(|| prefer_console_binary(p));
     }
     // The copy the installer put beside the app (`installer/stage_libreoffice.sh`).
     let beside = std::env::current_exe().ok().and_then(|exe| {
-        let p = exe
-            .parent()?
-            .join("libreoffice")
-            .join("program")
-            .join(if cfg!(windows) { "soffice.exe" } else { "soffice" });
-        p.is_file().then_some(p)
+        let dir = exe.parent()?.join("libreoffice").join("program");
+        for name in if cfg!(windows) {
+            &["soffice.com", "soffice.exe"][..]
+        } else {
+            &["soffice"][..]
+        } {
+            let p = dir.join(name);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+        None
     });
     if beside.is_some() {
         return beside;
     }
     let names: &[&str] = if cfg!(windows) {
-        &["soffice.exe", "soffice.com"]
+        &["soffice.com", "soffice.exe"]
     } else {
         &["soffice", "libreoffice"]
     };
@@ -61,7 +87,10 @@ fn find() -> Option<PathBuf> {
             ["ProgramFiles", "ProgramFiles(x86)"]
                 .iter()
                 .filter_map(std::env::var_os)
-                .map(|d| PathBuf::from(d).join("LibreOffice/program/soffice.exe"))
+                .flat_map(|d| {
+                    let base = PathBuf::from(d).join("LibreOffice").join("program");
+                    [base.join("soffice.com"), base.join("soffice.exe")]
+                })
                 .collect()
         } else if cfg!(target_os = "macos") {
             vec!["/Applications/LibreOffice.app/Contents/MacOS/soffice".into()]
@@ -90,14 +119,22 @@ fn forced() -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-/// The skill's helper that asks Office for a PDF.
+/// The plugin helper that asks Microsoft Office for a PDF.
 fn helper() -> Option<PathBuf> {
     let p = crate::plugin::dir()?
-        .join("skills")
-        .join("office-documents")
         .join("scripts")
         .join("office_to_pdf.ps1");
     p.is_file().then_some(p)
+}
+
+fn no_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = cmd;
 }
 
 static OFFICE: OnceLock<bool> = OnceLock::new();
@@ -110,8 +147,9 @@ fn office_blocking() -> bool {
             return false;
         }
         let Some(helper) = helper() else { return false };
-        Command::new("powershell")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        let mut cmd = Command::new("powershell");
+        no_window(&mut cmd);
+        cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(helper)
             .arg("-Probe")
             .stdin(Stdio::null())
@@ -227,7 +265,7 @@ pub fn to_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
 /// KodAct's temp folder first: a deck still open in PowerPoint, or being
 /// rewritten, is never touched.
 fn office_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
-    let helper = helper().ok_or("the office-documents helper is missing")?;
+    let helper = helper().ok_or("the Office PDF helper is missing")?;
     let ext = extension(name)?;
     let dir = cache_dir();
     let id = format!("{:016x}-{ext}", key(bytes));
@@ -244,6 +282,7 @@ fn office_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
     std::fs::write(&input, bytes).map_err(|e| e.to_string())?;
     let out = job.join("file.pdf");
     let mut cmd = Command::new("powershell");
+    no_window(&mut cmd);
     cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(&helper)
         .arg(&input)
@@ -290,7 +329,30 @@ fn wait(mut cmd: Command, who: &str) -> Result<(), String> {
 
 fn run(program: &Path, input: &Path, out: &Path) -> Result<(), String> {
     let profile = url(&cache_dir().join("libreoffice-profile"));
-    let mut child = Command::new(program)
+    let mut cmd = Command::new(program);
+    no_window(&mut cmd);
+    if let Some(prog_dir) = program.parent() {
+        cmd.current_dir(prog_dir);
+        if cfg!(windows) {
+            // Keep bundled Python / MSYS2 DLLs off soffice's PATH so mismatched
+            // vcruntime140 / zlib DLLs never trigger STATUS_DLL_INIT_FAILED (0xc0000142).
+            let sys_root = std::env::var_os("SystemRoot")
+                .or_else(|| std::env::var_os("WINDIR"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
+            if let Ok(clean_path) = std::env::join_paths([
+                prog_dir.to_path_buf(),
+                sys_root.join("System32"),
+                sys_root.clone(),
+                sys_root.join("System32").join("Wbem"),
+            ]) {
+                cmd.env("PATH", clean_path);
+            }
+        }
+    }
+    cmd.env("SAL_DISABLESKIA", "1")
+        .env("SAL_DISABLE_OPENCL", "1")
+        .env("SAL_USE_VCLPLUGIN", "svp")
         .arg(format!("-env:UserInstallation={profile}"))
         .args([
             "--headless",
@@ -304,14 +366,24 @@ fn run(program: &Path, input: &Path, out: &Path) -> Result<(), String> {
         .arg(input)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("LibreOffice did not start: {e}"))?;
     let start = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
-            Ok(Some(status)) => return Err(format!("LibreOffice stopped ({status})")),
+            Ok(Some(status)) => {
+                // 0xc0000142 = STATUS_DLL_INIT_FAILED (-1073741502 as i32) or 0xc0000135 (DLL not found).
+                if let Some(code) = status.code() {
+                    let u = code as u32;
+                    if u == 0xc000_0142 || u == 0xc000_0135 {
+                        SOFFICE_BROKEN.store(true, Ordering::Relaxed);
+                    }
+                }
+                return Err(format!("LibreOffice stopped ({status})"));
+            }
             Ok(None) if start.elapsed() > TIME_LIMIT => {
                 let _ = child.kill();
                 let _ = child.wait();

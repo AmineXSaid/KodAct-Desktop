@@ -75,11 +75,17 @@ mod tests {
     #[test]
     fn the_plugin_lists_its_skills() {
         let names: Vec<String> = super::skills().into_iter().map(|(n, _)| n).collect();
-        assert!(
-            names.contains(&"kodact:diagram-design".to_string()),
-            "{names:?}"
-        );
-        assert!(names.contains(&"kodact:design".to_string()), "{names:?}");
+        for expected in [
+            "kodact:diagram-design",
+            "kodact:design",
+            "kodact:docx",
+            "kodact:pdf",
+            "kodact:pptx",
+            "kodact:xlsx",
+        ] {
+            assert!(names.contains(&expected.to_string()), "missing {expected} in {names:?}");
+        }
+        assert!(!names.contains(&"kodact:office-documents".to_string()));
         assert!(super::skills().iter().all(|(_, d)| !d.is_empty()));
     }
 

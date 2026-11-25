@@ -307,6 +307,8 @@ mod tests {
         let d = dir("real");
         let home = d.join("home");
         std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(home.join(".sudo_as_admin_successful"), "").unwrap();
+        std::fs::write(home.join(".hushlogin"), "").unwrap();
         // Ubuntu's stock prompt: a window title, no colour.
         std::fs::write(
             home.join(".bashrc"),

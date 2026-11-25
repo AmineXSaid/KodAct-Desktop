@@ -24,13 +24,15 @@ use std::sync::Mutex;
 /// The libraries, pinned to the versions the skill's own tests pass with
 /// (`assets/kodact-plugin/skills/office-documents/scripts/test_tools.py`),
 /// and the module each is imported as.
-pub const LIBS: [(&str, &str); 6] = [
+pub const LIBS: [(&str, &str); 8] = [
     ("python-docx==1.2.0", "docx"),
     ("openpyxl==3.1.5", "openpyxl"),
     ("python-pptx==1.0.2", "pptx"),
     ("pypdf==6.17.0", "pypdf"),
+    ("pdfplumber==0.11.4", "pdfplumber"),
     ("reportlab==5.0.1", "reportlab"),
-    // Draws PDF pages as images for `check_tool.py render` where poppler isn't installed
+    ("pillow==11.1.0", "PIL"),
+    // Draws PDF pages as images for `render_preview.py` where poppler isn't installed
     // (every Windows PC): what lets a chat look at the slides or pages it made.
     ("pypdfium2==5.14.0", "pypdfium2"),
 ];
@@ -74,8 +76,8 @@ pub fn ready() -> Option<PathBuf> {
 
 /// What a local KodAct CLI session's environment gains: `KODACT_SOFFICE`, the
 /// LibreOffice the app found (the installer's own copy is on no PATH, so a
-/// chat can't find it otherwise); then, once the document tools' Python is
-/// ready, PATH with its folder first and `KODACT_PYTHON`.
+/// chat can't find it otherwise); UTF-8 Python stdio; then, once the document
+/// tools' Python is ready, PATH with its folder first and `KODACT_PYTHON`.
 pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
     let soffice = crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
     // How the skill's `render` draws pages: the route the panel uses, so the
@@ -84,12 +86,17 @@ pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
         "KODACT_OFFICE_RENDER".to_string(),
         std::ffi::OsString::from(crate::office_render::route_name()),
     );
+    let utf8 = [
+        ("PYTHONUTF8".to_string(), std::ffi::OsString::from("1")),
+        ("PYTHONIOENCODING".to_string(), std::ffi::OsString::from("utf-8")),
+    ];
     let Some(python) = ready() else {
-        return soffice.into_iter().chain([route]).collect();
+        return soffice.into_iter().chain([route]).chain(utf8).collect();
     };
     let mut out = vec![("KODACT_PYTHON".to_string(), python.clone().into_os_string())];
     out.extend(soffice);
     out.push(route);
+    out.extend(utf8);
     if let Some(dir) = python.parent() {
         let rest = std::env::var_os("PATH").unwrap_or_default();
         let all = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&rest));
@@ -354,10 +361,12 @@ mod tests {
         assert_eq!(PathBuf::from(&env[0].1), python);
         let path = &env.iter().find(|(k, _)| k == "PATH").expect("PATH").1;
         assert_eq!(std::env::split_paths(path).next(), Some(dir));
-        // Before Python is ready, at most where LibreOffice is.
+        // Before Python is ready, at most where LibreOffice is and UTF-8 Python I/O.
         assert!(
-            none.iter()
-                .all(|(k, _)| k == "KODACT_SOFFICE" || k == "KODACT_OFFICE_RENDER"),
+            none.iter().all(|(k, _)| matches!(
+                k.as_str(),
+                "KODACT_SOFFICE" | "KODACT_OFFICE_RENDER" | "PYTHONUTF8" | "PYTHONIOENCODING"
+            )),
             "{none:?}"
         );
         assert!(

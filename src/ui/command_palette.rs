@@ -359,7 +359,7 @@ impl CommandPalette {
             ),
             act(
                 "Next permission mode",
-                "icons/shield-check.svg",
+                "icons/sliders-horizontal.svg",
                 Some("Shift Tab".into()),
                 Box::new(CycleMode),
             ),
@@ -541,7 +541,7 @@ impl CommandPalette {
             ),
             act(
                 "Open Permissions…",
-                "icons/shield-check.svg",
+                "icons/sliders-horizontal.svg",
                 None,
                 Box::new(OpenPermissions),
             ),

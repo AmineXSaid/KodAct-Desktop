@@ -72,13 +72,18 @@ pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> A
             )
             .into_any_element(),
         ToolStatus::Done => {
-            icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success).into_any_element()
+            icon("icons/check.svg", t.size.icon_sm, t.colors.text_muted).into_any_element()
         }
-        ToolStatus::Failed => {
-            icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element()
-        }
+        ToolStatus::Failed => div()
+            .size(t.size.icon_sm)
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
+            .into_any_element(),
         ToolStatus::Declined => icon(
-            "icons/circle-slash.svg",
+            "icons/minus.svg",
             t.size.icon_sm,
             t.colors.text_subtle,
         )

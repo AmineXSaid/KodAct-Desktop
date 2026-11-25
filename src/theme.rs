@@ -647,22 +647,22 @@ impl ExtraColors {
                 ping_slow_bg: hsla(34. / 360., 1., 0.34, 0.22),
                 ping_slow_fg: rgb(0xe9be74).into(),
                 ansi: [
-                    rgb(0x646163).into(),
-                    rgb(0xec5941).into(),
-                    rgb(0x2da160).into(),
-                    rgb(0xd99530).into(),
-                    rgb(0x428fdc).into(),
-                    rgb(0x9475db).into(),
-                    rgb(0x63a6e9).into(),
-                    rgb(0xc1bfbe).into(),
-                    rgb(0x747273).into(),
-                    rgb(0xf6806d).into(),
-                    rgb(0x52b87a).into(),
-                    rgb(0xe9be74).into(),
-                    rgb(0x63a6e9).into(),
-                    rgb(0xac93e6).into(),
-                    rgb(0x9dc7f1).into(),
-                    rgb(0xecebea).into(),
+                    rgb(0x5c5956).into(),
+                    rgb(0xe87d6d).into(),
+                    rgb(0x76b88c).into(),
+                    rgb(0xdcb46e).into(),
+                    rgb(0x82afd6).into(),
+                    rgb(0xbfa3df).into(),
+                    rgb(0x7ec2c8).into(),
+                    rgb(0xcbc8c3).into(),
+                    rgb(0x7d7975).into(),
+                    rgb(0xf29687).into(),
+                    rgb(0x8fc9a2).into(),
+                    rgb(0xe8c688).into(),
+                    rgb(0x9dc2e2).into(),
+                    rgb(0xd0bae9).into(),
+                    rgb(0x9ad3d8).into(),
+                    rgb(0xf2efeb).into(),
                 ],
             }
         } else {
@@ -722,30 +722,30 @@ impl ExtraColors {
                 ping_slow_bg: rgb(0xf5d9a8).into(),
                 ping_slow_fg: rgb(0x894b16).into(),
                 ansi: [
-                    rgb(0x28272d).into(),
-                    rgb(0xc02f12).into(),
-                    rgb(0x2f7549).into(),
-                    rgb(0x995715).into(),
-                    rgb(0x2f68b4).into(),
-                    rgb(0x6a4fb4).into(),
-                    rgb(0x1f75cb).into(),
-                    rgb(0x747273).into(),
-                    rgb(0x646163).into(),
-                    rgb(0xdd2b0e).into(),
-                    rgb(0x108548).into(),
-                    rgb(0xab6100).into(),
-                    rgb(0x1f75cb).into(),
-                    rgb(0x7b58cf).into(),
-                    rgb(0x1f75cb).into(),
-                    rgb(0x18171d).into(),
+                    rgb(0x242220).into(),
+                    rgb(0xa82e22).into(),
+                    rgb(0x2b6b45).into(),
+                    rgb(0x854d14).into(),
+                    rgb(0x285680).into(),
+                    rgb(0x6b3a7a).into(),
+                    rgb(0x1e6670).into(),
+                    rgb(0x6b6661).into(),
+                    rgb(0x595550).into(),
+                    rgb(0xbf3626).into(),
+                    rgb(0x247848).into(),
+                    rgb(0x945615).into(),
+                    rgb(0x23649e).into(),
+                    rgb(0x7a428c).into(),
+                    rgb(0x1b7380).into(),
+                    rgb(0x171514).into(),
                 ],
             }
         }
     }
 }
 
-/// The shell tool's terminal block: KodAct's terminal palette (the same
-/// Pajamas stops KodAct for VS Code uses). Light themes get the darker stops.
+/// The shell tool's terminal block: a warm recessed surface integrated into
+/// KodAct's paper-and-ink hierarchy, with calm editorial syntax colours.
 #[derive(Clone, Copy)]
 pub struct TerminalColors {
     pub background: Hsla,
@@ -762,7 +762,7 @@ pub struct TerminalColors {
     pub number: Hsla,
     pub comment: Hsla,
     /// Output colours, by ANSI number: black, red, green, yellow, blue,
-    /// magenta, cyan, white. A program's red or green is KodAct's.
+    /// magenta, cyan, white.
     pub ansi: [Hsla; 8],
 }
 
@@ -770,41 +770,41 @@ impl TerminalColors {
     fn for_mode(is_dark: bool) -> Self {
         if is_dark {
             Self {
-                background: rgb(0x0d0f13).into(),
-                foreground: rgb(0xdcdbd9).into(),
-                muted: rgb(0x8a8888).into(),
-                divider: hsla(220. / 360., 0.14, 0.92, 0.1),
-                prompt: rgb(0xac93e6).into(),
-                command: rgb(0x52b87a).into(),
-                keyword: rgb(0xac93e6).into(),
-                flag: rgb(0x63a6e9).into(),
-                string: rgb(0xe9be74).into(),
-                variable: rgb(0xcbbbf2).into(),
-                operator: rgb(0xf6806d).into(),
-                number: rgb(0xd99530).into(),
-                comment: rgb(0x747273).into(),
+                background: rgb(0x19191b).into(),
+                foreground: rgb(0xe6e3de).into(),
+                muted: rgb(0x918d88).into(),
+                divider: hsla(30. / 360., 0.06, 0.90, 0.08),
+                prompt: rgb(0x8e8983).into(),
+                command: rgb(0xf5f2ed).into(),
+                keyword: rgb(0xd69eb1).into(),
+                flag: rgb(0x9bb8d4).into(),
+                string: rgb(0xdcc393).into(),
+                variable: rgb(0xc5b6e0).into(),
+                operator: rgb(0x9c9791).into(),
+                number: rgb(0xe0ad72).into(),
+                comment: rgb(0x88837e).into(),
                 ansi: [
-                    0x646163, 0xec5941, 0x2da160, 0xd99530, 0x428fdc, 0x9475db, 0x63a6e9, 0xc1bfbe,
+                    0x5c5956, 0xe87d6d, 0x76b88c, 0xdcb46e, 0x82afd6, 0xbfa3df, 0x7ec2c8, 0xcbc8c3,
                 ]
                 .map(|c| rgb(c).into()),
             }
         } else {
             Self {
-                background: rgb(0xefedea).into(),
-                foreground: rgb(0x28272d).into(),
-                muted: rgb(0x747273).into(),
-                divider: hsla(250. / 360., 0.07, 0.16, 0.12),
-                prompt: rgb(0x7759c2).into(),
-                command: rgb(0x2f7549).into(),
-                keyword: rgb(0x6a4fb4).into(),
-                flag: rgb(0x2f68b4).into(),
-                string: rgb(0x995715).into(),
-                variable: rgb(0x7b58cf).into(),
-                operator: rgb(0xc02f12).into(),
-                number: rgb(0xab6100).into(),
-                comment: rgb(0x747273).into(),
+                background: rgb(0xf4f3f0).into(),
+                foreground: rgb(0x242220).into(),
+                muted: rgb(0x6b6661).into(),
+                divider: hsla(30. / 360., 0.08, 0.14, 0.08),
+                prompt: rgb(0x736e68).into(),
+                command: rgb(0x171514).into(),
+                keyword: rgb(0x7a1f3d).into(),
+                flag: rgb(0x285680).into(),
+                string: rgb(0x754e1d).into(),
+                variable: rgb(0x5c438a).into(),
+                operator: rgb(0x66615c).into(),
+                number: rgb(0x854d14).into(),
+                comment: rgb(0x736e68).into(),
                 ansi: [
-                    0x28272d, 0xc02f12, 0x2f7549, 0xab6100, 0x2f68b4, 0x6a4fb4, 0x1f75cb, 0x747273,
+                    0x242220, 0xa82e22, 0x2b6b45, 0x854d14, 0x285680, 0x6b3a7a, 0x1e6670, 0x6b6661,
                 ]
                 .map(|c| rgb(c).into()),
             }

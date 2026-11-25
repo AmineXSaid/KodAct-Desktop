@@ -330,18 +330,24 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
             let key = copy_key.clone();
             state.update(cx, |s, cx| s.mark_copied(key, cx));
         });
+    let header_wash = if t.is_dark {
+        gpui::hsla(30. / 360., 0.08, 0.92, 0.028)
+    } else {
+        gpui::hsla(30. / 360., 0.10, 0.12, 0.025)
+    };
     let input = div()
         .group(group.clone())
         .relative()
         .flex()
         .gap(px(8.))
-        .pl(px(10.))
+        .pl(px(12.))
         .pr(px(36.))
-        .py(px(7.))
+        .py(px(8.))
+        .bg(header_wash)
         .child(
             div()
                 .flex_none()
-                .font_weight(FontWeight::BOLD)
+                .font_weight(FontWeight::MEDIUM)
                 .text_color(k.prompt)
                 .child("$"),
         )
@@ -365,7 +371,7 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
     } else {
         lines.len().saturating_sub(TAIL_LINES)
     };
-    let mut out = div().relative().px(px(10.)).py(px(7.)).flex().flex_col();
+    let mut out = div().relative().px(px(12.)).py(px(8.)).flex().flex_col();
     if running {
         out = out.child(div().w(px(7.)).h(px(14.)).bg(k.prompt).with_animation(
             SharedString::from(format!("cursor-{key}")),
@@ -411,13 +417,32 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         out.into_any_element()
     };
 
-    // The footer: exit code, size, and the toggle.
+    // The footer: exit status (understated when 0, tinted chip when non-zero), size, and actions.
     let footer = (!running && call.status != ToolStatus::Declined).then(|| {
-        // A command stopped mid-way has no exit code to show.
-        let (chip, fg, bg) = match call.status {
-            ToolStatus::Failed => ("exit 1", t.extra.danger, t.extra.danger_tint),
-            ToolStatus::Interrupted => ("stopped", t.extra.warning, t.extra.warning_tint),
-            _ => ("exit 0", t.extra.success, t.extra.success_tint),
+        let exit_badge: AnyElement = match call.status {
+            ToolStatus::Failed => div()
+                .px(px(6.))
+                .py(px(1.))
+                .rounded(t.radius.small)
+                .bg(t.extra.danger_tint)
+                .text_color(t.extra.danger)
+                .font_family(t.font_mono.clone())
+                .child("exit 1")
+                .into_any_element(),
+            ToolStatus::Interrupted => div()
+                .px(px(6.))
+                .py(px(1.))
+                .rounded(t.radius.small)
+                .bg(t.extra.warning_tint)
+                .text_color(t.extra.warning)
+                .font_family(t.font_mono.clone())
+                .child("stopped")
+                .into_any_element(),
+            _ => div()
+                .text_color(k.muted)
+                .font_family(t.font_mono.clone())
+                .child("exit 0")
+                .into_any_element(),
         };
         let (state, chat, msg, b) = (at.state.clone(), at.chat, at.msg, at.block);
         let (copier, rerun, output, cmd) = (
@@ -431,25 +456,19 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         let fg_hover = k.foreground;
         let bg_hover = k.divider;
         div()
-            .min_h(px(26.))
-            .px(px(10.))
+            .min_h(px(28.))
+            .px(px(12.))
             .flex()
             .items_center()
             .gap(px(8.))
             .border_t_1()
             .border_color(k.divider)
+            .bg(header_wash)
             .font_family(t.font_sans.clone())
             .text_size(t.text.caption)
             .text_color(k.muted)
-            .child(
-                div()
-                    .px(px(5.))
-                    .rounded(t.radius.small)
-                    .bg(bg)
-                    .text_color(fg)
-                    .font_family(t.font_mono.clone())
-                    .child(chip),
-            )
+            .child(exit_badge)
+            .child("·")
             .child(format!(
                 "{} line{}",
                 lines.len(),
@@ -549,21 +568,13 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
     });
 
     div()
-        .border_t_1()
-        .border_color(t.colors.border)
         .bg(k.background)
         .font_family(t.font_mono.clone())
         .text_size(px(12.))
-        .line_height(relative(1.45))
+        .line_height(relative(1.48))
         .text_color(k.foreground)
         .child(input)
-        .child(
-            div()
-                .h(px(1.))
-                .mx(px(10.))
-                .rounded(t.radius.line)
-                .bg(k.divider),
-        )
+        .child(div().h(px(1.)).bg(k.divider))
         .child(out)
         .children(footer)
         .into_any_element()

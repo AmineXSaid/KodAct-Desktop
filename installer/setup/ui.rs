@@ -1159,25 +1159,43 @@ impl Setup {
         div()
             .flex()
             .flex_col()
-            .gap(px(22.))
-            .child(
-                div()
-                    .size(px(56.))
-                    .rounded_full()
-                    .bg(rgba(0xf07a7a1f))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icon("alert", 26., Ink::danger())),
-            )
+            .gap(px(20.))
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .gap(px(10.))
-                    .child(eyebrow("SOMETHING STOPPED IT"))
                     .child(title("Setup couldn't finish"))
-                    .child(lead(why.to_string())),
+                    .child(lead(
+                        "Nothing already on your computer was damaged. Resolve the issue below and press Try again.",
+                    )),
+            )
+            .child(
+                div()
+                    .rounded(px(12.))
+                    .bg(Ink::panel())
+                    .border_1()
+                    .border_color(rgba(0xf07a7a38))
+                    .px(px(18.))
+                    .py(px(15.))
+                    .flex()
+                    .items_start()
+                    .gap(px(12.))
+                    .child(
+                        div()
+                            .pt(px(6.))
+                            .flex_none()
+                            .child(div().size(px(6.)).rounded(px(3.)).bg(Ink::danger())),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(13.5))
+                            .line_height(relative(1.55))
+                            .text_color(Ink::text())
+                            .child(why.to_string()),
+                    ),
             )
             .into_any_element()
     }

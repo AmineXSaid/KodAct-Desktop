@@ -447,9 +447,9 @@ fn event_line(
         ("icons/layers.svg", t.colors.text_muted, t.colors.hover)
     } else if words.starts_with("Finish check: met") || words.starts_with("Finished, verified") {
         (
-            "icons/shield-check.svg",
-            t.extra.success,
-            t.extra.success_tint,
+            "icons/check.svg",
+            t.colors.text_muted,
+            t.colors.hover,
         )
     } else if words.starts_with("Finish")
         || words.starts_with("Changes not checked")
@@ -548,7 +548,7 @@ fn event_line(
 
 fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyElement {
     let key = format!("{}-{}", cx.chat, cx.index);
-    let (fg, bg) = (t.extra.danger, t.extra.danger_tint);
+    let fg = t.extra.danger;
     let interrupted = !error && text.as_ref() == crate::state::INTERRUPTED;
     let copy_key: SharedString = format!("notice-{key}").into();
     let copied = cx.copied.as_ref() == Some(&copy_key);
@@ -581,19 +581,18 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
         .items_start()
         .gap(t.space.sm)
         .px(t.space.md)
-        .py(t.space.sm)
+        .py(t.space.snug)
         .rounded(t.radius.card)
-        .bg(bg)
-        .text_color(fg)
-        .child(div().pt(px(2.)).child(icon(
-            if error {
-                "icons/triangle-alert.svg"
-            } else {
-                "icons/circle-pause.svg"
-            },
-            t.size.icon_sm,
-            fg,
-        )))
+        .border_1()
+        .border_color(t.extra.danger.opacity(0.28))
+        .bg(t.colors.surface)
+        .text_color(t.extra.danger)
+        .child(
+            div()
+                .pt(px(7.))
+                .flex_none()
+                .child(div().size(px(6.)).rounded(px(3.)).bg(fg)),
+        )
         // A known error in words, the server's reply under it; else the
         // reply itself, wrapped rather than run off the card.
         .child(match crate::error_words::explain(text).filter(|_| error) {
@@ -971,23 +970,18 @@ pub(super) fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyE
         return div().into_any_element();
     };
     let mut parts = vec![format!("{} {}", verdict_word(*verdict), decider(info))];
-    parts.push(match &cx.place {
-        Some((label, _)) => format!("on {label}"),
-        None => "on this computer".into(),
-    });
+    if let Some((label, _)) = &cx.place {
+        parts.push(format!("on {label}"));
+    }
     parts.extend(info.at.map(super::versions::ago));
     div()
         .flex()
         .items_center()
         .gap(t.space.xs)
-        .pl(t.space.md)
+        .pl(t.space.lg)
+        .py(px(1.))
         .text_size(t.text.caption)
-        .text_color(t.colors.text_muted)
-        .child(icon(
-            "icons/shield-check.svg",
-            t.size.icon_xs,
-            t.extra.success,
-        ))
+        .text_color(t.colors.text_subtle)
         // One line, within the column: a long rule ends in an ellipsis.
         .child(
             div()
@@ -1261,13 +1255,18 @@ fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
             )
             .into_any_element(),
         ToolStatus::Done => {
-            icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success).into_any_element()
+            icon("icons/check.svg", t.size.icon_sm, t.colors.text_muted).into_any_element()
         }
-        ToolStatus::Failed => {
-            icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element()
-        }
+        ToolStatus::Failed => div()
+            .size(t.size.icon_sm)
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
+            .into_any_element(),
         ToolStatus::Declined => icon(
-            "icons/circle-slash.svg",
+            "icons/minus.svg",
             t.size.icon_sm,
             t.colors.text_subtle,
         )
@@ -1659,6 +1658,7 @@ pub(super) fn tool_header(
             .whitespace_nowrap()
             .text_ellipsis()
     };
+    let is_recovered = failed && recovered(blocks, b);
     let key = format!("{}-{}-{b}", cx.chat, cx.index);
     let inner = div()
         .flex()
@@ -1678,10 +1678,15 @@ pub(super) fn tool_header(
             }
             ToolStatus::Failed => {
                 let full = SharedString::from(call.output.trim().to_string());
+                let tint = if is_recovered {
+                    t.colors.text_muted
+                } else {
+                    t.extra.danger
+                };
                 div()
                     .id(SharedString::from(format!("tool-why-{key}")))
                     .flex_none()
-                    .child(status_icon(call.status, t))
+                    .child(icon(call.kind.icon(), t.size.icon_xs, tint))
                     .when(!full.is_empty(), |d| {
                         d.tooltip(move |w, cx| {
                             gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx)
@@ -1692,33 +1697,29 @@ pub(super) fn tool_header(
             s => status_icon(s, t),
         })
         .map(|d| match (&call.note, shell) {
-            (Some(note), true) => d
-                .child(
-                    div()
-                        .flex_none()
-                        .text_color(if failed {
-                            t.extra.danger
-                        } else if unknown {
-                            t.extra.warning
-                        } else {
-                            t.colors.text_muted
-                        })
-                        .child(if failed || unknown { verb } else { "Bash" }),
-                )
-                .child(
-                    one_line(div())
-                        .text_color(t.colors.text)
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(note.clone()),
-                ),
+            (Some(note), true) => d.child(
+                one_line(div())
+                    .text_color(if is_recovered {
+                        t.colors.text_muted
+                    } else {
+                        t.colors.text
+                    })
+                    .font_weight(if is_recovered {
+                        FontWeight::NORMAL
+                    } else {
+                        FontWeight::MEDIUM
+                    })
+                    .child(note.clone()),
+            ),
             _ => d
-                .child(
-                    div()
-                        .flex_none()
-                        .when(failed, |d| d.text_color(t.extra.danger))
-                        .when(unknown, |d| d.text_color(t.extra.warning))
-                        .child(verb),
-                )
+                .when(!failed, |d| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .when(unknown, |d| d.text_color(t.extra.warning))
+                            .child(verb),
+                    )
+                })
                 .child(
                     one_line(div())
                         .when(call.note.is_some() || why.is_some(), |d| {
@@ -1730,8 +1731,16 @@ pub(super) fn tool_header(
                         } else {
                             t.text.body_sm
                         })
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(t.colors.text)
+                        .font_weight(if is_recovered {
+                            FontWeight::NORMAL
+                        } else {
+                            FontWeight::MEDIUM
+                        })
+                        .text_color(if is_recovered {
+                            t.colors.text_muted
+                        } else {
+                            t.colors.text
+                        })
                         .child(target_label(call)),
                 )
                 .children(
@@ -1743,25 +1752,52 @@ pub(super) fn tool_header(
         })
         .children(why.as_ref().map(|w| {
             one_line(div())
+                .text_size(t.text.caption)
                 .text_color(if unknown {
                     t.extra.warning
+                } else if is_recovered {
+                    t.colors.text_subtle
                 } else {
                     t.extra.danger
                 })
                 .child(format!("· {w}"))
         }))
         .children(outcome.as_ref().map(|out| {
-            div()
-                .flex_none()
-                .text_size(t.text.caption)
-                .text_color(if failed {
-                    t.extra.danger
-                } else if unknown {
-                    t.extra.warning
-                } else {
-                    t.colors.text_subtle
-                })
-                .child(format!("· {out}"))
+            if failed {
+                div()
+                    .flex_none()
+                    .px(px(6.))
+                    .py(px(1.))
+                    .rounded(t.radius.small)
+                    .bg(if is_recovered {
+                        t.extra.inset
+                    } else {
+                        t.extra.danger_tint
+                    })
+                    .text_size(t.text.caption)
+                    .text_color(if is_recovered {
+                        t.colors.text_subtle
+                    } else {
+                        t.extra.danger
+                    })
+                    .child(if shell {
+                        "exit 1".to_string()
+                    } else {
+                        out.clone()
+                    })
+                    .into_any_element()
+            } else {
+                div()
+                    .flex_none()
+                    .text_size(t.text.caption)
+                    .text_color(if unknown {
+                        t.extra.warning
+                    } else {
+                        t.colors.text_subtle
+                    })
+                    .child(format!("· {out}"))
+                    .into_any_element()
+            }
         }))
         .when(adds + dels > 0, |d| d.child(diff_counts(adds, dels, t)))
         .when(has_body, |d| {
@@ -2315,10 +2351,9 @@ fn answer_meta(verdict: Verdict, info: &PermInfo, blocks: &[Block], cx: &ItemCon
         Decider::Stopped => format!("{}: {}", verdict_word(verdict), decider(info)),
         _ => format!("{} {}", verdict_word(verdict), decider(info)),
     }];
-    parts.push(match &cx.place {
-        Some((label, _)) => format!("on {label}"),
-        None => "on this computer".into(),
-    });
+    if let Some((label, _)) = &cx.place {
+        parts.push(format!("on {label}"));
+    }
     if let Some(at) = info.at {
         parts.push(super::versions::ago(at));
     }
@@ -2355,9 +2390,8 @@ fn subject(text: &SharedString, id: SharedString, t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
-/// An answered question as one row: a shield in the answer's tone, the
-/// call's icon and what it ran on, then who answered, where, when and how
-/// it went.
+/// An answered question as one quiet row: a crisp check/minus mark (no
+/// antivirus shield), what it ran on, then who answered and how it went.
 #[allow(clippy::too_many_arguments)]
 fn answered(
     title: &SharedString,
@@ -2373,7 +2407,7 @@ fn answered(
     let tone = if denied {
         t.extra.danger
     } else {
-        t.extra.success
+        t.colors.text_muted
     };
     let what = if detail.trim().is_empty() {
         title.clone()
@@ -2423,13 +2457,13 @@ fn answered(
         .border_1()
         .border_color(t.colors.border)
         .bg(t.colors.surface)
-        .child(div().pt(px(1.)).child(icon(
+        .child(div().pt(px(2.)).child(icon(
             if denied {
-                "icons/shield-x.svg"
+                "icons/minus.svg"
             } else {
-                "icons/shield-check.svg"
+                "icons/check.svg"
             },
-            t.size.icon_sm,
+            t.size.icon_xs,
             tone,
         )))
         .child(
@@ -2464,7 +2498,7 @@ fn answered(
                         .text_color(if denied {
                             t.extra.danger
                         } else {
-                            t.colors.text_muted
+                            t.colors.text_subtle
                         })
                         .child(answer_meta(verdict, info, blocks, cx)),
                 )
@@ -2500,7 +2534,7 @@ fn answer_group(
     let tone = if denied {
         t.extra.danger
     } else {
-        t.extra.success
+        t.colors.text_muted
     };
     let n = run.len();
     let noun = match info.kind {
@@ -2523,13 +2557,10 @@ fn answer_group(
         }),
         _ => None,
     });
-    let mut meta = vec![
-        decider(info),
-        match &cx.place {
-            Some((label, _)) => format!("on {label}"),
-            None => "on this computer".into(),
-        },
-    ];
+    let mut meta = vec![decider(info)];
+    if let Some((label, _)) = &cx.place {
+        meta.push(format!("on {label}"));
+    }
     meta.extend(last.map(super::versions::ago));
     let hover = t.colors.hover;
     let header = div()
@@ -2547,11 +2578,11 @@ fn answer_group(
         .on_click(toggle(cx, b))
         .child(icon(
             if denied {
-                "icons/shield-x.svg"
+                "icons/minus.svg"
             } else {
-                "icons/shield-check.svg"
+                "icons/check.svg"
             },
-            t.size.icon_sm,
+            t.size.icon_xs,
             tone,
         ))
         .child(

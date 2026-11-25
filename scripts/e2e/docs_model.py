@@ -76,18 +76,18 @@ def decide(body):
     if "word" in asked.lower():
         if n == 0:
             return [("text", "The report first, then its parts."),
-                    bash(f'{PY} "{TOOLS}/docx_tool.py" init "{DOCX}" --audience "the board" --title "Q3 Review" --subtitle "Results and the plan"', "Make the report")]
+                    bash(f'{PY} "{TOOLS}/docx/scripts/docx_tool.py" init "{DOCX}" --audience "the board" --title "Q3 Review" --subtitle "Results and the plan"', "Make the report")]
         if n == 1:
-            return [bash(f'{PY} "{TOOLS}/docx_tool.py" add "{DOCX}" --json {js(WORD)}', "Add its blocks")]
+            return [bash(f'{PY} "{TOOLS}/docx/scripts/docx_tool.py" add "{DOCX}" --json {js(WORD)}', "Add its blocks")]
         return [("text", "Done: report.docx is ready." if not res[-1][2] else "Failed: " + res[-1][1][:200])]
     if "excel" in asked.lower():
         if n == 0:
             return [("text", "The workbook first, then its parts."),
-                    bash(f'{PY} "{TOOLS}/xlsx_tool.py" init "{XLSX}" --audience "finance" --title "Q3 Budget" --subtitle "Costs by item"', "Make the workbook")]
+                    bash(f'{PY} "{TOOLS}/xlsx/scripts/xlsx_tool.py" init "{XLSX}" --audience "finance" --title "Q3 Budget" --subtitle "Costs by item"', "Make the workbook")]
         if n == 1:
-            return [bash(f'{PY} "{TOOLS}/xlsx_tool.py" add "{XLSX}" --json {js(EXCEL)}', "Add the table, tile and chart")]
+            return [bash(f'{PY} "{TOOLS}/xlsx/scripts/xlsx_tool.py" add "{XLSX}" --json {js(EXCEL)}', "Add the table, tile and chart")]
         if n == 2:
-            return [bash(f'{PY} "{TOOLS}/xlsx_tool.py" recalc "{XLSX}" "{XLSX}"', "Compute the formulas")]
+            return [bash(f'{PY} "{TOOLS}/xlsx/scripts/recalc_and_verify.py" "{XLSX}" --in-place', "Compute and verify the formulas")]
         return [("text", "Done: budget.xlsx is ready." if not res[-1][2] else "Failed: " + res[-1][1][:200])]
     return [("text", "ok")]
 

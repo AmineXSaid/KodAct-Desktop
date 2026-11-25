@@ -397,9 +397,9 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let all: Vec<&ToolCall> = calls.iter().map(|(_, c)| *c).collect();
     // Collapsed by default unless Detailed mode is active (or toggled open).
     let open = cx.detailed != cx.open_groups.contains(&run.start);
-    let failed = all
+    let failed = calls
         .iter()
-        .filter(|c| c.status == ToolStatus::Failed)
+        .filter(|(i, c)| c.status == ToolStatus::Failed && !message::recovered(blocks, *i))
         .count();
     // Cut short: an interrupted step, or a sub-agent you stopped (as the
     // Agents panel counts it, `agent_roster::Counts::of_calls`).
@@ -463,17 +463,26 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             )
         }
     } else if failed > 0 {
-        icon("icons/circle-x.svg", t.size.icon_xs, t.extra.danger).into_any_element()
+        div()
+            .size(t.size.icon_xs)
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
+            .into_any_element()
     } else if stopped > 0 || all.iter().any(|c| stalled_agent(c, &cx.agents)) {
-        icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
+        div()
+            .size(t.size.icon_xs)
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.warning))
+            .into_any_element()
     } else {
-        // Done reads as the plan's done mark: a quiet ink disc, not a green
-        // check competing with the reply.
-        super::todo_card::mark(
-            super::todo_card::TodoState::Done,
-            format!("work-done-{chat}-{msg}-{start}").into(),
-            t,
-        )
+        // Crisp vector check stroke in muted ink: never a pixelated filled white disc.
+        icon("icons/check.svg", t.size.icon_xs, t.colors.text_subtle).into_any_element()
     };
 
     let header_inner = div()
@@ -492,7 +501,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .font_weight(if live_step.is_some() || failed > 0 {
+                .font_weight(if live_step.is_some() {
                     gpui::FontWeight::MEDIUM
                 } else {
                     gpui::FontWeight::NORMAL
@@ -517,20 +526,26 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             d.child(
                 div()
                     .flex_none()
+                    .px(px(6.))
+                    .py(px(1.))
+                    .rounded(t.radius.small)
+                    .bg(t.extra.danger_tint)
                     .text_size(t.text.caption)
-                    .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(t.extra.danger)
-                    .child(format!("· {failed} failed")),
+                    .child(format!("{failed} failed")),
             )
         })
         .when(stopped > 0, |d| {
             d.child(
                 div()
                     .flex_none()
+                    .px(px(6.))
+                    .py(px(1.))
+                    .rounded(t.radius.small)
+                    .bg(t.extra.warning_tint)
                     .text_size(t.text.caption)
-                    .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(t.extra.warning)
-                    .child(format!("· {stopped} stopped")),
+                    .child(format!("{stopped} stopped")),
             )
         })
         .when(adds + dels > 0 && live_step.is_none(), |d| {
@@ -578,7 +593,8 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .filter(|&i| part(blocks, i, streaming) == Part::Step)
         .collect();
 
-    // Never hide a failure or warning behind a collapsed group.
+    // Surface only unrecovered failures or active stalls while collapsed;
+    // recovered exploratory probes stay quietly inside the group.
     let problem_rows: Vec<AnyElement> = if !open {
         shown
             .iter()
@@ -586,7 +602,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .filter(|&i| {
                 matches!(
                     &blocks[i],
-                    Block::Tool(c) if c.status == ToolStatus::Failed
+                    Block::Tool(c) if (c.status == ToolStatus::Failed && !message::recovered(blocks, i))
                         || cut_short(c)
                         || stalled_agent(c, &cx.agents)
                 )

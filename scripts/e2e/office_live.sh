@@ -30,7 +30,7 @@ OUT="${1:-$here/target/e2e-office}"
 CLI="${KODACT_CLI_BIN:-$here/../kodact/target/debug/kodact}"
 BIN="$here/target/debug/kodact-desktop"
 PORT="${PORT:-4612}"
-TOOLS="$here/assets/kodact-plugin/skills/office-documents/scripts"
+TOOLS="$here/assets/kodact-plugin/skills/pptx/scripts"
 
 [ -x "$BIN" ] || { echo "Build first: cargo build" >&2; exit 2; }
 [ -x "$CLI" ] || { echo "No KodAct CLI at $CLI: build it, or set KODACT_CLI_BIN" >&2; exit 2; }

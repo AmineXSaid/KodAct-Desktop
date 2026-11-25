@@ -308,7 +308,7 @@ float quad_sdf(float2 pt, Bounds bounds, Corners corner_radii) {
     float2 half_size = bounds.size / 2.;
     float2 center = bounds.origin + half_size;
     float2 center_to_point = pt - center;
-    float corner_radius = pick_corner_radius(center_to_point, corner_radii);
+    float corner_radius = min(pick_corner_radius(center_to_point, corner_radii), min(half_size.x, half_size.y));
     float2 corner_to_point = abs(center_to_point) - half_size;
     float2 corner_center_to_point = corner_to_point + corner_radius;
     return quad_sdf_impl(corner_center_to_point, corner_radius);
@@ -585,7 +585,8 @@ float4 quad_fragment(QuadFragmentInput input): SV_Target {
     const float antialias_threshold = 0.5;
 
     // Radius of the nearest corner
-    float corner_radius = pick_corner_radius(center_to_point, quad.corner_radii);
+    float max_corner_radius = min(half_size.x, half_size.y);
+    float corner_radius = min(pick_corner_radius(center_to_point, quad.corner_radii), max_corner_radius);
 
     float2 border = float2(
         center_to_point.x < 0.0 ? quad.border_widths.left : quad.border_widths.right,
@@ -717,10 +718,10 @@ float4 quad_fragment(QuadFragmentInput input): SV_Target {
                 // When corners are rounded, the dashes are laid out clockwise
                 // around the whole perimeter.
 
-                float r_tr = quad.corner_radii.top_right;
-                float r_br = quad.corner_radii.bottom_right;
-                float r_bl = quad.corner_radii.bottom_left;
-                float r_tl = quad.corner_radii.top_left;
+                float r_tr = min(quad.corner_radii.top_right, max_corner_radius);
+                float r_br = min(quad.corner_radii.bottom_right, max_corner_radius);
+                float r_bl = min(quad.corner_radii.bottom_left, max_corner_radius);
+                float r_tl = min(quad.corner_radii.top_left, max_corner_radius);
 
                 float w_t = quad.border_widths.top;
                 float w_r = quad.border_widths.right;
@@ -841,10 +842,10 @@ float4 quad_fragment(QuadFragmentInput input): SV_Target {
         // between the two as we slide inside the background.
         float4 blended_border = over(background_color, border_color);
         color = lerp(background_color, blended_border,
-                    saturate(antialias_threshold - inner_sdf));
+                    smoothstep(-antialias_threshold, antialias_threshold, -inner_sdf));
     }
 
-    return color * float4(1.0, 1.0, 1.0, saturate(antialias_threshold - outer_sdf));
+    return color * float4(1.0, 1.0, 1.0, smoothstep(-antialias_threshold, antialias_threshold, -outer_sdf));
 }
 
 /*

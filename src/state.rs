@@ -9648,13 +9648,43 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// A picture, drawn on: the new picture (a PNG) replaces it.
-    pub fn set_attachment_image(&mut self, id: u64, png: Vec<u8>, cx: &mut Context<Self>) {
+    /// A picture, edited: the rendered result (a PNG) is what travels, the
+    /// untouched original and the edits are kept beside it for Reset and
+    /// for reopening. No edits at all puts the original back.
+    pub fn set_attachment_edits(
+        &mut self,
+        id: u64,
+        png: Vec<u8>,
+        edits: Vec<crate::draw::EditOp>,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(a) = self.attachments.iter_mut().find(|a| a.id == id) {
-            a.kind = crate::attach::Kind::Image("image/png");
-            a.size = png.len() as u64;
-            a.bytes = Some(std::sync::Arc::from(png.into_boxed_slice()));
-            a.note = Some("drawn on by the user".into());
+            let original = a.original.clone().or_else(|| a.bytes.clone());
+            if edits.is_empty() {
+                if let Some(orig) = original {
+                    let mime = match image::guess_format(&orig) {
+                        Ok(image::ImageFormat::Jpeg) => "image/jpeg",
+                        Ok(image::ImageFormat::Gif) => "image/gif",
+                        Ok(image::ImageFormat::WebP) => "image/webp",
+                        _ => "image/png",
+                    };
+                    a.kind = crate::attach::Kind::Image(mime);
+                    a.size = orig.len() as u64;
+                    a.bytes = Some(orig);
+                }
+                a.original = None;
+                a.edits.clear();
+                if a.note.as_deref() == Some("edited by the user") {
+                    a.note = None;
+                }
+            } else {
+                a.kind = crate::attach::Kind::Image("image/png");
+                a.size = png.len() as u64;
+                a.bytes = Some(std::sync::Arc::from(png.into_boxed_slice()));
+                a.original = original;
+                a.edits = edits;
+                a.note = Some("edited by the user".into());
+            }
         }
         self.editing_attachment = None;
         cx.notify();

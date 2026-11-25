@@ -132,6 +132,18 @@ pub(crate) fn stroke_svg(path: &str) -> Option<Vec<u8>> {
         "angle" => Stroke::Angle,
         _ => return None,
     };
+    if stroke == Stroke::Dot {
+        let s = BOX * FILL / VIEW.0;
+        let (ox, oy) = ((BOX - VIEW.0 * s) / 2., (BOX - VIEW.1 * s) / 2.);
+        let (cx, cy) = (ox + 35.0 * s, oy + 205.0 * s);
+        let r = (18.0 + JOIN * 0.5) * s;
+        return Some(
+            format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle fill="#000" cx="{cx:.3}" cy="{cy:.3}" r="{r:.3}"/></svg>"##
+            )
+            .into_bytes(),
+        );
+    }
     let d: String = outline(stroke, BOX)
         .iter()
         .enumerate()
@@ -477,7 +489,9 @@ mod tests {
 
     #[test]
     fn all_three_strokes_are_served_and_nothing_else() {
-        for name in ["dot", "slash", "angle"] {
+        let dot = String::from_utf8(stroke_svg("kodact/dot.svg").expect("dot served")).unwrap();
+        assert!(dot.starts_with("<svg") && dot.contains("<circle "), "{dot}");
+        for name in ["slash", "angle"] {
             let svg = stroke_svg(&format!("kodact/{name}.svg")).expect("served");
             let svg = String::from_utf8(svg).unwrap();
             assert!(svg.starts_with("<svg") && svg.contains(" d=\"M"), "{svg}");

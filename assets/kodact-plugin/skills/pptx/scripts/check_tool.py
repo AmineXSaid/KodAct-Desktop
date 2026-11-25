@@ -107,7 +107,11 @@ def _soffice():
     return found
 
 
-HELPER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "office_to_pdf.ps1")
+HELPER = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts", "office_to_pdf.ps1"))
+SHARED_SCRIPTS = os.path.dirname(HELPER)
+if SHARED_SCRIPTS not in sys.path:
+    sys.path.insert(0, SHARED_SCRIPTS)
+from _kodact_office import run_soffice as _run_soffice  # noqa: E402
 
 
 def _office_route():
@@ -134,8 +138,9 @@ def _office_probe():
     ps = _powershell()
     if not ps:
         return False
+    kw = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)} if os.name == "nt" else {}
     r = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", HELPER, "-Probe"],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, timeout=30, **kw)
     return r.returncode == 0 and bool(r.stdout.strip())
 
 
@@ -145,8 +150,9 @@ def _office_to_pdf(path, tmp):
     if not ps:
         raise SystemExit("render: PowerShell is missing, so Office can't be asked to draw the file")
     pdf = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".pdf")
+    kw = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)} if os.name == "nt" else {}
     r = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", HELPER, path, pdf],
-                       capture_output=True, text=True, timeout=120)
+                       capture_output=True, text=True, timeout=120, **kw)
     if r.returncode == 3:
         return None
     if r.returncode != 0 or not os.path.exists(pdf):
@@ -169,9 +175,10 @@ def to_pdf(path, tmp):
     if not soffice:
         raise SystemExit("render: no Microsoft Office or LibreOffice here to draw Office files. "
                          "Say you could not check the layout; don't look for other tools.")
-    profile = "file://" + os.path.join(tmp, "profile").replace(os.sep, "/")
-    subprocess.run([soffice, f"-env:UserInstallation={profile}", "--headless", "--convert-to", "pdf", "--outdir", tmp, path],
-                   check=True, capture_output=True, timeout=120)
+    from pathlib import Path as _Path
+    profile = _Path(os.path.join(tmp, "profile")).resolve().as_uri()
+    _run_soffice([f"-env:UserInstallation={profile}", "--headless", "--norestore", "--nolockcheck", "--convert-to", "pdf", "--outdir", tmp, path],
+                 timeout=120, check=True)
     pdf = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".pdf")
     if not os.path.exists(pdf):
         raise SystemExit("LibreOffice could not convert it")

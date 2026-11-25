@@ -87,7 +87,14 @@ pub fn status_icon(status: ToolStatus, t: &Theme, size: gpui::Pixels, key: Strin
 fn run_status_icon(status: ToolStatus, t: &Theme, size: gpui::Pixels, key: String) -> AnyElement {
     match status {
         ToolStatus::Running => spinner(size, t.extra.live, key),
-        ToolStatus::Failed => icon("icons/circle-x.svg", size, t.extra.danger).into_any_element(),
+        ToolStatus::Failed => div()
+            .size(size)
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
+            .into_any_element(),
         ToolStatus::Declined => {
             icon("icons/square.svg", size, t.colors.text_subtle).into_any_element()
         }
@@ -95,7 +102,7 @@ fn run_status_icon(status: ToolStatus, t: &Theme, size: gpui::Pixels, key: Strin
             icon("icons/triangle-alert.svg", size, t.extra.warning).into_any_element()
         }
         ToolStatus::Done => {
-            icon("icons/circle-check.svg", size, t.extra.success).into_any_element()
+            icon("icons/check.svg", size, t.colors.text_muted).into_any_element()
         }
     }
 }
@@ -1301,7 +1308,7 @@ fn render_step(
             format!("agent-{}-step-spin-{step_idx}", run.id),
         )
     } else if failed {
-        icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element()
+        icon(step.kind.icon(), t.size.icon_sm, t.extra.danger).into_any_element()
     } else if interrupted {
         icon("icons/triangle-alert.svg", t.size.icon_sm, t.extra.warning).into_any_element()
     } else {

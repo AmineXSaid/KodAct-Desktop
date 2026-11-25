@@ -30,7 +30,7 @@ OUT="${1:-$here/target/e2e-docs}"
 CLI="${KODACT_CLI_BIN:-$here/../kodact/target/debug/kodact}"
 BIN="$here/target/debug/kodact-desktop"
 PORT="${PORT:-4613}"
-TOOLS="$here/assets/kodact-plugin/skills/office-documents/scripts"
+TOOLS="$here/assets/kodact-plugin/skills"
 
 [ -x "$BIN" ] || { echo "Build first: cargo build" >&2; exit 2; }
 [ -x "$CLI" ] || { echo "No KodAct CLI at $CLI: build it, or set KODACT_CLI_BIN" >&2; exit 2; }
@@ -125,7 +125,8 @@ sleep 12; shot 3-excel-pages
 echo "Checks"
 check "the report is valid and holds its blocks" 'python3 - "$PROJECT/report.docx" "$TOOLS" <<P
 import sys
-sys.path.insert(0, sys.argv[2])
+sys.path.insert(0, sys.argv[2] + "/docx/scripts")
+sys.path.insert(0, sys.argv[2] + "/pptx/scripts")
 import check_tool, docx_tool
 t = docx_tool.read(sys.argv[1])
 sys.exit(0 if not check_tool.validate(sys.argv[1]) and "185k" in t and "Licence costs" in t else 1)

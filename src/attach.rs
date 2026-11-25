@@ -146,6 +146,11 @@ pub struct Attachment {
     pub note: Option<String>,
     /// Still being read, copied or opened.
     pub pending: bool,
+    /// A picture edited in the editor: the bytes before any edit, so Reset
+    /// and reopening never lose quality (`bytes` holds the rendered result).
+    pub original: Option<Arc<[u8]>>,
+    /// The edits made to `original`, replayed to give `bytes` (`draw.rs`).
+    pub edits: Vec<crate::draw::EditOp>,
 }
 
 impl Default for Attachment {
@@ -164,6 +169,8 @@ impl Default for Attachment {
             extracted: None,
             note: None,
             pending: false,
+            original: None,
+            edits: Vec::new(),
         }
     }
 }

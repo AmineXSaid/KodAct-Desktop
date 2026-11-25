@@ -110,7 +110,7 @@ const SECTIONS: &[Section] = &[
             (SettingsTab::Mcp, "icons/plug.svg", "MCP servers"),
             (
                 SettingsTab::Permissions,
-                "icons/shield-check.svg",
+                "icons/sliders-horizontal.svg",
                 "Permissions",
             ),
         ],

@@ -85,9 +85,16 @@ pub fn render(
     } else if interrupted {
         icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
     } else if failed {
-        icon("icons/circle-x.svg", t.size.icon_xs, t.extra.danger).into_any_element()
+        div()
+            .size(t.size.icon_xs)
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
+            .into_any_element()
     } else {
-        icon("icons/circle-check.svg", t.size.icon_xs, t.extra.success).into_any_element()
+        icon("icons/check.svg", t.size.icon_xs, t.colors.text_muted).into_any_element()
     };
 
     let status_summary = if stalled {
