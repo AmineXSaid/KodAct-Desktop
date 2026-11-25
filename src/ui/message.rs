@@ -1892,6 +1892,8 @@ pub(super) fn tool_body(
         };
         return Some(
             frame()
+                .bg(t.terminal.background)
+                .border_color(t.terminal.divider)
                 .child(terminal::block(call, &at, t))
                 .into_any_element(),
         );

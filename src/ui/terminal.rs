@@ -331,9 +331,9 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
             state.update(cx, |s, cx| s.mark_copied(key, cx));
         });
     let header_wash = if t.is_dark {
-        gpui::hsla(30. / 360., 0.08, 0.92, 0.028)
+        gpui::hsla(0., 0., 1., 0.03)
     } else {
-        gpui::hsla(30. / 360., 0.10, 0.12, 0.025)
+        gpui::hsla(0., 0., 0., 0.025)
     };
     let input = div()
         .group(group.clone())

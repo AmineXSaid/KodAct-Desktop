@@ -700,6 +700,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
             folded("Changes"),
             changed(t, state, &files, in_folder && !s.busy()),
         ));
+    let closer = state.clone();
     div()
         .id("session-column")
         .flex_none()
@@ -714,7 +715,11 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
             t,
             super::panel_chrome::title(t, "Session"),
             vec![],
-            vec![],
+            vec![super::panel_chrome::close_button(
+                "session-close",
+                "Close Session",
+                move |_, _, cx| closer.update(cx, |s, cx| s.toggle_session(cx)),
+            )],
         ))
         .child(body)
         .into_any_element()

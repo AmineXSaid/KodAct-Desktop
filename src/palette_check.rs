@@ -375,7 +375,13 @@ fn the_measures_agree_with_known_values() {
 #[test]
 fn terminal_colours_read_on_the_dock() {
     for t in [Theme::light(), Theme::dark()] {
+        let mode = if t.is_dark { "dark" } else { "light" };
         let bg = t.terminal.background;
+        let (_, chroma) = oklab(rgba(bg));
+        assert!(
+            chroma <= 0.01,
+            "terminal background in {mode} has chroma {chroma:.4}; keep neutral"
+        );
         for (i, c) in t.extra.ansi.iter().enumerate() {
             let need = match (i, t.is_dark) {
                 (0, true) => 1.0,
@@ -386,9 +392,39 @@ fn terminal_colours_read_on_the_dock() {
             let r = contrast(*c, bg);
             assert!(
                 r >= need,
-                "ansi[{i}] {:.2}:1 on the dock in {} (needs {need})",
-                r,
-                if t.is_dark { "dark" } else { "light" }
+                "ansi[{i}] {r:.2}:1 on the dock in {mode} (needs {need})"
+            );
+        }
+        let k = &t.terminal;
+        for (name, c) in [
+            ("foreground", k.foreground),
+            ("muted", k.muted),
+            ("prompt", k.prompt),
+            ("command", k.command),
+            ("keyword", k.keyword),
+            ("flag", k.flag),
+            ("string", k.string),
+            ("variable", k.variable),
+            ("operator", k.operator),
+            ("number", k.number),
+            ("comment", k.comment),
+        ] {
+            let r = contrast(c, bg);
+            assert!(
+                r >= AA_TEXT,
+                "terminal.{name} {r:.2}:1 on terminal.background in {mode} (needs {AA_TEXT})"
+            );
+        }
+        for (i, c) in k.ansi.iter().enumerate() {
+            let need = match (i, t.is_dark) {
+                (0, true) => 1.0,
+                (0, false) => AA_TEXT,
+                _ => AA_UI,
+            };
+            let r = contrast(*c, bg);
+            assert!(
+                r >= need,
+                "terminal.ansi[{i}] {r:.2}:1 on terminal.background in {mode} (needs {need})"
             );
         }
     }

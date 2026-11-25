@@ -2593,7 +2593,7 @@ impl AppState {
             projects,
             all_chats: true,
             show_archived: false,
-            session_open: false,
+            session_open: true,
             session_folded: vec![],
             context_usage: Default::default(),
             switcher_open: false,
@@ -4411,6 +4411,10 @@ impl AppState {
             c.unread = false;
         }
         self.follow_chat_folder(id);
+        if self.session_open {
+            self.ask_context_usage(id);
+            self.ask_mcp_status(id);
+        }
         cx.notify();
     }
 
@@ -12531,6 +12535,10 @@ fix everything under 8, render it again to check, then tell me the scores before
                 _relays: relays,
             },
         );
+        if self.session_open {
+            self.ask_context_usage(id);
+            self.ask_mcp_status(id);
+        }
         Ok(())
     }
 
@@ -17021,6 +17029,14 @@ mod tests {
             })
             .count();
         assert_eq!(started, 10);
+    }
+
+    #[test]
+    fn session_panel_defaults_open_while_new_chat_has_no_active_conversation() {
+        let s = AppState::new();
+        assert!(s.session_open);
+        assert_eq!(s.current, None);
+        assert_eq!(s.session_open.then_some(s.current).flatten(), None);
     }
 }
 
