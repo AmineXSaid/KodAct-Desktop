@@ -2277,6 +2277,9 @@ pub struct AppState {
     /// file it cannot read); the card then shows the app's mark.
     pub card_thumbs:
         std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
+    /// Each Office file's or PDF's page (slide) count, by the same key, once
+    /// its first page is drawn: a card says "12 slides".
+    pub card_pages: std::sync::Arc<std::collections::HashMap<u64, usize>>,
     pub doc_preview: Option<(
         SharedString,
         Result<std::sync::Arc<crate::office::Preview>, String>,
@@ -2760,6 +2763,7 @@ impl AppState {
             doc_full: false,
             doc_preview: None,
             card_thumbs: Default::default(),
+            card_pages: Default::default(),
             doc_text: false,
             sheet_print: false,
             sheet_pages: None,
@@ -11163,10 +11167,33 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Show the file the toast is about in Explorer, selected.
     pub fn toast_reveal(&mut self, cx: &mut Context<Self>) {
         let Some(p) = self.toast_file.clone() else { return };
+        self.reveal_file(&p, cx);
+    }
+
+    /// Open a file KodAct made in its own app (PowerPoint, Word, Excel, the
+    /// PDF reader), from a card.
+    pub fn open_in_app(&mut self, file: &FileRef, cx: &mut Context<Self>) {
+        match file
+            .path
+            .as_ref()
+            .map(|p| std::path::PathBuf::from(p.as_ref()))
+        {
+            Some(p) => cx.open_with_system(&p),
+            None => self.show_toast("This file isn't on disk; use Download to save it.", cx),
+        }
+    }
+
+    /// Show a file in Explorer (Finder, the file manager), selected where the
+    /// system can select it, else its folder.
+    pub fn reveal_file(&mut self, p: &std::path::Path, cx: &mut Context<Self>) {
         if cfg!(windows) {
             let mut arg = std::ffi::OsString::from("/select,");
             arg.push(p.as_os_str());
-            if std::process::Command::new("explorer").arg(arg).spawn().is_ok() {
+            if std::process::Command::new("explorer")
+                .arg(arg)
+                .spawn()
+                .is_ok()
+            {
                 return;
             }
         }
@@ -13619,6 +13646,31 @@ fix everything under 8, render it again to check, then tell me the scores before
                         if !found.is_empty() {
                             self.documents_made(chat, found, since, cx);
                         }
+                        // And the ones it made without naming them (`python
+                        // build_deck.py`): a bounded look at the chat's folder,
+                        // off this thread. A deck already shown is updated, not
+                        // shown twice.
+                        let command_call = self
+                            .tool_at(chat, m, b)
+                            .is_some_and(|t| t.kind == ToolKind::Bash);
+                        if let Some(root) = self.chat_project_dir(chat).filter(|_| command_call) {
+                            let after = since - std::time::Duration::from_secs(2);
+                            let look = cx.background_spawn(async move {
+                                crate::live_docs::recent_documents(&root, after)
+                            });
+                            cx.spawn(async move |this, cx| {
+                                let fresh = look.await;
+                                if fresh.is_empty() {
+                                    return;
+                                }
+                                let _ = this.update(cx, |s, cx| {
+                                    let paths =
+                                        fresh.iter().map(|p| p.display().to_string()).collect();
+                                    s.documents_made(chat, paths, since, cx);
+                                });
+                            })
+                            .detach();
+                        }
                     }
                     let mut written = None;
                     let mut page = None;
@@ -15199,20 +15251,27 @@ impl AppState {
             std::sync::Arc::make_mut(&mut self.card_thumbs).insert(key, None);
             let name = file.name.to_string();
             cx.spawn(async move |this, cx| {
-                let thumb = cx
+                let (thumb, pages) = cx
                     .background_spawn(async move {
                         if let Some(format) = crate::ui::image_view::format_of(&name) {
-                            return Some(std::sync::Arc::new(gpui::Image::from_bytes(
-                                format,
-                                bytes.to_vec(),
-                            )));
+                            return (
+                                Some(std::sync::Arc::new(gpui::Image::from_bytes(
+                                    format,
+                                    bytes.to_vec(),
+                                ))),
+                                None,
+                            );
                         }
-                        crate::office::first_page(&name, &bytes)
-                            .ok()
-                            .map(|p| p.image)
+                        match crate::office::first_page_counted(&name, &bytes) {
+                            Ok((p, n)) => (Some(p.image), Some(n).filter(|n| *n > 0)),
+                            Err(_) => (None, None),
+                        }
                     })
                     .await;
                 let _ = this.update(cx, |s, cx| {
+                    if let Some(n) = pages {
+                        std::sync::Arc::make_mut(&mut s.card_pages).insert(key, n);
+                    }
                     if thumb.is_some() {
                         std::sync::Arc::make_mut(&mut s.card_thumbs).insert(key, thumb);
                         cx.notify();
@@ -15932,6 +15991,54 @@ fn demo_screenshots() -> Vec<Step> {
     s
 }
 
+/// A deck checked as the pptx skill checks one: its slides rendered, then
+/// looked at one by one (they fold into one row with their thumbnails), and
+/// the deck's card, with its first slide and slide count.
+fn demo_deck_check() -> Vec<Step> {
+    let slide = |n: usize, bytes: &'static [u8]| ToolImage {
+        name: format!("slide-{n}.jpg").into(),
+        path: None,
+        image: std::sync::Arc::new(gpui::Image::from_bytes(
+            gpui::ImageFormat::Jpeg,
+            bytes.to_vec(),
+        )),
+    };
+    let light: &'static [u8] = include_bytes!("../assets/docs/samples/forge-light.jpg");
+    let dark: &'static [u8] = include_bytes!("../assets/docs/samples/forge-dark.jpg");
+    let mut s = words("I'll render the deck and look at each slide.", Step::Say);
+    s.extend([
+        Step::ToolStart(
+            ToolKind::Bash,
+            "python scripts/render_preview.py finance/q3-budget.pptx --out-dir preview --grid"
+                .into(),
+            Some("Render the slides".into()),
+        ),
+        Step::ToolDone("Rendered 4 slide(s)".into(), vec![]),
+    ]);
+    for n in 1..=4 {
+        s.extend([
+            Step::ToolStart(ToolKind::Read, format!("preview/slide-{n}.png"), None),
+            Step::ToolDone(String::new(), vec![]),
+            Step::ToolImages(vec![slide(n, if n % 2 == 1 { light } else { dark })]),
+        ]);
+    }
+    s.extend(words(
+        "Every slide reads well: nothing overflows, and the numbers match the budget.",
+        Step::Say,
+    ));
+    s.push(Step::File(FileRef {
+        name: "q3-budget.pptx".into(),
+        path: Some("finance/q3-budget.pptx".into()),
+        content: "".into(),
+        bytes: Some(
+            include_bytes!("../assets/docs/samples/q3-budget.pptx")
+                .as_slice()
+                .into(),
+        ),
+    }));
+    s
+}
+
 /// Questions first (a card with two), then a burst of work: a write that
 /// fails as KodAct CLI's does on a file not read yet, then edits and commands
 /// with thinking between them, as a real build-out goes.
@@ -16554,6 +16661,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if lower.contains("notes") || lower.contains("write a doc") {
         s.extend(demo_notes());
         s.push(Step::End { seconds: 12.0 });
+        return s;
+    }
+    if lower.contains("render") {
+        s.extend(demo_deck_check());
+        s.push(Step::End { seconds: 9.4 });
         return s;
     }
     if ["design", "deck", "slides", "course"]

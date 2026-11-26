@@ -212,6 +212,37 @@ pub fn key(bytes: &[u8]) -> u64 {
     h.finish()
 }
 
+/// `key` of a file's shared bytes, remembered per buffer: a card is drawn every
+/// frame, and hashing a deck's megabytes each time would cost frames. The
+/// memo holds a weak reference to each buffer, so its memory can't be reused
+/// by other bytes while the entry lives: same address and alive means same
+/// bytes.
+pub fn key_of(bytes: &std::sync::Arc<[u8]>) -> u64 {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Weak};
+    /// A buffer's address → the buffer (weakly) and its key.
+    type Memo = HashMap<usize, (Weak<[u8]>, u64)>;
+    thread_local! {
+        static MEMO: RefCell<Memo> = RefCell::new(HashMap::new());
+    }
+    let at = Arc::as_ptr(bytes) as *const u8 as usize;
+    MEMO.with(|m| {
+        let mut m = m.borrow_mut();
+        if let Some((w, k)) = m.get(&at) {
+            if w.upgrade().is_some_and(|live| Arc::ptr_eq(&live, bytes)) {
+                return *k;
+            }
+        }
+        if m.len() > 256 {
+            m.retain(|_, (w, _)| w.strong_count() > 0);
+        }
+        let k = key(bytes);
+        m.insert(at, (Arc::downgrade(bytes), k));
+        k
+    })
+}
+
 /// `name` (whose extension says what it is) as a PDF.
 pub fn to_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
     let forced = forced();

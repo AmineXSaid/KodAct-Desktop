@@ -26,6 +26,8 @@ pub struct ChatView {
     shown_count: usize,
     /// The chat's version, and how many messages are queued.
     shown_version: (u64, usize),
+    /// The chat and version whose document cards were last given previews.
+    thumbs_checked: (Option<usize>, u64),
     /// Re-renders the working line's timer every second while a reply plays.
     ticker: Option<Task<()>>,
     /// The working line: the step's mark, what the work is about (its
@@ -78,6 +80,7 @@ impl ChatView {
             shown_chat: None,
             shown_count: 0,
             shown_version: (0, 0),
+            thumbs_checked: (None, 0),
             ticker: None,
             step: None,
             away: false,
@@ -119,6 +122,41 @@ impl ChatView {
             self.list.remeasure();
         }
         (self.shown_chat, self.shown_count, self.shown_version) = (id, count, version);
+
+        // The chat's document cards get their first page and page count, drawn
+        // off the UI thread; looked for when the chat changes, not every frame
+        // (finding a card's preview hashes the file).
+        if (id, version.0) != self.thumbs_checked {
+            self.thumbs_checked = (id, version.0);
+            let s = self.state.read(cx);
+            let want: Vec<crate::state::FileRef> = s
+                .chat()
+                .map(|c| {
+                    c.messages
+                        .iter()
+                        .filter_map(|m| match m {
+                            Message::Assistant { blocks } => Some(blocks.iter()),
+                            _ => None,
+                        })
+                        .flatten()
+                        .filter_map(|b| match b {
+                            Block::File(f) if f.office().is_some() => {
+                                f.bytes.as_ref().and_then(|bytes| {
+                                    (!s.card_thumbs
+                                        .contains_key(&crate::office_render::key_of(bytes)))
+                                    .then(|| f.clone())
+                                })
+                            }
+                            _ => None,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !want.is_empty() {
+                let st = self.state.clone();
+                cx.defer(move |cx| st.update(cx, |s, cx| s.want_thumbs(want, cx)));
+            }
+        }
 
         // A find move: its match comes to the top of the view.
         let find = self
@@ -616,6 +654,11 @@ impl Render for ChatView {
                         place: s
                             .chat_remote(chat.id)
                             .map(|r| (r.target.label().into(), r.target.icon())),
+                        thumbs: s.card_thumbs.clone(),
+                        pages: s.card_pages.clone(),
+                        root: s
+                            .project(chat.project)
+                            .map(|p| p.path.to_string_lossy().into_owned().into()),
                         chat: chat.id,
                         index: ix,
                         copied: s.copied.clone(),

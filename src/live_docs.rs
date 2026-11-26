@@ -137,10 +137,113 @@ impl Watch {
     }
 }
 
+/// Folders a document the person asked for is never in: tools', caches' and
+/// the skills' own render output (`preview/`, the slide images a check draws).
+const SKIPPED_DIRS: [&str; 10] = [
+    "node_modules",
+    "target",
+    "__pycache__",
+    "venv",
+    "preview",
+    "prev",
+    "previews",
+    "thumbnails",
+    "dist",
+    "build",
+];
+
+/// The documents in `root` changed since `since` that a command made without
+/// naming them (`python build_deck.py` writes `deck.pptx`): Word, Excel and
+/// PowerPoint files up to two folders down, and PDFs in `root` itself (deeper
+/// ones are mostly a check's render of a deck). Bounded, so a big project costs
+/// a quick look: at most `MAX_SEEN` entries, hidden and tool folders skipped.
+/// Newest first.
+pub fn recent_documents(root: &Path, since: SystemTime) -> Vec<PathBuf> {
+    const MAX_SEEN: usize = 4000;
+    let mut found: Vec<(SystemTime, PathBuf)> = vec![];
+    let mut seen = 0usize;
+    let mut stack = vec![(root.to_path_buf(), 0u8)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            seen += 1;
+            if seen > MAX_SEEN {
+                break;
+            }
+            let name = e.file_name().to_string_lossy().into_owned();
+            let Ok(kind) = e.file_type() else { continue };
+            if kind.is_dir() {
+                let lower = name.to_ascii_lowercase();
+                if depth < 2 && !name.starts_with('.') && !SKIPPED_DIRS.contains(&lower.as_str()) {
+                    stack.push((e.path(), depth + 1));
+                }
+                continue;
+            }
+            let lower = name.to_ascii_lowercase();
+            let office = [".pptx", ".docx", ".xlsx"]
+                .iter()
+                .any(|x| lower.ends_with(x));
+            let pdf = depth == 0 && lower.ends_with(".pdf");
+            if !(office || pdf) || !is_watched(&name) {
+                continue;
+            }
+            if let Some(at) = e.metadata().ok().and_then(|m| m.modified().ok()) {
+                if at >= since {
+                    found.push((at, e.path()));
+                }
+            }
+        }
+    }
+    found.sort_by_key(|f| std::cmp::Reverse(f.0));
+    found.into_iter().map(|(_, p)| p).take(8).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn documents_a_script_made_are_found_without_being_named() {
+        let root = std::env::temp_dir().join(format!("kodact-recent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for d in ["out", "preview", "node_modules", ".git", "a/b/c"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        let before = SystemTime::now() - Duration::from_secs(5);
+        for f in [
+            "deck.pptx",
+            "out/report.docx",
+            "summary.pdf",
+            "out/render.pdf",
+            "preview/deck.pdf",
+            "preview/deck.pptx",
+            "node_modules/x.xlsx",
+            ".git/y.docx",
+            "a/b/c/deep.xlsx",
+            "~$deck.pptx",
+            "notes.md",
+            "deck.pptx.part",
+        ] {
+            std::fs::write(root.join(f), b"x").unwrap();
+        }
+        let mut got: Vec<String> = recent_documents(&root, before)
+            .iter()
+            .map(|p| {
+                p.strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        got.sort();
+        assert_eq!(got, ["deck.pptx", "out/report.docx", "summary.pdf"]);
+        // Nothing changed since now.
+        assert!(recent_documents(&root, SystemTime::now() + Duration::from_secs(60)).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     fn stamp(len: u64, secs: u64) -> Option<Stamp> {
         Some(Stamp {

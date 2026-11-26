@@ -7,7 +7,7 @@
 
 use std::ops::Range;
 
-use gpui::{div, prelude::*, px, AnyElement, SharedString};
+use gpui::{div, prelude::*, px, relative, AnyElement, SharedString};
 
 use super::icon;
 use super::message::{self, ItemContext};
@@ -135,9 +135,27 @@ pub fn summary(calls: &[&ToolCall]) -> String {
     if edited > 0 {
         parts.push(format!("edited {}", plural(edited, "a file", "files")));
     }
-    let read = files(&[ToolKind::Read]);
+    // Pictures looked at (a rendered slide, a screenshot) are said as such,
+    // not as files read.
+    let read = ok
+        .iter()
+        .filter(|c| c.kind == ToolKind::Read && c.images.is_empty())
+        .map(|c| c.target.as_ref())
+        .collect::<HashSet<_>>()
+        .len();
     if read > 0 {
         parts.push(format!("read {}", plural(read, "a file", "files")));
+    }
+    let looked: usize = ok
+        .iter()
+        .filter(|c| c.kind == ToolKind::Read && !c.images.is_empty())
+        .map(|c| c.images.len())
+        .sum();
+    if looked > 0 {
+        parts.push(format!(
+            "looked at {}",
+            plural(looked, "an image", "images")
+        ));
     }
     let ran = count(&[ToolKind::Bash]);
     if ran > 0 {
@@ -202,6 +220,8 @@ fn step_label(c: &ToolCall) -> String {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SubKind {
     Read,
+    /// Pictures looked at: a rendered slide, a screenshot, a contact sheet.
+    Look,
     Edit,
     Write,
     Bash,
@@ -218,6 +238,7 @@ impl SubKind {
             return SubKind::Agent;
         }
         match c.kind {
+            ToolKind::Read if !c.images.is_empty() => SubKind::Look,
             ToolKind::Read => SubKind::Read,
             ToolKind::Edit => SubKind::Edit,
             ToolKind::Write => SubKind::Write,
@@ -233,6 +254,7 @@ impl SubKind {
         match self {
             SubKind::Agent => "icons/boxes.svg",
             SubKind::Read => ToolKind::Read.icon(),
+            SubKind::Look => "icons/image.svg",
             SubKind::Edit => ToolKind::Edit.icon(),
             SubKind::Write => ToolKind::Write.icon(),
             SubKind::Bash => ToolKind::Bash.icon(),
@@ -246,6 +268,7 @@ impl SubKind {
     fn label(self, count: usize) -> String {
         match self {
             SubKind::Read => format!("Read {count} files"),
+            SubKind::Look => format!("Looked at {count} images"),
             SubKind::Edit => format!("Edited {count} files"),
             SubKind::Write => format!("Wrote {count} files"),
             SubKind::Bash => format!("Ran {count} commands"),
@@ -272,14 +295,17 @@ fn group_steps(blocks: &[Block], shown: &[usize]) -> Vec<GroupedStep> {
         let Block::Tool(c) = &blocks[i] else {
             return None;
         };
-        if c.status != ToolStatus::Done
-            || !c.images.is_empty()
-            || message::answer_for(blocks, i).is_some()
-            || c.open
-        {
+        if c.status != ToolStatus::Done || message::answer_for(blocks, i).is_some() || c.open {
             return None;
         }
-        Some(SubKind::of(c))
+        // Pictures fold with pictures (a deck's slides looked at one by one
+        // were a wall of full-size images); a call returning one beside
+        // other output stays on its own.
+        let kind = SubKind::of(c);
+        if !c.images.is_empty() && kind != SubKind::Look {
+            return None;
+        }
+        Some(kind)
     };
 
     let mut out = Vec::new();
@@ -496,7 +522,11 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .hover(move |s| s.text_color(strong))
         .child(header_icon)
         .child(
+            // The summary keeps its words; the paths after it give way first
+            // ("Looked at 4 images, ran a com…" lost them to the paths).
             div()
+                .flex_shrink_0()
+                .max_w(relative(0.7))
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
@@ -639,7 +669,19 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                 let count = indices.len();
                 let sub_key = format!("subgrp-{chat}-{msg}-{start}-{first_i}");
                 let sub_open = cx.ui_toggles.contains(&sub_key);
-                let label = kind.label(count);
+                let pictures: Vec<&crate::state::ToolImage> = indices
+                    .iter()
+                    .filter_map(|&i| match &blocks[i] {
+                        Block::Tool(c) => Some(c.images.iter()),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
+                let label = kind.label(if kind == SubKind::Look {
+                    pictures.len().max(count)
+                } else {
+                    count
+                });
                 let total_lines: usize = indices
                     .iter()
                     .filter_map(|&i| match &blocks[i] {
@@ -687,16 +729,23 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                                 .text_color(t.colors.text)
                                 .child(label),
                         )
-                        .when(total_lines > 0 && adds + dels == 0, |d| {
-                            d.child(
-                                div()
-                                    .flex_none()
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_subtle)
-                                    .child(format!("· {total_lines} lines")),
-                            )
-                        })
+                        .when(
+                            total_lines > 0 && adds + dels == 0 && kind != SubKind::Look,
+                            |d| {
+                                d.child(
+                                    div()
+                                        .flex_none()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_subtle)
+                                        .child(format!("· {total_lines} lines")),
+                                )
+                            },
+                        )
                         .when(adds + dels > 0, |d| d.child(message::diff_counts(adds, dels, t)))
+                        // Closed, the pictures show small at the row's end.
+                        .when(!sub_open, |d| {
+                            d.children(message::thumbs(pictures.iter().copied(), t))
+                        })
                         .child(icon(
                             if sub_open {
                                 "icons/chevron-down.svg"
@@ -812,6 +861,53 @@ mod tests {
             text: "hm".into(),
             open: false,
         }
+    }
+
+    fn looked_at(name: &str) -> Block {
+        let mut c = call(ToolKind::Read, name, ToolStatus::Done);
+        c.images = vec![crate::state::ToolImage {
+            name: name.into(),
+            path: Some(name.into()),
+            image: std::sync::Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, vec![])),
+        }];
+        Block::Tool(c)
+    }
+
+    #[test]
+    fn slides_looked_at_one_by_one_fold_into_one_row() {
+        // A deck checked slide by slide was a wall of full-size pictures.
+        let blocks = vec![
+            tool(ToolKind::Bash, "python render.py"),
+            looked_at("preview/slide-1.png"),
+            looked_at("preview/slide-2.png"),
+            looked_at("preview/slide-3.png"),
+            tool(ToolKind::Read, "notes.md"),
+        ];
+        let shown: Vec<usize> = (0..blocks.len()).collect();
+        let grouped = group_steps(&blocks, &shown);
+        assert_eq!(
+            grouped,
+            vec![
+                GroupedStep::Single(0),
+                GroupedStep::Group {
+                    kind: SubKind::Look,
+                    indices: vec![1, 2, 3]
+                },
+                GroupedStep::Single(4),
+            ]
+        );
+        assert_eq!(SubKind::Look.label(3), "Looked at 3 images");
+        let calls: Vec<&ToolCall> = blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Tool(c) => Some(c),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            summary(&calls),
+            "Read a file, looked at 3 images, ran a command"
+        );
     }
 
     #[test]

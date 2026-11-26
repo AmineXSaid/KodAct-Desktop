@@ -31,6 +31,13 @@ pub struct ItemContext {
     /// Where this chat's agent runs: the remote's label and icon, or None
     /// for this computer. Commands and approvals carry it as a badge.
     pub place: Option<(SharedString, &'static str)>,
+    /// The chat's project folder (a plain chat's workspace), to show the
+    /// files its calls touch relative to it (`display_path`).
+    pub root: Option<SharedString>,
+    /// Each document card's first page and page count (`AppState::card_thumbs`,
+    /// `card_pages`), by `office_render::key`.
+    pub thumbs: std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
+    pub pages: std::sync::Arc<std::collections::HashMap<u64, usize>>,
     pub chat: usize,
     pub index: usize,
     pub copied: Option<SharedString>,
@@ -1076,6 +1083,10 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                     .unwrap_or(1.),
                 text_open: cx.sources.contains(&super::file_card::text_key(&key)),
             };
+            let doc_key = file
+                .office()
+                .and(file.bytes.as_ref())
+                .map(crate::office_render::key_of);
             super::file_card::render(
                 file,
                 &key,
@@ -1086,6 +1097,10 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                     .is_some_and(|p| cx.writing.iter().any(|w| w == p.as_ref())),
                 cx.scale,
                 Some(view),
+                super::file_card::Preview {
+                    page: doc_key.and_then(|k| cx.thumbs.get(&k).cloned().flatten()),
+                    count: doc_key.and_then(|k| cx.pages.get(&k).copied()),
+                },
                 t,
             )
         }
@@ -1445,6 +1460,42 @@ fn pictures(call: &ToolCall, t: &Theme) -> gpui::Div {
 
 /// Maximum lines rendered initially for tool output / diffs before "Show more".
 const OUTPUT_FOLD: usize = 10;
+
+/// A path as a person reads it: relative to the chat's folder when inside it
+/// (a plain chat's own `chats/<id>/` dropped too), `~/…` under the home
+/// folder, else whole. Git Bash's `/c/Users/…` and Windows' `C:\Users\…` are
+/// the same place. Pure: no disk is read while drawing.
+pub fn display_path(path: &str, root: Option<&str>, home: Option<&str>) -> String {
+    fn norm(p: &str) -> String {
+        let mut s = p.replace('\\', "/");
+        // `/c/Users` (Git Bash, MSYS) → `c:/Users`.
+        let b = s.as_bytes();
+        if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b'/' {
+            s = format!("{}:{}", &s[1..2], &s[2..]);
+        }
+        s.trim_end_matches('/').to_string()
+    }
+    let shown = norm(path);
+    let lower = shown.to_lowercase();
+    let under = |base: &str| -> Option<usize> {
+        let b = norm(base).to_lowercase();
+        (!b.is_empty() && lower.starts_with(&b) && lower[b.len()..].starts_with('/'))
+            .then_some(b.len() + 1)
+    };
+    if let Some(at) = root.and_then(under) {
+        let rel = &shown[at..];
+        if let Some(rest) = rel.strip_prefix("chats/") {
+            if let Some((_, inner)) = rest.split_once('/') {
+                return inner.to_string();
+            }
+        }
+        return rel.to_string();
+    }
+    if let Some(at) = home.and_then(under) {
+        return format!("~/{}", &shown[at..]);
+    }
+    path.to_string()
+}
 
 /// What a call's line names: a file by up to its last two path components
 /// (`src/app.ts`, `…/dir/file.rs`), anything else as its row says it.
@@ -1918,7 +1969,11 @@ pub(super) fn tool_body(
                     .font_family(t.font_mono.clone())
                     .text_size(t.text.caption)
                     .text_color(t.colors.text_muted)
-                    .child(call.target.clone()),
+                    .child(display_path(
+                        &call.target,
+                        cx.root.as_deref(),
+                        crate::rules::home_dir().as_deref().and_then(|h| h.to_str()),
+                    )),
             )
             .children(review_controls(call, b, cx, t))
     });
@@ -3086,6 +3141,41 @@ pub const ASK_KEYS: (&str, &str, &str) = ("Enter", "Shift Enter", "Esc");
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn paths_read_relative_to_the_chat_folder() {
+        use super::display_path;
+        let home = Some("C:/Users/amis");
+        let ws = Some("C:\\Users\\amis\\AppData\\Roaming\\forge\\workspace");
+        // A plain chat's file, as Windows and as Git Bash write it.
+        let win = "C:\\Users\\amis\\AppData\\Roaming\\forge\\workspace\\chats\\11b1\\pages\\slide\\Slide1.PNG";
+        assert_eq!(display_path(win, ws, home), "pages/slide/Slide1.PNG");
+        let bash = "/c/Users/amis/AppData/Roaming/forge/workspace/chats/11b1/deck.pptx";
+        assert_eq!(display_path(bash, ws, home), "deck.pptx");
+        // A project's file; one under home but outside the project; elsewhere.
+        assert_eq!(
+            display_path(
+                "/home/a/proj/src/x.rs",
+                Some("/home/a/proj"),
+                Some("/home/a")
+            ),
+            "src/x.rs"
+        );
+        assert_eq!(
+            display_path("/home/a/notes/y.md", Some("/home/a/proj"), Some("/home/a")),
+            "~/notes/y.md"
+        );
+        assert_eq!(
+            display_path("/etc/hosts", Some("/home/a/proj"), Some("/home/a")),
+            "/etc/hosts"
+        );
+        // A folder that merely starts with the same letters is not inside.
+        assert_eq!(
+            display_path("/home/a/project2/z", Some("/home/a/proj"), None),
+            "/home/a/project2/z"
+        );
+    }
+
     use super::{denied_call, same_answers};
     use crate::state::{Block, PermInfo, Verdict};
 

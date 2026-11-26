@@ -166,19 +166,24 @@ fn pages(bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
     Ok((out, total))
 }
 
-/// A file's first page as a small picture, for its card in a reply: a PDF
-/// drawn directly, a Word, PowerPoint or Excel file through LibreOffice
+/// A file's first page as a small picture, for its card in a reply, and how
+/// many pages (slides) it has, for the card's "12 slides": a PDF drawn
+/// directly, a Word, PowerPoint or Excel file through Office or LibreOffice
 /// (`office_render.rs`, which caches the PDF it makes, so opening the file
-/// after reuses it). `Err` without LibreOffice or for a file it cannot draw.
-/// Blocks for seconds: run it off the UI thread.
-pub fn first_page(name: &str, bytes: &[u8]) -> Result<Page, String> {
+/// after reuses it). `Err` when neither can draw it. Blocks for seconds: run
+/// it off the UI thread.
+pub fn first_page_counted(name: &str, bytes: &[u8]) -> Result<(Page, usize), String> {
     let pdf = match Kind::of(name) {
         Some(Kind::Pdf) => bytes.to_vec(),
         Some(_) => crate::office_render::to_pdf(name, bytes)?,
         None => return Err("not an Office file or a PDF".into()),
     };
-    std::panic::catch_unwind(|| page_at(&pdf, 0, THUMB_SCALE))
-        .unwrap_or_else(|_| Err("the page could not be drawn".into()))
+    let count = hayro::hayro_syntax::Pdf::new(pdf.clone())
+        .map(|p| p.pages().len())
+        .unwrap_or(0);
+    let page = std::panic::catch_unwind(|| page_at(&pdf, 0, THUMB_SCALE))
+        .unwrap_or_else(|_| Err("the page could not be drawn".into()))?;
+    Ok((page, count))
 }
 
 /// How a card's page is drawn: about 300 px wide for a letter page, sharp
