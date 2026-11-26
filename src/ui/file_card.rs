@@ -40,44 +40,100 @@ fn page(file: &FileRef, t: &Theme) -> AnyElement {
 pub struct Preview {
     pub page: Option<std::sync::Arc<gpui::Image>>,
     pub count: Option<usize>,
+    /// Drawn, or known it can't be: false while the page is being drawn.
+    pub ready: bool,
 }
 
-/// A document's first page on its card, at the shape it prints: a deck's
-/// slide wide, a page tall, as PowerPoint or Word drew it.
-fn first_page(
+/// The preview of a document's tile: its first page as it prints (a deck's
+/// slide across the tile; a Word or PDF page rising from a tinted well, cut
+/// by the footer); while it is drawn, a placeholder filling the same space,
+/// so the tile never jumps; when it can't be drawn, the app's mark.
+fn tile_preview(
+    file: &FileRef,
     kind: crate::office::Kind,
-    image: std::sync::Arc<gpui::Image>,
+    preview: &Preview,
+    key: &str,
+    scale: f32,
     t: &Theme,
 ) -> AnyElement {
-    let (w, h) = match kind {
-        crate::office::Kind::Pptx => (PAGE_H * 16. / 9., PAGE_H),
-        crate::office::Kind::Xlsx => (PAGE_H * 4. / 3., PAGE_H),
-        crate::office::Kind::Docx | crate::office::Kind::Pdf => (PAGE_H * 0.773, PAGE_H),
-    };
-    div()
-        .flex_none()
-        .w(px(w))
-        .h(px(h))
-        .rounded(t.radius.small)
+    let well = div()
+        .relative()
+        .w_full()
+        .h(px(TILE_PREVIEW_H))
         .overflow_hidden()
-        .border_1()
-        .border_color(t.colors.border)
-        // Paper is white in both themes: it is the page as it prints.
-        .bg(gpui::white())
-        .child(
-            gpui::img(image)
-                .size_full()
-                .object_fit(gpui::ObjectFit::Contain),
-        )
-        .into_any_element()
+        .border_b_1()
+        .border_color(t.colors.border);
+    match (&preview.page, preview.ready) {
+        (None, false) => well
+            .child(super::skeleton::bar(
+                t,
+                SharedString::from(format!("page-wait-{key}")),
+                relative(1.),
+                px(TILE_PREVIEW_H),
+            ))
+            .into_any_element(),
+        (None, true) => well
+            .bg(t.artifact_well(file.path.as_deref().unwrap_or(&file.name)))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(super::file_mark::render(kind, MARK * 1.5, scale))
+            .into_any_element(),
+        // A slide fills the width at its own shape.
+        (Some(image), _) if kind == crate::office::Kind::Pptx => well
+            .bg(gpui::white())
+            .child(
+                gpui::img(image.clone())
+                    .size_full()
+                    .object_fit(gpui::ObjectFit::Cover),
+            )
+            .into_any_element(),
+        // A page: paper on the well, inset at the top and sides, running on
+        // past the footer.
+        (Some(image), _) => well
+            .bg(t.artifact_well(file.path.as_deref().unwrap_or(&file.name)))
+            .child(
+                div()
+                    .absolute()
+                    .top(t.space.lg)
+                    .left(t.space.xl)
+                    .right(t.space.xl)
+                    .h(px(TILE_PREVIEW_H * 2.))
+                    .overflow_hidden()
+                    .rounded_t(t.radius.small)
+                    // Paper is white in both themes: the page as it prints.
+                    .bg(gpui::white())
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .shadow(t.elevation_grain())
+                    .child(
+                        gpui::img(image.clone())
+                            .w_full()
+                            .object_fit(gpui::ObjectFit::Cover),
+                    ),
+            )
+            .into_any_element(),
+    }
 }
 
-/// How tall a document's first page shows on its card.
-const PAGE_H: f32 = 64.;
+/// A document tile's preview height: a 16:9 slide at the tile's width.
+const TILE_PREVIEW_H: f32 = TILE_W * 9. / 16.;
+/// A document tile's width.
+const TILE_W: f32 = 360.;
 
-/// "12 slides", "4 pages", for the card's second line.
-fn count_words(kind: Option<crate::office::Kind>, n: usize) -> Option<String> {
-    let noun = match kind? {
+/// The app a document opens in, as its actions name it.
+fn app_name(kind: crate::office::Kind) -> &'static str {
+    match kind {
+        crate::office::Kind::Pptx => "PowerPoint",
+        crate::office::Kind::Docx => "Word",
+        crate::office::Kind::Xlsx => "Excel",
+        crate::office::Kind::Pdf => "your PDF reader",
+    }
+}
+
+/// "12 slides", "4 pages", beside the title.
+fn count_words(kind: crate::office::Kind, n: usize) -> Option<String> {
+    let noun = match kind {
         crate::office::Kind::Pptx => ("slide", "slides"),
         crate::office::Kind::Docx | crate::office::Kind::Pdf => ("page", "pages"),
         // A workbook's printed pages say little about it.
@@ -86,61 +142,153 @@ fn count_words(kind: Option<crate::office::Kind>, n: usize) -> Option<String> {
     Some(format!("{n} {}", if n == 1 { noun.0 } else { noun.1 }))
 }
 
-/// Open in its app, and show in the folder: ghost icons beside Download, for
-/// a file that is on disk.
-fn disk_actions(file: &FileRef, key: &str, state: Entity<AppState>) -> Option<gpui::Div> {
-    file.path.as_ref()?;
-    let app = match file.office() {
-        Some(crate::office::Kind::Pptx) => "Open in PowerPoint",
-        Some(crate::office::Kind::Docx) => "Open in Word",
-        Some(crate::office::Kind::Xlsx) => "Open in Excel",
-        Some(crate::office::Kind::Pdf) => "Open in your PDF reader",
-        None => "Open in its app",
+/// A Word, Excel, PowerPoint or PDF file in a reply, as a tile: its first
+/// page large, then its title and "4 slides"; Open in its app, Download and
+/// Show in folder appear on the footer when you point at the tile. The tile
+/// itself opens the file beside the chat.
+#[allow(clippy::too_many_arguments)]
+fn document_card(
+    file: &FileRef,
+    kind: crate::office::Kind,
+    key: &str,
+    state: Entity<AppState>,
+    open: bool,
+    writing: bool,
+    scale: f32,
+    preview: Preview,
+    t: &Theme,
+) -> AnyElement {
+    let group = SharedString::from(format!("doc-tile-{key}"));
+    let edge = if open {
+        t.colors.primary.opacity(0.6)
+    } else {
+        t.colors.text_subtle.opacity(0.5)
     };
-    let (open_state, open_file) = (state.clone(), file.clone());
-    let reveal = file
+    let detail = if writing {
+        Some("Writing…".to_string())
+    } else {
+        preview
+            .count
+            .and_then(|n| count_words(kind, n))
+            .or_else(|| Some(file.kind().to_string()))
+    };
+    let on_disk = file
         .path
         .as_ref()
         .map(|p| std::path::PathBuf::from(p.as_ref()));
-    Some(
-        div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .child(
-                super::button::Button::icon(
-                    SharedString::from(format!("file-open-{key}")),
-                    "icons/external-link.svg",
-                    app,
-                )
-                .compact()
-                .on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    open_state.update(cx, |s, cx| s.open_in_app(&open_file, cx));
-                }),
+    // On the footer's right, over the count, when you point at the tile: the
+    // count shows at rest, the actions take its place.
+    let mut actions = div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .right(t.space.xs)
+        .flex()
+        .items_center()
+        .pl(t.space.sm)
+        .bg(t.colors.surface)
+        .invisible()
+        .group_hover(group.clone(), |st| st.visible());
+    if on_disk.is_some() {
+        let (st, f) = (state.clone(), file.clone());
+        actions = actions.child(
+            super::button::Button::icon(
+                SharedString::from(format!("file-open-{key}")),
+                "icons/external-link.svg",
+                format!("Open in {}", app_name(kind)),
             )
-            .child(
-                super::button::Button::icon(
-                    SharedString::from(format!("file-reveal-{key}")),
-                    "icons/folder-open.svg",
-                    "Show in folder",
+            .compact()
+            .on_click(move |_, _, cx| {
+                cx.stop_propagation();
+                st.update(cx, |s, cx| s.open_in_app(&f, cx));
+            }),
+        );
+    }
+    let (st, f) = (state.clone(), file.clone());
+    actions = actions.child(
+        super::button::Button::icon(
+            SharedString::from(format!("file-dl-{key}")),
+            "icons/download.svg",
+            "Download",
+        )
+        .compact()
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            st.update(cx, |s, cx| s.download(&f, cx));
+        }),
+    );
+    if let Some(path) = on_disk {
+        let st = state.clone();
+        actions = actions.child(
+            super::button::Button::icon(
+                SharedString::from(format!("file-reveal-{key}")),
+                "icons/folder-open.svg",
+                "Show in folder",
+            )
+            .compact()
+            .on_click(move |_, _, cx| {
+                cx.stop_propagation();
+                st.update(cx, |s, cx| s.reveal_file(&path, cx));
+            }),
+        );
+    }
+    let opener = state.clone();
+    let to_open = file.clone();
+    div()
+        .id(SharedString::from(format!("file-{key}")))
+        .group(group)
+        .w(px(TILE_W))
+        .max_w_full()
+        .flex()
+        .flex_col()
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(if open {
+            t.colors.primary.opacity(0.6)
+        } else {
+            t.colors.border
+        })
+        .rounded(t.radius.card)
+        .overflow_hidden()
+        .cursor_pointer()
+        .hover(move |st| st.border_color(edge))
+        .child(tile_preview(file, kind, &preview, key, scale, t))
+        .child(
+            div()
+                .relative()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .px(t.space.md)
+                .min_h(px(40.))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.body_sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_strong)
+                        .child(file.title()),
                 )
-                .compact()
-                .on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    if let Some(p) = reveal.clone() {
-                        state.update(cx, |s, cx| s.reveal_file(&p, cx));
-                    }
-                }),
-            ),
-    )
+                .children(detail.map(|d| {
+                    div()
+                        .flex_none()
+                        .whitespace_nowrap()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(d)
+                }))
+                .child(actions),
+        )
+        .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
+        .into_any_element()
 }
 
 /// The widest a card gets.
 const CARD: f32 = 440.;
-/// The widest a document's card gets once it shows its first page: the page
-/// and its actions leave the title and "Presentation · 12 slides" room.
-const DOC_CARD: f32 = 520.;
 /// An app's mark on a card: about the page tile's height.
 const MARK: f32 = 40.;
 
@@ -151,7 +299,6 @@ fn label_row(
     key: &str,
     state: Entity<AppState>,
     kind: &str,
-    count: Option<String>,
     t: &Theme,
 ) -> gpui::Div {
     div()
@@ -181,13 +328,9 @@ fn label_row(
                         .text_ellipsis()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
-                        .child(match count {
-                            Some(n) => format!("{kind} · {n}"),
-                            None => format!("{kind} · {}", file.kind()),
-                        }),
+                        .child(format!("{kind} · {}", file.kind())),
                 ),
         )
-        .children(disk_actions(file, key, state.clone()))
         .child(download_button(file, key, state, t))
 }
 
@@ -245,6 +388,9 @@ pub fn render(
         }
         return diagram_card(file, key, state, open, scale, t);
     }
+    if let Some(kind) = file.office() {
+        return document_card(file, kind, key, state, open, writing, scale, preview, t);
+    }
     // Hovered, the edge darkens; open, it stays the accent.
     let edge = if open {
         t.colors.primary.opacity(0.6)
@@ -253,11 +399,10 @@ pub fn render(
     };
     let opener = state.clone();
     let to_open = file.clone();
-    let shows_page = file.office().is_some() && preview.page.is_some();
     div()
         .id(SharedString::from(format!("file-{key}")))
         .w_full()
-        .max_w(px(if shows_page { DOC_CARD } else { CARD }))
+        .max_w(px(CARD))
         .flex()
         .items_center()
         .gap(t.space.md)
@@ -273,12 +418,9 @@ pub fn render(
         .rounded(t.radius.card)
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
-        // A document shows its first page as it prints, once drawn (off the
-        // UI thread); until then, and for other files, its type's icon.
-        .child(match (file.office(), preview.page) {
-            (Some(kind), Some(image)) => first_page(kind, image, t),
-            _ => page(file, t),
-        })
+        // No preview for these: the file's icon on a quiet square; it opens
+        // beside the chat. (Documents have their own card, `document_card`.)
+        .child(page(file, t))
         .child(
             label_row(
                 file,
@@ -286,7 +428,6 @@ pub fn render(
                 state,
                 // Being made this turn: it redraws as it changes.
                 if writing { "Writing…" } else { file.label() },
-                preview.count.and_then(|n| count_words(file.office(), n)),
                 t,
             )
             .flex_1()
@@ -584,7 +725,7 @@ fn diagram_card(
                 .border_color(t.colors.border)
                 .children(drawing),
         )
-        .child(label_row(file, key, state, "Diagram", None, t).px(t.space.xs))
+        .child(label_row(file, key, state, "Diagram", t).px(t.space.xs))
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
 }

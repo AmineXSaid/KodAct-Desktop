@@ -2280,6 +2280,9 @@ pub struct AppState {
     /// Each Office file's or PDF's page (slide) count, by the same key, once
     /// its first page is drawn: a card says "12 slides".
     pub card_pages: std::sync::Arc<std::collections::HashMap<u64, usize>>,
+    /// The cards whose first page has been drawn or could not be: until
+    /// then a card shows a placeholder the page's size.
+    pub card_drawn: std::sync::Arc<std::collections::HashSet<u64>>,
     pub doc_preview: Option<(
         SharedString,
         Result<std::sync::Arc<crate::office::Preview>, String>,
@@ -2764,6 +2767,7 @@ impl AppState {
             doc_preview: None,
             card_thumbs: Default::default(),
             card_pages: Default::default(),
+            card_drawn: Default::default(),
             doc_text: false,
             sheet_print: false,
             sheet_pages: None,
@@ -15274,8 +15278,9 @@ impl AppState {
                     }
                     if thumb.is_some() {
                         std::sync::Arc::make_mut(&mut s.card_thumbs).insert(key, thumb);
-                        cx.notify();
                     }
+                    std::sync::Arc::make_mut(&mut s.card_drawn).insert(key);
+                    cx.notify();
                 });
             })
             .detach();

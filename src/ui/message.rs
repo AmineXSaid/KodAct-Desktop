@@ -38,6 +38,8 @@ pub struct ItemContext {
     /// `card_pages`), by `office_render::key`.
     pub thumbs: std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
     pub pages: std::sync::Arc<std::collections::HashMap<u64, usize>>,
+    /// The cards whose first page is drawn, or failed to be (`card_drawn`).
+    pub drawn: std::sync::Arc<std::collections::HashSet<u64>>,
     pub chat: usize,
     pub index: usize,
     pub copied: Option<SharedString>,
@@ -1100,6 +1102,7 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                 super::file_card::Preview {
                     page: doc_key.and_then(|k| cx.thumbs.get(&k).cloned().flatten()),
                     count: doc_key.and_then(|k| cx.pages.get(&k).copied()),
+                    ready: doc_key.is_none_or(|k| cx.drawn.contains(&k)),
                 },
                 t,
             )

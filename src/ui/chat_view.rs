@@ -656,6 +656,7 @@ impl Render for ChatView {
                             .map(|r| (r.target.label().into(), r.target.icon())),
                         thumbs: s.card_thumbs.clone(),
                         pages: s.card_pages.clone(),
+                        drawn: s.card_drawn.clone(),
                         root: s
                             .project(chat.project)
                             .map(|p| p.path.to_string_lossy().into_owned().into()),
