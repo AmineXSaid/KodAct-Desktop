@@ -160,9 +160,8 @@ pub fn marks(text: &str, s: &AppState, sent: bool) -> Vec<(std::ops::Range<usize
 pub enum Pick {
     /// Replace the word with this text (skills, prompts, `@file` mentions).
     Text(String),
-    /// Clear the word, then run a desktop/engine slash action (`Enter`/click runs
-    /// `run` immediately; `Tab` inserts `fill` when optional arguments exist).
-    SlashAction { run: String, fill: Option<String> },
+    /// Clear the word and run a desktop/engine slash action immediately.
+    SlashAction(String),
     /// Clear the word, then run an app action.
     Action(Box<dyn Action>),
     /// Clear the word, then switch to this mode.
@@ -210,46 +209,31 @@ fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Pick)> {
             "plugins",
             "Open installed plugins",
             "icons/puzzle.svg",
-            Pick::SlashAction {
-                run: "/plugins".into(),
-                fill: None,
-            },
+            Pick::SlashAction("/plugins".into()),
         ),
         (
             "model",
             "Switch model or endpoint",
             "icons/model.svg",
-            Pick::SlashAction {
-                run: "/model".into(),
-                fill: Some("/model ".into()),
-            },
+            Pick::SlashAction("/model".into()),
         ),
         (
             "session",
             "Show or hide the Session panel",
             "icons/panel-right.svg",
-            Pick::SlashAction {
-                run: "/session".into(),
-                fill: None,
-            },
+            Pick::SlashAction("/session".into()),
         ),
         (
             "files",
             "Show or hide project files",
             "icons/folder.svg",
-            Pick::SlashAction {
-                run: "/files".into(),
-                fill: None,
-            },
+            Pick::SlashAction("/files".into()),
         ),
         (
             "terminal",
             "Show or hide the terminal dock",
             "icons/terminal.svg",
-            Pick::SlashAction {
-                run: "/terminal".into(),
-                fill: None,
-            },
+            Pick::SlashAction("/terminal".into()),
         ),
         (
             "new",
@@ -413,10 +397,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             } else {
                 (
                     action_icon(&c.name),
-                    Pick::SlashAction {
-                        run: format!("/{}", c.name),
-                        fill: (!c.args.is_empty()).then_some(text),
-                    },
+                    Pick::SlashAction(format!("/{}", c.name)),
                 )
             };
             push(order, label, detail, "Actions", icon, pick);
@@ -639,7 +620,10 @@ pub fn render(
             .cursor_pointer()
             .when(on, |d| d.bg(t.colors.hover))
             .on_mouse_move(move |_, _, cx| hover(i, cx))
-            .on_click(move |_, window, cx| pick(i, window, cx));
+            .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                cx.stop_propagation();
+                pick(i, window, cx);
+            });
         let row = if item.file {
             // Name first, its whole path after it, dimmed and cut from the left.
             let folder = item.group == "Folders";
@@ -747,8 +731,13 @@ pub fn render(
                 }),
         );
     }
+    let runs_immediately = rows
+        .get(selected)
+        .is_some_and(|r| !matches!(r.pick, Pick::Text(_)));
     let hints: &[&str] = if files {
         &["↑↓ choose", "Enter or Tab add", "Esc close"]
+    } else if runs_immediately {
+        &["↑↓ choose", "Enter or click run", "Esc close"]
     } else {
         &["↑↓ choose", "Enter or Tab complete", "Esc close"]
     };

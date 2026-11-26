@@ -18117,7 +18117,7 @@ mod tests {
         let plugins_row = rows.iter().find(|r| r.label.as_ref() == "/plugins").expect("/plugins");
         assert!(matches!(
             &plugins_row.pick,
-            crate::ui::autocomplete::Pick::SlashAction { run, fill: None } if run == "/plugins"
+            crate::ui::autocomplete::Pick::SlashAction(run) if run == "/plugins"
         ));
         let reload_row = rows
             .iter()
@@ -18125,7 +18125,7 @@ mod tests {
             .expect("/reload-plugins");
         assert!(matches!(
             &reload_row.pick,
-            crate::ui::autocomplete::Pick::SlashAction { run, fill: None } if run == "/reload-plugins"
+            crate::ui::autocomplete::Pick::SlashAction(run) if run == "/reload-plugins"
         ));
         let review_row = rows.iter().find(|r| r.label.as_ref() == "/review").expect("/review");
         assert!(review_row.skill);

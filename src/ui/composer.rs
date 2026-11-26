@@ -367,8 +367,8 @@ impl Composer {
         Some((trig, rows))
     }
 
-    /// Complete with row `i`. `by_tab` fills optional arguments instead of executing.
-    fn pick(&mut self, i: usize, by_tab: bool, window: &mut Window, cx: &mut Context<Self>) {
+    /// Complete with row `i`: skills/prompts insert text; action commands run immediately.
+    fn pick(&mut self, i: usize, _by_tab: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some((trig, mut rows)) = self.completion(cx) else {
             return;
         };
@@ -379,14 +379,7 @@ impl Composer {
         let before = text[..trig.start].to_string();
         match rows.swap_remove(i).pick {
             super::autocomplete::Pick::Text(t) => self.fill(&format!("{before}{t}"), window, cx),
-            super::autocomplete::Pick::SlashAction { run, fill } => {
-                if by_tab {
-                    if let Some(f) = fill {
-                        self.fill(&format!("{before}{f}"), window, cx);
-                        self.ac_selected = 0;
-                        return;
-                    }
-                }
+            super::autocomplete::Pick::SlashAction(run) => {
                 self.fill(&before, window, cx);
                 self.state
                     .update(cx, |s, cx| _ = s.try_slash_action(&run, Some(window), cx));
