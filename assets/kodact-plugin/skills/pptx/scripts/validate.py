@@ -13,6 +13,11 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
+# The shared modules (textfit, ooxml_schema) in kodact-plugin/scripts.
+_SHARED = Path(__file__).resolve().parents[3] / "scripts"
+if str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+
 REQUIRED_PARTS = (
     "[Content_Types].xml",
     "_rels/.rels",
@@ -53,6 +58,20 @@ def _check_rels(names: set[str], rels_path: str, root: ET.Element, errors: list[
             errors.append(f"Broken relationship in {rels_path}: '{target}' -> '{resolved}' missing")
 
 
+def _schema_problems(parts_or_path):
+    """Problems against the Office Open XML schemas (kodact-plugin/scripts/ooxml_schema.py)."""
+    shared = Path(__file__).resolve().parents[3] / "scripts"
+    if str(shared) not in sys.path:
+        sys.path.insert(0, str(shared))
+    try:
+        import ooxml_schema
+    except ImportError as exc:  # lxml missing: the structural checks still ran
+        return [], [f"schema check skipped: {exc}"]
+    if isinstance(parts_or_path, dict):
+        return ooxml_schema.check_parts(parts_or_path), []
+    return ooxml_schema.check(parts_or_path), []
+
+
 def validate_pptx(pptx_path: Path) -> tuple[list[str], list[str]]:
     if not pptx_path.is_file():
         raise FileNotFoundError(f"Input PPTX not found: {pptx_path}")
@@ -74,6 +93,11 @@ def validate_pptx(pptx_path: Path) -> tuple[list[str], list[str]]:
                 except ET.ParseError as exc:
                     errors.append(f"Malformed XML in {name}: {exc}")
 
+    if not errors:
+        found, notes = _schema_problems(pptx_path)
+        errors.extend(f"Schema: {p}" for p in found)
+        warnings.extend(notes)
+
     try:
         from pptx import Presentation
     except ImportError:
@@ -83,8 +107,9 @@ def validate_pptx(pptx_path: Path) -> tuple[list[str], list[str]]:
     prs = Presentation(str(pptx_path))
     sw, sh = prs.slide_width, prs.slide_height
     tol = int(EMU_PER_INCH * 0.05)
+    body = _body_font(prs)
     for s_idx, slide in enumerate(prs.slides, start=1):
-        _check_slide(slide, s_idx, sw, sh, tol, errors, warnings)
+        _check_slide(slide, s_idx, sw, sh, tol, errors, warnings, body)
     return errors, warnings
 
 
@@ -104,9 +129,12 @@ def _content_kind(shape) -> str | None:
     return None
 
 
-def _text_height_in(shape) -> float | None:
-    """The height in inches the shape's text needs at its font sizes, wrapped to its width; None
-    when a run's size isn't set on the slide (it comes from the layout, unknown here)."""
+def _text_height_in(shape, body_font: str) -> float | None:
+    """The height in inches the shape's text needs at its fonts and sizes, wrapped to its width
+    (textfit.py: measured with the font itself where installed); None when a run's size isn't set
+    on the slide (it comes from the layout, unknown here)."""
+    import textfit
+
     tf = shape.text_frame
     m = lambda v, d: (v if v is not None else d) / EMU_PER_INCH  # noqa: E731
     width = (shape.width or 0) / EMU_PER_INCH - m(tf.margin_left, 91440) - m(tf.margin_right, 91440)
@@ -114,23 +142,34 @@ def _text_height_in(shape) -> float | None:
         return None
     total = m(tf.margin_top, 45720) + m(tf.margin_bottom, 45720)
     for p in tf.paragraphs:
-        sizes = [r.font.size.pt for r in p.runs if r.font.size is not None]
-        if p.runs and len(sizes) < len(p.runs):
+        runs = [r for r in p.runs if r.text]
+        if any(r.font.size is None for r in runs):
             return None
-        pt = max(sizes) if sizes else 12.0
-        chars = len(p.text)
-        per_line = max(1, int(width * 72 / (pt * 0.5)))
-        lines = 1
-        if tf.word_wrap is not False and chars > per_line:
-            lines, cur = 1, 0
-            for word in p.text.split():
-                add = len(word) + (1 if cur else 0)
-                if cur + add > per_line and cur:
-                    lines, cur = lines + 1, len(word)
-                else:
-                    cur += add
-        total += lines * pt * 1.15 / 72
+        if not runs:
+            total += 12 * 1.15 / 72
+            continue
+        # The paragraph's largest run sets its line height; its widest face, its wrapping.
+        big = max(runs, key=lambda r: r.font.size.pt)
+        family = big.font.name or body_font
+        if tf.word_wrap is False:
+            total += big.font.size.pt * 1.15 / 72
+            continue
+        total += textfit.height(p.text, family, big.font.size.pt, width, bool(big.font.bold), 1.15)
     return total
+
+
+def _body_font(prs) -> str:
+    """The deck theme's body font (its minor Latin typeface), which runs without a font use."""
+    from lxml import etree
+
+    for rel in prs.slide_master.part.rels.values():
+        if rel.reltype.endswith("/theme"):
+            root = etree.fromstring(rel.target_part.blob)
+            el = root.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}minorFont/"
+                           "{http://schemas.openxmlformats.org/drawingml/2006/main}latin")
+            if el is not None and el.get("typeface"):
+                return el.get("typeface")
+    return "Calibri"
 
 
 def _autofits(shape) -> bool:
@@ -139,7 +178,7 @@ def _autofits(shape) -> bool:
     return any(el.tag.endswith(("}normAutofit", "}spAutoFit")) for el in body.iter())
 
 
-def _check_slide(slide, s_idx, sw, sh, tol, errors, warnings) -> None:
+def _check_slide(slide, s_idx, sw, sh, tol, errors, warnings, body_font="Calibri") -> None:
     where = f"Slide {s_idx}"
     texts: list[tuple[str, tuple[int, int, int, int]]] = []
     for shape in slide.shapes:
@@ -162,7 +201,7 @@ def _check_slide(slide, s_idx, sw, sh, tol, errors, warnings) -> None:
         if tiny:
             warnings.append(f"{where}: '{shape.name}' uses tiny text ({min(tiny):.1f}pt < 9pt).")
         # A glyph or a number in a badge (a 140pt quote mark, "3") is drawn, not read as lines.
-        need = _text_height_in(shape) if len("".join(shape.text_frame.text.split())) > 3 else None
+        need = _text_height_in(shape, body_font) if len("".join(shape.text_frame.text.split())) > 3 else None
         have = h / EMU_PER_INCH
         if need is not None and have > 0 and need > have * 1.2 + 0.1:
             msg = (f"{where}: the text of '{shape.name}' needs about {need:.1f}in of height but its box "

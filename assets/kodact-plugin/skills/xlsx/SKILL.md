@@ -30,8 +30,8 @@ The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and th
    A new sheet: `{"block": "sheet", "sheet": "Data"}`; `"sheet"` on any block targets one.
 4. **Compute and audit**: `python "$T/recalc_and_verify.py" book.xlsx --in-place`. It has Excel
    (on Windows, when installed) or LibreOffice compute every formula, saves the values in the
-   file, and fails on any formula error (#DIV/0!, #REF!, #NAME?…) or when the formulas could not be
-   computed at all. Fix each error at its cause and run it again. Its warnings flag a total typed
+   file, and fails on any formula error (#DIV/0!, #REF!, #NAME?…), when the formulas could not be
+   computed at all, or on XML Excel would refuse or repair (the Office Open XML schemas). Fix each error at its cause and run it again. Its warnings flag a total typed
    as a number and functions that need the `_xlfn.` prefix.
 5. **Look at it once**: `python "$T/render_preview.py" book.xlsx --out-dir preview --grid`, then
    open `preview/grid-1.png`: columns too narrow (####), a chart over a table, a sheet that prints

@@ -191,6 +191,20 @@ def check_baseline_preservation(
             break
 
 
+def _schema_problems(parts_or_path):
+    """Problems against the Office Open XML schemas (kodact-plugin/scripts/ooxml_schema.py)."""
+    shared = Path(__file__).resolve().parents[3] / "scripts"
+    if str(shared) not in sys.path:
+        sys.path.insert(0, str(shared))
+    try:
+        import ooxml_schema
+    except ImportError as exc:  # lxml missing: the structural checks still ran
+        return [], [f"schema check skipped: {exc}"]
+    if isinstance(parts_or_path, dict):
+        return ooxml_schema.check_parts(parts_or_path), []
+    return ooxml_schema.check(parts_or_path), []
+
+
 def validate_package(
     target: Path, baseline: Path | None = None
 ) -> tuple[list[str], list[str]]:
@@ -227,6 +241,10 @@ def validate_package(
         if baseline is not None:
             check_baseline_preservation(doc_root, baseline, errors)
 
+    if not errors:  # a package that doesn't open isn't worth a schema check
+        found, notes = _schema_problems(files)
+        errors.extend(f"Schema: {p}" for p in found)
+        warnings.extend(notes)
     return errors, warnings
 
 

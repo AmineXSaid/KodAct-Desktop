@@ -135,31 +135,24 @@ def shape(slide, kind, x, y, w, h, fill=None, line=None, lw=1.5, radius=None):
     return s
 
 
-def _fits(text, w, h, pt, line=1.18, char_w=0.52):
-    """Whether `text` at `pt` wraps into a w x h inch box."""
-    per_line = max(1, int(w * 72 / (pt * char_w)))
-    lines, cur = 1, 0
-    for word in text.split():
-        add = len(word) + (1 if cur else 0)
-        if cur + add > per_line and cur:
-            lines += 1
-            cur = len(word)
-        else:
-            cur += add
-    lines += text.count("\n")
-    return lines * pt * line / 72 <= h
+def _fits(text, w, h, pt, line=1.18, font=None, bold=False):
+    """Whether `text` at `pt` wraps into a w x h inch box, measured with `font` (textfit.py: the
+    installed font, a metric twin, or an estimate of its letter widths)."""
+    import textfit
+
+    return textfit.height(text, font or "Segoe UI", pt, w, bold, line) <= h
 
 
-def fit_pt(text, w, h, max_pt, min_pt=12, line=1.18, char_w=0.52):
+def fit_pt(text, w, h, max_pt, min_pt=12, line=1.18, font=None, bold=False):
     """The largest size from max_pt down at which `text` wraps into a w x h inch box. When even
     min_pt is too big, says so on stderr (the text is too long for this layout) and returns min_pt:
     smaller type would be unreadable, so the words are what must change."""
     pt = max_pt
     while pt > min_pt:
-        if _fits(text, w, h, pt, line, char_w):
+        if _fits(text, w, h, pt, line, font, bold):
             return pt
         pt -= 1
-    if not _fits(text, w, h, min_pt, line, char_w):
+    if not _fits(text, w, h, min_pt, line, font, bold):
         import sys
 
         short = " ".join(text.split())
@@ -179,7 +172,7 @@ def text(slide, x, y, w, h, words, pt, color, font, bold=False, align=PP_ALIGN.L
     tf.vertical_anchor = anchor
     for m in ("margin_left", "margin_right", "margin_top", "margin_bottom"):
         setattr(tf, m, Inches(0.04))
-    size = fit_pt(words, w - 0.1, h - 0.1, pt) if fit else pt
+    size = fit_pt(words, w - 0.1, h - 0.1, pt, font=font, bold=bold) if fit else pt
     for i, part in enumerate(words.split("\n")):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.alignment = align
@@ -547,6 +540,17 @@ def _closing(slide, t, spec, accent, n):
 
 # ---------- data and structure layouts ----------
 
+def _unsigned_axis_ids(chart):
+    """python-pptx gives axes negative ids; the schema wants unsigned ones (Office reads either).
+    Write the same 32 bits unsigned, so the chart is valid as the standard reads it too."""
+    ns = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+    for tag in ("axId", "crossAx"):
+        for el in chart._chartSpace.iter(ns + tag):
+            v = el.get("val", "")
+            if v.startswith("-") and v[1:].isdigit():
+                el.set("val", str(int(v) & 0xFFFFFFFF))
+
+
 def chart_in(slide, t, c, x, y, w, h):
     """A native PowerPoint chart (editable in PowerPoint, its data in the deck) in the box
     x, y, w, h: c = {"type": "column", "categories": [...], "series": {"Name": [...]}}."""
@@ -572,6 +576,7 @@ def chart_in(slide, t, c, x, y, w, h):
           "area": XL_CHART_TYPE.AREA, "stacked": XL_CHART_TYPE.COLUMN_STACKED}[kind]
     gf = slide.shapes.add_chart(xl, Inches(x), Inches(y), Inches(w), Inches(h), data)
     gf.name = "Chart"
+    _unsigned_axis_ids(gf.chart)
     ch = gf.chart
     ch.has_title = False
     ch.font.name = t["body"]

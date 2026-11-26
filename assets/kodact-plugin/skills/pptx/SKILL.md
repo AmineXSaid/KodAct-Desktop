@@ -54,7 +54,9 @@ The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and th
    (`title`, `h1`-`h3`, `lead`, `body`, `small`, `caption`, `stat`). Use layouts for most slides
    and the kit where the content asks for its own shape; both pass through the same check.
 4. **Check it**: `python "$T/validate.py" deck.pptx`. It fails on what looks broken: content cut
-   off by the slide edge, text overflowing its box, words printed over words, a broken file. Fix
+   off by the slide edge, text overflowing its box (measured in the slide's own fonts), words
+   printed over words, and any XML PowerPoint would refuse or repair (checked against the Office
+   Open XML schemas). Fix
    every error and run it again. Warnings (an empty placeholder, an off-centre title, tiny type,
    a wall of text) are worth fixing too.
 5. **Look at it once**: `python "$T/render_preview.py" deck.pptx --out-dir preview --grid`, then

@@ -54,6 +54,7 @@ if str(SHARED_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SHARED_SCRIPTS))
 
 from _kodact_office import recalc_xlsx  # noqa: E402
+import ooxml_schema  # noqa: E402
 
 
 def _patch_full_calc_on_load(xlsx_path: Path) -> None:
@@ -176,6 +177,10 @@ def audit_workbook(xlsx_path: Path) -> dict:
     # No formula has a value: the workbook was never calculated (openpyxl writes none), so it shows
     # empty cells and no error could have been found. That is a failure, not a pass. A few empty
     # results among computed ones can be formulas that give "" on purpose: a warning each.
+    # A workbook Excel would repair or refuse, whatever its values.
+    for problem in ooxml_schema.check(xlsx_path):
+        errors.append({"type": "schema", "sheet": "", "cell": "", "detail": problem})
+
     if formula_count and len(uncomputed) == formula_count:
         errors.append({"type": "not_recalculated", "sheet": "", "cell": "",
                        "detail": f"None of the {formula_count} formula(s) has a computed value: "
@@ -245,7 +250,7 @@ def main() -> int:
         print(f"WARNING [{w['sheet']}!{w['cell']}]: {w['detail']}", file=sys.stderr)
     for err in report["errors"]:
         print(
-            (f"ERROR: {err['detail']}" if err.get("type") == "not_recalculated"
+            (f"ERROR: {err['detail']}" if err.get("type") in ("not_recalculated", "schema")
              else f"ERROR [{err['sheet']}!{err['cell']}]: {err['value']} (formula={err['formula']!r})"),
             file=sys.stderr,
         )

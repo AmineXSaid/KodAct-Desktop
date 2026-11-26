@@ -464,3 +464,105 @@ def test_who_reads_it_picks_the_theme_before_what_it_is_about():
     assert deck_design.for_audience("kids aged 8") == "kids"
     assert deck_design.for_audience("patients and families") == "warm"
     assert deck_design.for_audience("health research paper") == "editorial"
+
+
+# ---------- phase 2: the schemas, and text measured in its font ----------
+
+def _rezip(src, out, part, change):
+    import zipfile
+
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+        for info in zin.infolist():
+            data = zin.read(info.filename)
+            if info.filename == part:
+                data = change(data.decode()).encode()
+            zout.writestr(info, data)
+
+
+def test_the_schema_check_fails_what_word_refuses(tmp_path):
+    (tmp_path / "m.md").write_text("# Memo\n\nText.\n")
+    run("docx", "docx_tool.py", "create", "m.docx", "--markdown", "m.md", cwd=tmp_path)
+    run("docx", "validate.py", "m.docx", cwd=tmp_path)
+    _rezip(tmp_path / "m.docx", tmp_path / "nest.docx", "word/document.xml",
+           lambda x: x.replace("<w:r>", "<w:r><w:p/>", 1))
+    _, out = run("docx", "validate.py", "nest.docx", cwd=tmp_path, ok=False)
+    assert "Schema: word/document.xml" in out and "not expected" in out
+    _rezip(tmp_path / "m.docx", tmp_path / "enum.docx", "word/document.xml",
+           lambda x: x.replace("<w:body>", '<w:body><w:p><w:pPr><w:jc w:val="middle"/></w:pPr></w:p>', 1))
+    run("docx", "validate.py", "enum.docx", cwd=tmp_path, ok=False)
+
+
+def test_the_schema_check_reads_markup_compatibility_as_office_does(tmp_path):
+    # Word 2010+ writes w14 markup marked ignorable and AlternateContent with a fallback: valid.
+    (tmp_path / "m.md").write_text("# Memo\n\nText.\n")
+    run("docx", "docx_tool.py", "create", "m.docx", "--markdown", "m.md", cwd=tmp_path)
+    w14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+    mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+
+    def office_2010(x):
+        head = x[:x.index(">", x.index("<w:document"))]
+        add = "".join(f' xmlns:{p}="{u}"' for p, u in (("w14", w14), ("mc", mc)) if f"xmlns:{p}=" not in head)
+        if "mc:Ignorable" not in head:
+            add += ' mc:Ignorable="w14"'
+        x = x.replace("<w:document ", "<w:document" + add + " ", 1)
+        x = x.replace("<w:p>", '<w:p w14:paraId="1A2B3C4D">', 1)
+        return x.replace("<w:body>", '<w:body><mc:AlternateContent><mc:Choice Requires="w14"><w14:anything/>'
+                         '</mc:Choice><mc:Fallback><w:p/></mc:Fallback></mc:AlternateContent>', 1)
+
+    _rezip(tmp_path / "m.docx", tmp_path / "o.docx", "word/document.xml", office_2010)
+    run("docx", "validate.py", "o.docx", cwd=tmp_path)
+
+
+def test_every_file_the_skills_write_is_schema_valid(tmp_path):
+    sys.path.insert(0, str(PLUGIN / "scripts"))
+    import ooxml_schema
+
+    run("pptx", "pptx_tool.py", "init", "d.pptx", "--theme", "kids", "--title", "T", cwd=tmp_path)
+    (tmp_path / "s.json").write_text(json.dumps(ALL_LAYOUTS))
+    run("pptx", "pptx_tool.py", "add", "d.pptx", "--json", "@s.json", cwd=tmp_path)
+    run("docx", "docx_tool.py", "init", "r.docx", "--title", "T", cwd=tmp_path)
+    (tmp_path / "b.json").write_text(json.dumps(BLOCKS))
+    run("docx", "docx_tool.py", "add", "r.docx", "--json", "@b.json", cwd=tmp_path)
+    run("xlsx", "xlsx_tool.py", "init", "w.xlsx", "--title", "T", cwd=tmp_path)
+    run("xlsx", "xlsx_tool.py", "add", "w.xlsx", "--json", json.dumps(
+        [{"block": "table", "columns": ["A", "B"], "rows": [["x", 1]], "totals": {"B": "sum"}, "bars": ["B"]},
+         {"block": "chart", "type": "column", "data": "C6:C7", "categories": "B7:B7"}]), cwd=tmp_path)
+    for f in ("d.pptx", "r.docx", "w.xlsx"):
+        assert ooxml_schema.check(tmp_path / f) == [], f
+    for f in ("hard.docx", "hard.pptx", "hard.xlsx", "hard-openpyxl.xlsx"):
+        assert ooxml_schema.check(FIXTURES / f) == [], f
+
+
+def _has_font(family):
+    sys.path.insert(0, str(PLUGIN / "scripts"))
+    import textfit
+
+    return textfit.source(family) != "an estimate"
+
+
+@pytest.mark.skipif(not _has_font("Calibri"), reason="neither Calibri nor Carlito is installed")
+def test_text_is_measured_in_its_font_not_by_counting_letters(tmp_path):
+    import textfit
+    import deck_design
+
+    # Wide letters take more room than an average-letter estimate allows, narrow ones less.
+    assert textfit.lines("W" * 40, "Calibri", 18, 4.0) == 3
+    assert textfit.lines("i" * 40, "Calibri", 18, 4.0) == 1
+    assert deck_design.fit_pt("W" * 40, 4.0, 0.5, 24, font="Calibri") < deck_design.fit_pt("i" * 40, 4.0, 0.5, 24, font="Calibri")
+
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+
+    p = Presentation()
+    s = p.slides.add_slide(p.slide_layouts[6])
+    tb = s.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(0.4))
+    tb.text_frame.word_wrap = True
+    from pptx.enum.text import MSO_AUTO_SIZE
+
+    tb.text_frame.auto_size = MSO_AUTO_SIZE.NONE  # a fixed box, as the designed layouts draw
+    r = tb.text_frame.paragraphs[0].add_run()
+    r.text, r.font.size, r.font.name = "W" * 30, Pt(18), "Calibri"
+    p.save(tmp_path / "w.pptx")
+    # Counting letters said this fits on one line; in Calibri it takes two.
+    _, out = run("pptx", "validate.py", "w.pptx", cwd=tmp_path, ok=False)
+    assert "overflows the box" in out

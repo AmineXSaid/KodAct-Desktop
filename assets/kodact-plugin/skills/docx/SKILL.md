@@ -32,7 +32,9 @@ The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and th
    Long prose can come as Markdown instead:
    `python "$T/docx_tool.py" append report.docx report.docx --markdown body.md`; in a document
    made by `init`, its tables take the theme too.
-4. **Check it**: `python "$T/validate.py" report.docx`. Fix every error and run it again.
+4. **Check it**: `python "$T/validate.py" report.docx`: the package, comments and tracked changes,
+   and every part against the Office Open XML schemas (what Word would refuse or repair). Fix
+   every error and run it again.
 5. **Look at it once**: `python "$T/render_preview.py" report.docx --out-dir preview --grid`, then
    open `preview/grid-1.png`: page breaks in odd places, a heading alone at a page's foot, a table
    split badly, an empty page. Open a single `page-N.png` only for a detail; don't read every page.
