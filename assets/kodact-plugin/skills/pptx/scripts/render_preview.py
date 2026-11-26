@@ -15,53 +15,14 @@ SHARED_SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 if str(SHARED_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SHARED_SCRIPTS))
 
-from _kodact_office import convert_office_to_pdf, render_pdf_to_pngs  # noqa: E402
+from _kodact_office import contact_sheets, convert_office_to_pdf, render_pdf_to_pngs  # noqa: E402
 
 
 def build_slide_grids(
     pngs: list[Path], out_dir: Path, cols: int = 3, rows: int = 4
 ) -> list[Path]:
-    """Composite slides into contact sheets labeled with both 1-based and 0-based indices."""
-    from PIL import Image, ImageDraw
-
-    per_sheet = cols * rows
-    tile_w = 520
-    first = Image.open(pngs[0])
-    tile_h = int(tile_w * (first.height / max(1, first.width)))
-    banner_h = 28
-    pad = 16
-    sheets: list[Path] = []
-
-    for start in range(0, len(pngs), per_sheet):
-        batch = pngs[start : start + per_sheet]
-        used_rows = (len(batch) + cols - 1) // cols
-        canvas_w = pad + cols * (tile_w + pad)
-        canvas_h = pad + used_rows * (tile_h + banner_h + pad)
-        sheet = Image.new("RGB", (canvas_w, canvas_h), (241, 245, 249))
-        draw = ImageDraw.Draw(sheet)
-
-        for idx, img_path in enumerate(batch):
-            zero_idx = start + idx
-            r, c = divmod(idx, cols)
-            x = pad + c * (tile_w + pad)
-            y = pad + r * (tile_h + banner_h + pad)
-            draw.rectangle([x, y, x + tile_w, y + banner_h], fill=(15, 23, 42))
-            draw.text(
-                (x + 10, y + 7),
-                f"Slide {zero_idx + 1}  [idx={zero_idx}]",
-                fill=(255, 255, 255),
-            )
-            with Image.open(img_path) as im:
-                thumb = im.convert("RGB").resize((tile_w, tile_h))
-                sheet.paste(thumb, (x, y + banner_h))
-            draw.rectangle(
-                [x, y, x + tile_w, y + banner_h + tile_h], outline=(148, 163, 184), width=1
-            )
-
-        out_path = out_dir / f"grid-{len(sheets) + 1}.png"
-        sheet.save(out_path)
-        sheets.append(out_path)
-    return sheets
+    """Slides on contact sheets, each labelled with its 1-based and 0-based index."""
+    return contact_sheets(pngs, out_dir, lambda i: f"Slide {i + 1}  [idx={i}]", cols, rows, 520)
 
 
 def render_pptx_preview(

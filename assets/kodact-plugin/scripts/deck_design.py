@@ -26,7 +26,7 @@ THEMES = {
         "bg": "FFF9EF", "ink": "1F2A3A", "soft": "4A5568", "card": "FFFFFF",
         "accents": ["FF6B6B", "2EC4B6", "FFB703", "9D4EDD", "52B788", "48CAE4"],
         "head": "Century Gothic", "body": "Trebuchet MS",
-        "radius": 0.30, "decor": True, "title_pt": 34,
+        "radius": 0.30, "decor": True, "title_pt": 34, "playful": True,
     },
     # Quiet and clear: white, one blue, thin rules.
     "clean": {
@@ -68,16 +68,17 @@ THEMES.update({
     },
 })
 
-# Words that say who a file is for, and the theme that fits them (first match wins).
+# Words that say who a file is for, and the theme that fits them. Checked in this order, first match wins: who reads it (children, a board, researchers) before
+# the field it is about (health), so "a hospital board" gets the board's theme, not the patients'.
 AUDIENCES = [
     ("kids", ("kid", "child", "children", "pupil", "primary school", "classroom", "young", "ages 4", "ages 5",
               "ages 6", "ages 7", "ages 8", "ages 9", "ages 10", "enfant", "élève")),
-    ("warm", ("patient", "parent", "family", "families", "caregiver", "health", "hospital", "community",
-              "charity", "volunteer", "wellbeing", "therapy", "senior")),
     ("corporate", ("board", "investor", "executive", "finance", "quarterly", "budget", "shareholder", "bank",
                    "client", "sales", "corporate", "management", "kpi")),
     ("editorial", ("research", "academic", "paper", "thesis", "policy", "report", "study", "university",
                    "journal", "white paper")),
+    ("warm", ("patient", "parent", "family", "families", "caregiver", "health", "hospital", "community",
+              "charity", "volunteer", "wellbeing", "therapy", "senior")),
     ("bold", ("conference", "keynote", "launch", "pitch", "event", "talk", "meetup", "hackathon", "marketing")),
 ]
 
@@ -370,12 +371,14 @@ def _title(slide, t, spec, accent):
     if t["decor"]:
         shape(slide, MSO_SHAPE.OVAL, -1.6, -1.6, 4.2, 4.2, fill=tint(a[2], 0.7, t["bg"]))
         shape(slide, MSO_SHAPE.OVAL, W - 2.6, H - 2.2, 4.0, 4.0, fill=tint(a[1], 0.8, t["bg"]))
-        icon(slide, "sun", 0.55, 0.45, 1.2, a[2])
-        for (x, y, d, c) in [(10.6, 0.6, 0.45, a[2]), (11.6, 1.5, 0.3, a[3]), (2.3, 1.1, 0.3, a[0])]:
-            icon(slide, "star", x, y, d, c)
-        icon(slide, "heart", 10.3, 1.5, 0.4, a[0])
-        icon(slide, "cloud", 1.0, 5.6, 1.3, "FFFFFF")
-        art = spec.get("icon", "cell")
+        # Sun, stars, a heart and a cloud are for children's decks; other soft themes keep the discs.
+        if t.get("playful"):
+            icon(slide, "sun", 0.55, 0.45, 1.2, a[2])
+            for (x, y, d, c) in [(10.6, 0.6, 0.45, a[2]), (11.6, 1.5, 0.3, a[3]), (2.3, 1.1, 0.3, a[0])]:
+                icon(slide, "star", x, y, d, c)
+            icon(slide, "heart", 10.3, 1.5, 0.4, a[0])
+            icon(slide, "cloud", 1.0, 5.6, 1.3, "FFFFFF")
+        art = spec.get("icon", "cell" if t.get("playful") else "none")
         if art != "none":
             icon(slide, art, W / 2 - 0.9, 0.75, 1.8, a[1], t["ink"])
     if not t["decor"]:
@@ -544,13 +547,13 @@ def _closing(slide, t, spec, accent, n):
 
 # ---------- data and structure layouts ----------
 
-def _chart(slide, t, spec, accent):
-    """A native PowerPoint chart (editable in PowerPoint, its data in the deck):
-    "chart": {"type": "column", "categories": [...], "series": {"Name": [...]}}."""
+def chart_in(slide, t, c, x, y, w, h):
+    """A native PowerPoint chart (editable in PowerPoint, its data in the deck) in the box
+    x, y, w, h: c = {"type": "column", "categories": [...], "series": {"Name": [...]}}."""
     from pptx.chart.data import CategoryChartData
     from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 
-    c = spec.get("chart") or {}
+    c = c or {}
     kind = c.get("type", "column")
     if kind not in CHARTS:
         raise SystemExit(f"no chart type {kind!r}; choose one of {', '.join(CHARTS)}")
@@ -567,9 +570,7 @@ def _chart(slide, t, spec, accent):
     xl = {"bar": XL_CHART_TYPE.BAR_CLUSTERED, "column": XL_CHART_TYPE.COLUMN_CLUSTERED,
           "line": XL_CHART_TYPE.LINE_MARKERS, "pie": XL_CHART_TYPE.PIE, "doughnut": XL_CHART_TYPE.DOUGHNUT,
           "area": XL_CHART_TYPE.AREA, "stacked": XL_CHART_TYPE.COLUMN_STACKED}[kind]
-    side = bool(spec.get("items"))
-    cw = W - 1.7 - (4.0 if side else 0)
-    gf = slide.shapes.add_chart(xl, Inches(0.85), Inches(1.75), Inches(cw), Inches(5.1), data)
+    gf = slide.shapes.add_chart(xl, Inches(x), Inches(y), Inches(w), Inches(h), data)
     gf.name = "Chart"
     ch = gf.chart
     ch.has_title = False
@@ -619,6 +620,14 @@ def _chart(slide, t, spec, accent):
         va.tick_labels.font.size = Pt(12)
         ch.category_axis.tick_labels.font.size = Pt(13)
         ch.category_axis.format.line.color.rgb = tint(t["soft"], 0.6, t["bg"])
+    return gf
+
+
+def _chart(slide, t, spec, accent):
+    """The chart layout: the chart, and its takeaways beside it when there are items."""
+    side = bool(spec.get("items"))
+    cw = W - 1.7 - (4.0 if side else 0)
+    chart_in(slide, t, spec.get("chart"), 0.85, 1.75, cw, 5.1)
     if side:
         for i, ((y, h), item) in enumerate(zip(_rows(len(spec["items"]), 1.9, 6.8, 0.2, 1.3), spec["items"])):
             x = W - 4.65
@@ -628,19 +637,18 @@ def _chart(slide, t, spec, accent):
             text(slide, x + 0.25, y, 3.45, h, str(item), 16, t["soft"], t["body"], anchor=MSO_ANCHOR.MIDDLE)
 
 
-def _table(slide, t, spec, accent):
-    """A real table: "columns": [...], "rows": [[...], ...]; "highlight": row index."""
-    cols, rows = spec.get("columns"), spec.get("rows")
+def table_in(slide, t, cols, rows, x, y, w, h_max, accent, highlight=None):
+    """A real, editable table in the box x, y, w (rows as tall as they need, up to h_max):
+    a header row in `accent`, banded rows, numbers right-aligned."""
     if not cols or not rows:
-        raise SystemExit('a table needs "columns": [...] and "rows": [[...], ...]')
+        raise SystemExit('a table needs columns [...] and rows [[...], ...]')
     rows = _keep(rows, 12, "a table", "rows")
     n_r, n_c = len(rows) + 1, len(cols)
-    h = min(5.1, 0.55 * n_r)
-    gf = slide.shapes.add_table(n_r, n_c, Inches(0.85), Inches(1.8), Inches(W - 2.05), Inches(h))
+    h = min(h_max, 0.55 * n_r)
+    gf = slide.shapes.add_table(n_r, n_c, Inches(x), Inches(y), Inches(w), Inches(h))
     gf.name = "Table"
     tbl = gf.table
     tbl.first_row = True
-    hl = spec.get("highlight")
     size = 16 if n_r <= 7 else 13
     for ci, name in enumerate(cols):
         _cell(tbl.cell(0, ci), str(name), size, "FFFFFF", t["head"], accent, bold=True)
@@ -648,11 +656,18 @@ def _table(slide, t, spec, accent):
         if len(row) != n_c:
             raise SystemExit(f"row {ri} has {len(row)} cells for {n_c} columns")
         zebra = t["card"] if ri % 2 else _hex(tint(accent, 0.92, t["bg"]))
-        fill = _hex(tint(accent, 0.7, t["bg"])) if hl == ri - 1 else zebra
+        fill = _hex(tint(accent, 0.7, t["bg"])) if highlight == ri - 1 else zebra
         for ci, v in enumerate(row):
             num = isinstance(v, (int, float))
             _cell(tbl.cell(ri, ci), f"{v:,}" if num else str(v), size, t["ink"], t["body"], fill,
-                  bold=hl == ri - 1, align=PP_ALIGN.RIGHT if num else PP_ALIGN.LEFT)
+                  bold=highlight == ri - 1, align=PP_ALIGN.RIGHT if num else PP_ALIGN.LEFT)
+    return gf
+
+
+def _table(slide, t, spec, accent):
+    """A real table: "columns": [...], "rows": [[...], ...]; "highlight": row index."""
+    table_in(slide, t, spec.get("columns"), spec.get("rows"), 0.85, 1.8, W - 2.05, 5.1, accent,
+             spec.get("highlight"))
 
 
 def _cell(cell, words, pt, color, font, fill, bold=False, align=PP_ALIGN.LEFT):

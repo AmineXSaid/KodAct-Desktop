@@ -284,3 +284,47 @@ def recalc_xlsx(src: Path, out: Path, timeout: int = 120) -> Path:
             shutil.move(str(conv / "in.xlsx"), result)
         shutil.copyfile(result, out)
     return out
+
+
+def contact_sheets(pngs: list[Path], out_dir: Path, label, cols: int = 3, rows: int = 4,
+                   tile_w: int = 520) -> list[Path]:
+    """Pages side by side on `grid-N.png` sheets, each under a banner (`label(i)`, i from 0).
+
+    Every page keeps its own shape: tiles are as tall as the tallest page needs at `tile_w`, and
+    each page is scaled to fit its tile, centred, never stretched (a landscape section among
+    portrait pages showed squashed into a portrait tile, 2026-11-26)."""
+    from PIL import Image, ImageDraw
+
+    if not pngs:
+        return []
+    sizes = []
+    for p in pngs:
+        with Image.open(p) as im:
+            sizes.append(im.size)
+    tile_h = max(int(tile_w * h / max(1, w)) for w, h in sizes)
+    tile_h = min(tile_h, int(tile_w * 1.5))
+    banner_h, pad = 28, 16
+    per_sheet = cols * rows
+    sheets: list[Path] = []
+    for start in range(0, len(pngs), per_sheet):
+        batch = pngs[start:start + per_sheet]
+        used_rows = (len(batch) + cols - 1) // cols
+        sheet = Image.new("RGB", (pad + cols * (tile_w + pad), pad + used_rows * (tile_h + banner_h + pad)),
+                          (241, 245, 249))
+        draw = ImageDraw.Draw(sheet)
+        for idx, img_path in enumerate(batch):
+            r, c = divmod(idx, cols)
+            x = pad + c * (tile_w + pad)
+            y = pad + r * (tile_h + banner_h + pad)
+            draw.rectangle([x, y, x + tile_w, y + banner_h], fill=(15, 23, 42))
+            draw.text((x + 10, y + 7), label(start + idx), fill=(255, 255, 255))
+            with Image.open(img_path) as im:
+                w, h = im.size
+                k = min(tile_w / w, tile_h / h)
+                thumb = im.convert("RGB").resize((max(1, int(w * k)), max(1, int(h * k))))
+            sheet.paste(thumb, (x + (tile_w - thumb.width) // 2, y + banner_h + (tile_h - thumb.height) // 2))
+            draw.rectangle([x, y, x + tile_w, y + banner_h + tile_h], outline=(148, 163, 184), width=1)
+        out_path = out_dir / f"grid-{len(sheets) + 1}.png"
+        sheet.save(out_path)
+        sheets.append(out_path)
+    return sheets

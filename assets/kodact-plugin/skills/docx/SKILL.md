@@ -39,6 +39,23 @@ The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and th
    (A table of contents shows as a note in the preview: Word fills it when the file is opened.)
 6. **Reply** with the file's name and one line on what it says. Don't paste its text back.
 
+**What the blocks don't do** (footnotes, a landscape appendix, two-column pages, headers and
+footers per section, tables with set widths, merged cells or a totals row, links, mixed
+formatting in one sentence): write it as code with `doc_kit`, on the same theme, alongside the
+blocks:
+```python
+import sys; sys.path.insert(0, r"${KODACT_SKILL_DIR}/scripts")
+from doc_kit import Doc
+with Doc("report.docx") as d:
+    d.heading("Results", 1)
+    d.para("Visits grew ").add("75%", bold=True).add(" after the east clinic opened.") \
+        .footnote("Booked visits, July to September; source: scheduling system.")
+    d.block({"block": "kpis", "items": [{"value": "210k", "label": "Visits", "delta": "+40%"}]})
+    d.table(["Site", "Visits", "Wait"], rows, widths=[3, 1.5, 1.5], total="Visits")
+    d.section(orientation="landscape", columns=2, header="Appendix", footer="Confidential")
+```
+`help(doc_kit)` lists all of it. Tables fit the column they are in.
+
 A plain document with no design (a quick conversion): `python "$T/docx_tool.py" create out.docx
 --markdown notes.md`.
 

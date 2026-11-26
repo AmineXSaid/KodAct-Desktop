@@ -32,6 +32,27 @@ The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and th
    Text is sized to fit its box. `add` prints a `note:` when text is too long even at 12pt, or a
    layout leaves items out: shorten or split that slide, never ignore a note.
    Icons: any Lucide name (`python "${KODACT_SKILL_DIR}/../../scripts/icons.py" search heart`).
+   **A slide no layout fits** (a chart beside three cards, a hero panel, a diagram of your own):
+   draw it as code with `slide_kit`, in the same deck, on the same theme. Write a short script:
+   ```python
+   import sys; sys.path.insert(0, r"${KODACT_SKILL_DIR}/scripts")
+   from slide_kit import Deck
+   with Deck("deck.pptx") as deck:
+       s = deck.slide("Visits grew 75% as the new clinic opened", icon="trending-up")
+       chart_box, side = s.area.cols(7, 5)          # a 12-column grid under the title
+       s.chart(chart_box, "column", ["Q1", "Q2", "Q3"], {"Visits (k)": [120, 150, 210]})
+       for i, (box, (head, body)) in enumerate(zip(side.rows(3), points)):
+           s.card(box, accent=i)
+           s.icon(icons[i], box.inset(0.22).left(0.55).top(0.55), color=i, badge=True)
+           s.text(box.inset(0.22).cut_left(0.75).top(0.45), head, size="h3", bold=True, color="ink")
+           s.text(box.inset(0.22).cut_left(0.75).cut_top(0.45), body, size="small")
+   ```
+   Everything it needs is in `python -c "import sys; sys.path.insert(0, r'$T'); import slide_kit; help(slide_kit)"`:
+   boxes that split on a grid (`cols`, `rows`, `inset`, `top`, `cut_left`…), and `text`
+   (fitted), `bullets`, `card`, `icon`, `stat`, `chart`, `table`, `image`, `shape`, `line`,
+   `notes`, with the theme's colours (`ink`, `soft`, `accent`, `accent0`-`accent5`) and sizes
+   (`title`, `h1`-`h3`, `lead`, `body`, `small`, `caption`, `stat`). Use layouts for most slides
+   and the kit where the content asks for its own shape; both pass through the same check.
 4. **Check it**: `python "$T/validate.py" deck.pptx`. It fails on what looks broken: content cut
    off by the slide edge, text overflowing its box, words printed over words, a broken file. Fix
    every error and run it again. Warnings (an empty placeholder, an off-centre title, tiny type,

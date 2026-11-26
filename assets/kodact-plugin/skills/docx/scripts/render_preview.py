@@ -15,47 +15,14 @@ SHARED_SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 if str(SHARED_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SHARED_SCRIPTS))
 
-from _kodact_office import convert_office_to_pdf, render_pdf_to_pngs  # noqa: E402
+from _kodact_office import contact_sheets, convert_office_to_pdf, render_pdf_to_pngs  # noqa: E402
 
 
 def _build_contact_sheets(
     pngs: list[Path], out_dir: Path, cols: int = 3, rows: int = 3
 ) -> list[Path]:
-    from PIL import Image, ImageDraw
-
-    per_sheet = cols * rows
-    tile_w = 480
-    first = Image.open(pngs[0])
-    tile_h = int(tile_w * (first.height / max(1, first.width)))
-    banner_h = 28
-    pad = 16
-    sheets: list[Path] = []
-
-    for s_idx in range(0, len(pngs), per_sheet):
-        batch = pngs[s_idx : s_idx + per_sheet]
-        used_rows = (len(batch) + cols - 1) // cols
-        canvas_w = pad + cols * (tile_w + pad)
-        canvas_h = pad + used_rows * (tile_h + banner_h + pad)
-        sheet = Image.new("RGB", (canvas_w, canvas_h), (241, 245, 249))
-        draw = ImageDraw.Draw(sheet)
-
-        for idx, img_path in enumerate(batch):
-            r, c = divmod(idx, cols)
-            x = pad + c * (tile_w + pad)
-            y = pad + r * (tile_h + banner_h + pad)
-            draw.rectangle([x, y, x + tile_w, y + banner_h], fill=(30, 41, 59))
-            draw.text((x + 10, y + 7), f"Page {s_idx + idx + 1}", fill=(255, 255, 255))
-            with Image.open(img_path) as im:
-                thumb = im.convert("RGB").resize((tile_w, tile_h))
-                sheet.paste(thumb, (x, y + banner_h))
-            draw.rectangle(
-                [x, y, x + tile_w, y + banner_h + tile_h], outline=(148, 163, 184), width=1
-            )
-
-        out_path = out_dir / f"grid-{len(sheets) + 1}.png"
-        sheet.save(out_path)
-        sheets.append(out_path)
-    return sheets
+    """Pages on contact sheets, each labelled with its page number."""
+    return contact_sheets(pngs, out_dir, lambda i: f"Page {i + 1}", cols, rows, 480)
 
 
 def render_preview(

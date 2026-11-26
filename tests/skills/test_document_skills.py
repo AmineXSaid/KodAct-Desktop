@@ -340,3 +340,127 @@ def test_markdown_becomes_a_designed_pdf(tmp_path):
 def test_make_pdf_refuses_what_it_cannot_print(tmp_path):
     (tmp_path / "g.md").write_text("x")
     run("pdf", "make_pdf.py", "from-office", "g.md", "g.pdf", cwd=tmp_path, ok=False)
+
+
+# ---------- slides and documents as code ----------
+
+def _kit_script(tmp_path, body, kit):
+    folder = SKILLS / ("pptx" if kit == "slide_kit" else "docx") / "scripts"
+    script = tmp_path / "make.py"
+    script.write_text(f"import sys\nsys.path.insert(0, r'{folder}')\n" + body)
+    r = subprocess.run([sys.executable, str(script)], cwd=tmp_path, capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return r.stdout + r.stderr
+
+
+def test_slide_kit_draws_free_slides_on_the_theme_beside_layout_slides(tmp_path):
+    from PIL import Image
+
+    Image.new("RGB", (300, 200), (40, 90, 160)).save(tmp_path / "p.png")
+    out = _kit_script(tmp_path, '''
+from slide_kit import Deck
+with Deck("k.pptx", audience="hospital board", title="Q3") as deck:
+    s = deck.slide("Visits grew", icon="trending-up")
+    left, right = s.area.cols(7, 5)
+    s.chart(left, "column", ["Q1", "Q2"], {"Visits": [1, 2]})
+    for i, box in enumerate(right.rows(3)):
+        s.card(box, accent=i)
+        s.icon("check", box.inset(0.2).left(0.5).top(0.5), color=i, badge=True)
+        s.text(box.inset(0.2).cut_left(0.7), "Point", size="h3", bold=True, color="ink")
+    s = deck.slide("Numbers")
+    for i, box in enumerate(s.area.top(2.5).split(3)):
+        s.stat(box, "1.2M", "Users", delta="+12%")
+    t, p = s.area.cut_top(2.8).cols(6, 6)
+    s.table(t, ["A", "B"], [["x", 1]])
+    s.image(p, "p.png", fit="cover")
+    s = deck.slide()
+    s.shape("rounded", s.area.inset(0.3))
+    s.bullets(s.area.inset(0.9), ["One", "Two"], marker="check", color="white")
+    s.notes("Say this.")
+''', "slide_kit")
+    assert "3 slide(s) drawn, 4 in the deck" in out
+    _, out = run("pptx", "pptx_tool.py", "add", "k.pptx", "--json", '{"layout": "closing", "title": "Thanks"}', cwd=tmp_path)
+    _, out = run("pptx", "validate.py", "k.pptx", cwd=tmp_path)
+    assert "PASSED (0 warning(s))" in out
+    from pptx import Presentation
+
+    prs = Presentation(tmp_path / "k.pptx")
+    assert len(prs.slides) == 5 and prs.core_properties.category == "kodact-theme:corporate"
+    # White check marks on the coloured panel, not the panel's own colour (they vanished into it).
+    marks = [sh for sh in prs.slides[3].shapes if sh.name == "Icon check"]
+    assert len(marks) == 2 and all(str(sh.line.color.rgb) == "FFFFFF" for sh in marks)
+
+
+def test_slide_kit_boxes_split_on_a_twelve_column_grid():
+    sys.path.insert(0, str(SKILLS / "pptx" / "scripts"))
+    from slide_kit import Box
+
+    a, b = Box(0, 0, 12.25, 5).cols(7, 5)
+    assert round(a.w + b.w + 0.25, 6) == 12.25 and round(b.x - a.x - a.w, 6) == 0.25
+    rows = Box(0, 0, 4, 10).rows(1, 2, gap=1)
+    assert round(rows[1].h, 6) == round(2 * rows[0].h, 6)
+    assert Box(0, 0, 4, 4).inset(1) == Box(1, 1, 2, 2)
+
+
+def test_doc_kit_writes_footnotes_sections_and_fitting_tables(tmp_path):
+    import zipfile
+
+    _kit_script(tmp_path, '''
+from doc_kit import Doc
+with Doc("r.docx", audience="hospital board", title="Q3") as d:
+    d.heading("Results", 1)
+    d.para("Visits grew ").add("75%", bold=True).add(".").footnote("Source: scheduling.")
+    d.para("Waits fell.").footnote("Median wait.")
+    d.table(["Site", "Visits"], [["A", 1], ["B", 2]], widths=[3, 1.5], total="Visits")
+    d.section(orientation="landscape", columns=2, header="Appendix", footer="Confidential")
+    d.para("See the ").link("dashboard", "https://example.org").add(".")
+    d.table(["Region", "Q1", "Q2"], [["N", 1, 2], ["", "", ""]], merge=[(2, 0, 2, 2)], style="grid")
+''', "doc_kit")
+    run("docx", "validate.py", "r.docx", cwd=tmp_path)
+    z = zipfile.ZipFile(tmp_path / "r.docx")
+    notes = z.read("word/footnotes.xml").decode()
+    assert "Source: scheduling." in notes and 'w:id="2"' in notes
+    body = z.read("word/document.xml").decode()
+    assert body.count("<w:footnoteReference") == 2 and 'w:orient="landscape"' in body and 'w:num="2"' in body
+    assert "Total" in body and "https://example.org" in z.read("word/_rels/document.xml.rels").decode()
+    # The two-column section's table fits one column (about 4.25in), not the page.
+    last = body[body.rfind("<w:tbl>"):]
+    widths = [int(w) for w in re.findall(r'<w:gridCol w:w="(\d+)"', last)]
+    assert sum(widths) / 1440 < 4.6
+
+
+def test_doc_kit_refuses_widths_wider_than_the_text_and_totals_of_text(tmp_path):
+    folder = SKILLS / "docx" / "scripts"
+    for body in ('d.table(["A", "B"], [["x", 1]], widths=[6, 6])', 'd.table(["A", "B"], [["x", 1]], total="A")'):
+        script = tmp_path / "m.py"
+        script.write_text(f"import sys\nsys.path.insert(0, r'{folder}')\nfrom doc_kit import Doc\n"
+                          f"with Doc('x.docx') as d:\n    {body}\n")
+        r = subprocess.run([sys.executable, str(script)], cwd=tmp_path, capture_output=True, text=True)
+        assert r.returncode != 0 and ("wide" in r.stderr + r.stdout or "holds text" in r.stderr + r.stdout)
+
+
+def test_contact_sheets_keep_each_pages_shape(tmp_path):
+    sys.path.insert(0, str(PLUGIN / "scripts"))
+    from PIL import Image
+    from _kodact_office import contact_sheets
+
+    Image.new("RGB", (850, 1100), (255, 255, 255)).save(tmp_path / "page-1.png")
+    Image.new("RGB", (1100, 850), (255, 0, 0)).save(tmp_path / "page-2.png")
+    sheet = Image.open(contact_sheets([tmp_path / "page-1.png", tmp_path / "page-2.png"], tmp_path,
+                                      lambda i: f"Page {i + 1}", 2, 1, 400)[0]).convert("RGB")
+    # The landscape page keeps its shape: red spans the tile's width but not its whole height.
+    tile_top, tile_h = 16 + 28, int(400 * 1100 / 850)
+    column = [sheet.getpixel((16 + 400 + 16 + 200, y)) for y in range(tile_top, tile_top + tile_h)]
+    red = sum(1 for px in column if px[0] > 200 and px[1] < 60)
+    expected = 400 * 850 / 1100  # the landscape page at the tile's width
+    assert abs(red - expected) <= 3, (red, expected)
+
+
+def test_who_reads_it_picks_the_theme_before_what_it_is_about():
+    sys.path.insert(0, str(PLUGIN / "scripts"))
+    import deck_design
+
+    assert deck_design.for_audience("hospital board") == "corporate"
+    assert deck_design.for_audience("kids aged 8") == "kids"
+    assert deck_design.for_audience("patients and families") == "warm"
+    assert deck_design.for_audience("health research paper") == "editorial"
