@@ -158,8 +158,11 @@ pub fn marks(text: &str, s: &AppState, sent: bool) -> Vec<(std::ops::Range<usize
 
 /// What choosing a row does.
 pub enum Pick {
-    /// Replace the word with this text.
+    /// Replace the word with this text (skills, prompts, `@file` mentions).
     Text(String),
+    /// Clear the word, then run a desktop/engine slash action (`Enter`/click runs
+    /// `run` immediately; `Tab` inserts `fill` when optional arguments exist).
+    SlashAction { run: String, fill: Option<String> },
     /// Clear the word, then run an app action.
     Action(Box<dyn Action>),
     /// Clear the word, then switch to this mode.
@@ -180,75 +183,127 @@ pub struct Item {
 }
 
 /// The most rows listed.
-const MAX_ROWS: usize = 40;
+const MAX_ROWS: usize = 72;
 
-fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Box<dyn Action>)> {
+fn action_icon(name: &str) -> &'static str {
+    match name {
+        "plugin" | "plugins" | "reload-plugins" => "icons/puzzle.svg",
+        "skills" | "reload-skills" => "icons/scroll-text.svg",
+        "agents" => "icons/boxes.svg",
+        "hooks" => "icons/webhook.svg",
+        "mcp" => "icons/plug.svg",
+        "memory" => "icons/notebook-pen.svg",
+        "compact" | "autocompact" => "icons/layers.svg",
+        "context" | "effort" => "icons/model.svg",
+        "tasks" => "icons/list-todo.svg",
+        "export" => "icons/file-text.svg",
+        "help" | "release-notes" => "icons/book-open.svg",
+        "permissions" | "config" => "icons/sliders-horizontal.svg",
+        "sandbox" => "icons/box.svg",
+        _ => "icons/terminal.svg",
+    }
+}
+
+fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Pick)> {
     vec![
+        (
+            "plugins",
+            "Open installed plugins",
+            "icons/puzzle.svg",
+            Pick::SlashAction {
+                run: "/plugins".into(),
+                fill: None,
+            },
+        ),
+        (
+            "model",
+            "Switch model or endpoint",
+            "icons/model.svg",
+            Pick::SlashAction {
+                run: "/model".into(),
+                fill: Some("/model ".into()),
+            },
+        ),
+        (
+            "session",
+            "Show or hide the Session panel",
+            "icons/panel-right.svg",
+            Pick::SlashAction {
+                run: "/session".into(),
+                fill: None,
+            },
+        ),
+        (
+            "files",
+            "Show or hide project files",
+            "icons/folder.svg",
+            Pick::SlashAction {
+                run: "/files".into(),
+                fill: None,
+            },
+        ),
+        (
+            "terminal",
+            "Show or hide the terminal dock",
+            "icons/terminal.svg",
+            Pick::SlashAction {
+                run: "/terminal".into(),
+                fill: None,
+            },
+        ),
         (
             "new",
             "Start a new chat",
             "icons/plus.svg",
-            Box::new(NewChat),
+            Pick::Action(Box::new(NewChat)),
         ),
         (
             "attach",
             "Attach files and images",
             "icons/paperclip.svg",
-            Box::new(AttachFiles),
+            Pick::Action(Box::new(AttachFiles)),
         ),
         (
             "find",
             "Find in this chat",
             "icons/search.svg",
-            Box::new(ToggleFind),
-        ),
-        (
-            "export",
-            "Export this chat as Markdown",
-            "icons/file-text.svg",
-            Box::new(ExportChat),
+            Pick::Action(Box::new(ToggleFind)),
         ),
         (
             "export-json",
             "Export this chat as JSON",
             "icons/file-json.svg",
-            Box::new(ExportChatJson),
+            Pick::Action(Box::new(ExportChatJson)),
         ),
         (
             "context-window",
             "Open the context window breakdown",
             "icons/model.svg",
-            Box::new(ShowContext),
-        ),
-        (
-            "tasks",
-            "Show this turn's tasks",
-            "icons/list-todo.svg",
-            Box::new(ToggleTasks),
+            Pick::Action(Box::new(ShowContext)),
         ),
         (
             "browser",
             "Turn the web browser on or off for KodAct's agents",
             "icons/globe.svg",
-            Box::new(ToggleBrowser),
+            Pick::Action(Box::new(ToggleBrowser)),
         ),
         (
             "settings",
             "Open settings",
             "icons/settings.svg",
-            Box::new(OpenSettings),
+            Pick::Action(Box::new(OpenSettings)),
         ),
         (
             "shortcuts",
             "Keyboard shortcuts",
             "icons/keyboard.svg",
-            Box::new(ShowShortcuts),
+            Pick::Action(Box::new(ShowShortcuts)),
         ),
         (
             "theme",
             "Switch light / dark",
             "icons/moon.svg",
-            Box::new(ToggleTheme),
+            Pick::Action(Box::new(ToggleTheme)),
         ),
     ]
 }
@@ -297,7 +352,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             let icon = if c.group == "Skills" {
                 "icons/scroll-text.svg"
             } else {
-                "icons/terminal.svg"
+                "icons/square-slash.svg"
             };
             push(
                 order,
@@ -310,7 +365,22 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
         }
     } else if trig.sign == '/' {
         let mut order = 0;
-        for c in s.completion_commands() {
+        let mut seen = std::collections::HashSet::new();
+        let all_cmds = s.completion_commands();
+        // 1) Project commands & Skills, then 2) Conversational Prompts, then 3) Actions:
+        // keeps each section header contiguous when browsing bare `/`.
+        let mut deferred_actions = vec![];
+        for c in all_cmds {
+            if !seen.insert(c.name.clone()) {
+                continue;
+            }
+            if c.group != "Skills"
+                && c.group != "This project"
+                && (c.name == "btw" || c.kind == crate::commands::CommandKind::Action)
+            {
+                deferred_actions.push(c);
+                continue;
+            }
             let label = format!("/{}", c.name);
             let detail = if c.args.is_empty() {
                 c.description.clone()
@@ -318,22 +388,51 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
                 format!("{} · {}", c.args, c.description)
             };
             let text = format!("/{} ", c.name);
-            let icon = if c.group == "Skills" {
-                "icons/scroll-text.svg"
+            let (group, icon) = if c.group == "Skills" {
+                ("Skills", "icons/scroll-text.svg")
+            } else if c.group == "This project" {
+                ("This project", "icons/square-slash.svg")
             } else {
-                "icons/terminal.svg"
+                ("Prompts", "icons/terminal.svg")
             };
-            push(order, label, detail, c.group, icon, Pick::Text(text));
+            push(order, label, detail, group, icon, Pick::Text(text));
             order += 1;
         }
-        for (name, what, icon, action) in app_actions() {
+        for c in deferred_actions {
+            let label = format!("/{}", c.name);
+            let detail = if c.args.is_empty() {
+                c.description.clone()
+            } else {
+                format!("{} · {}", c.args, c.description)
+            };
+            let text = format!("/{} ", c.name);
+            let (icon, pick) = if c.name == "btw" {
+                ("icons/terminal.svg", Pick::Text(text))
+            } else if c.args.starts_with('<') {
+                (action_icon(&c.name), Pick::Text(text))
+            } else {
+                (
+                    action_icon(&c.name),
+                    Pick::SlashAction {
+                        run: format!("/{}", c.name),
+                        fill: (!c.args.is_empty()).then_some(text),
+                    },
+                )
+            };
+            push(order, label, detail, "Actions", icon, pick);
+            order += 1;
+        }
+        for (name, what, icon, pick) in app_actions() {
+            if !seen.insert(name.to_string()) {
+                continue;
+            }
             push(
                 order,
                 format!("/{name}"),
                 what.to_string(),
-                "KodAct Desktop",
+                "Actions",
                 icon,
-                Pick::Action(action),
+                pick,
             );
             order += 1;
         }
@@ -342,6 +441,9 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             .filter(|m| *m != ModeId::Bypass || s.bypass_allowed)
         {
             let name = m.label().to_lowercase().replace(' ', "-");
+            if !seen.insert(name.clone()) {
+                continue;
+            }
             push(
                 order,
                 format!("/{name}"),

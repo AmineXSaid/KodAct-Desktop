@@ -18,6 +18,7 @@ pub mod button;
 pub mod changed_files;
 pub mod chat_menu;
 pub mod chat_view;
+pub mod command_modal;
 pub mod command_palette;
 pub mod compose_style;
 pub mod composer;

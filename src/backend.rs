@@ -726,6 +726,11 @@ impl Session {
         self.control(json!({ "subtype": "mcp_reconnect", "serverName": server }))
     }
 
+    /// Enable or disable an MCP server (`mcp_toggle`).
+    pub fn mcp_toggle(&self, server: &str, enabled: bool) -> Result<String, String> {
+        self.control(mcp_toggle_request(server, enabled))
+    }
+
     /// Your message with its attachments (`attach::content_blocks`).
     pub fn send_content(&self, content: Value) -> Result<(), String> {
         self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "" }))
@@ -830,6 +835,107 @@ impl Drop for Session {
 /// `set_max_thinking_tokens`: a number, or null for the model's default.
 pub fn thinking_budget_request(tokens: Option<u32>) -> Value {
     json!({ "subtype": "set_max_thinking_tokens", "max_thinking_tokens": tokens })
+}
+
+/// `mcp_toggle` control payload supported by KodAct CLI's host protocol.
+pub fn mcp_toggle_request(server: &str, enabled: bool) -> Value {
+    json!({ "subtype": "mcp_toggle", "serverName": server, "enabled": enabled })
+}
+
+/// Run a single stateless slash command (`/doctor`, `/status`, `/release-notes`,
+/// `/diff`) in a short-lived KodAct CLI process without writing a session file.
+/// Blocking: call off the UI thread.
+pub fn run_oneshot_command(
+    exe: &Path,
+    base_launch: Option<&Launch>,
+    cwd: &Path,
+    cli_line: &str,
+) -> Result<(String, bool), String> {
+    let launch = match base_launch {
+        Some(base) => {
+            let mut args = Vec::with_capacity(base.args.len() + 1);
+            let mut skip_next = false;
+            for a in &base.args {
+                if skip_next {
+                    skip_next = false;
+                    continue;
+                }
+                if a == "--session-id" || a == "--resume" {
+                    skip_next = true;
+                    continue;
+                }
+                args.push(a.clone());
+            }
+            if !args.iter().any(|a| a == "--no-session-persistence") {
+                args.push("--no-session-persistence".to_string());
+            }
+            Launch {
+                args,
+                env: base.env.clone(),
+            }
+        }
+        None => Launch {
+            args: [
+                "-p",
+                "--input-format",
+                "stream-json",
+                "--output-format",
+                "stream-json",
+                "--no-session-persistence",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+            env: vec![],
+        },
+    };
+    let session = Session::spawn(exe, &launch, cwd)?;
+    session.send(cli_line)?;
+    session.stdin.lock().unwrap().take();
+    let mut out = String::new();
+    while let Ok(ev) = session.events.recv_blocking() {
+        match ev {
+            Event::Immediate { text, is_error } => return Ok((text, is_error)),
+            Event::Break => {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push_str("\n\n");
+                }
+            }
+            Event::Text(t) => out.push_str(&t),
+            Event::Status(t) => {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push_str(&t);
+            }
+            Event::Error(e) => return Ok((e, true)),
+            Event::TurnEnd { error, .. } => {
+                if let Some(e) = error {
+                    if out.is_empty() {
+                        out = e;
+                    } else {
+                        out.push_str(&format!("\n{e}"));
+                    }
+                    return Ok((out, true));
+                }
+                return Ok((out, false));
+            }
+            Event::Exited { code, detail } => {
+                if !out.is_empty() {
+                    return Ok((out, code.unwrap_or(0) != 0));
+                }
+                if !detail.is_empty() {
+                    return Ok((detail, true));
+                }
+                return Err(format!(
+                    "KodAct CLI exited before answering (code {}).",
+                    code.unwrap_or(-1)
+                ));
+            }
+            _ => {}
+        }
+    }
+    Ok((out, false))
 }
 
 /// One MCP server as KodAct CLI reports it.
@@ -2231,6 +2337,10 @@ mod tests {
         assert_eq!(
             tool_call("Task", &json!({"description":"look"})).kind,
             ToolKind::Other
+        );
+        assert_eq!(
+            mcp_toggle_request("github", false),
+            json!({ "subtype": "mcp_toggle", "serverName": "github", "enabled": false })
         );
     }
 }

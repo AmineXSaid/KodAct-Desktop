@@ -312,6 +312,18 @@ impl Composer {
             return;
         }
         let text = self.text(cx);
+        // UI, settings and out-of-band engine slash commands (`/plugins`,
+        // `/status`, `/reload-plugins`, `/btw …`, `/routine …`) run immediately
+        // without creating a user message bubble or waiting in the turn queue.
+        if !text.trim().is_empty() {
+            let handled = self
+                .state
+                .update(cx, |s, cx| s.try_slash_action(&text, Some(window), cx));
+            if handled {
+                self.input.update(cx, |i, cx| i.set_value("", window, cx));
+                return;
+            }
+        }
         // A question waits: what you typed answers a question card, or
         // denies a permission card and says what to do instead.
         if self.state.read(cx).asking()
@@ -355,8 +367,8 @@ impl Composer {
         Some((trig, rows))
     }
 
-    /// Complete with row `i`.
-    fn pick(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+    /// Complete with row `i`. `by_tab` fills optional arguments instead of executing.
+    fn pick(&mut self, i: usize, by_tab: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some((trig, mut rows)) = self.completion(cx) else {
             return;
         };
@@ -367,6 +379,18 @@ impl Composer {
         let before = text[..trig.start].to_string();
         match rows.swap_remove(i).pick {
             super::autocomplete::Pick::Text(t) => self.fill(&format!("{before}{t}"), window, cx),
+            super::autocomplete::Pick::SlashAction { run, fill } => {
+                if by_tab {
+                    if let Some(f) = fill {
+                        self.fill(&format!("{before}{f}"), window, cx);
+                        self.ac_selected = 0;
+                        return;
+                    }
+                }
+                self.fill(&before, window, cx);
+                self.state
+                    .update(cx, |s, cx| _ = s.try_slash_action(&run, Some(window), cx));
+            }
             super::autocomplete::Pick::Action(a) => {
                 self.fill(&before, window, cx);
                 window.dispatch_action(a, cx);
@@ -405,7 +429,7 @@ impl Composer {
             "enter" | "tab" if n > 0 => {
                 let i = self.ac_selected.min(n - 1);
                 self.ac_took_enter = key == "enter";
-                self.pick(i, window, cx);
+                self.pick(i, key == "tab", window, cx);
             }
             "escape" => self.ac_closed_for = Some(self.text(cx)[trig.start..].to_string()),
             _ => return false,
@@ -854,7 +878,7 @@ impl Render for Composer {
                 ranked,
                 leaving,
                 move |i, window, cx| {
-                    let _ = me.update(cx, |c, cx| c.pick(i, window, cx));
+                    let _ = me.update(cx, |c, cx| c.pick(i, false, window, cx));
                 },
                 move |i, cx| {
                     let _ = me2.update(cx, |c, cx| {

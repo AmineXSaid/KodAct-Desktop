@@ -1940,6 +1940,30 @@ pub struct CompletionCommand {
     pub args: String,
     pub description: String,
     pub group: &'static str,
+    pub kind: crate::commands::CommandKind,
+}
+
+/// Ephemeral modal showing the output of an out-of-band slash command (`/status`, `/doctor`…).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommandModal {
+    pub command: SharedString,
+    pub output: SharedString,
+    pub pending: bool,
+    pub is_error: bool,
+}
+
+#[derive(Clone, Debug)]
+enum ImmediateSink {
+    Side,
+    Modal(SharedString),
+}
+
+#[derive(Clone, Debug)]
+struct EphemeralTurn {
+    command: SharedString,
+    output: String,
+    is_error: bool,
+    toast_only: bool,
 }
 
 /// A control request sent to a chat's KodAct CLI, and what its answer is for.
@@ -2498,9 +2522,14 @@ pub struct AppState {
     /// The attachment open in the editor (`attachment_editor.rs`): a pasted
     /// text to edit, or a picture to draw on. By its id.
     pub editing_attachment: Option<u64>,
-    /// Answers KodAct CLI gives at once, in the order asked, by chat: `true`
-    /// for a command typed in the composer (`/status`), `false` for `/btw`.
-    immediate_queue: std::collections::HashMap<usize, std::collections::VecDeque<bool>>,
+    /// Answers KodAct CLI gives at once, in the order asked, by chat: modal
+    /// output for an out-of-band command (`/status`), or the `/btw` side card.
+    immediate_queue: std::collections::HashMap<usize, std::collections::VecDeque<ImmediateSink>>,
+    /// Out-of-band turn-based CLI slash commands (`/doctor`, `/reload-plugins`…)
+    /// running without entering `c.messages`.
+    ephemeral_turns: std::collections::HashMap<usize, EphemeralTurn>,
+    /// Ephemeral output sheet for out-of-band inspection slash commands.
+    pub command_modal: Option<CommandModal>,
     /// Control requests waiting on KodAct CLI's answer, by request id.
     requests: std::collections::HashMap<String, Request>,
     /// For `@` completion: the project's files, read once per project.
@@ -2837,6 +2866,8 @@ impl AppState {
             pasted_texts: 0,
             editing_attachment: None,
             immediate_queue: Default::default(),
+            ephemeral_turns: Default::default(),
+            command_modal: None,
             requests: Default::default(),
             file_index: None,
             find_request: None,
@@ -9170,6 +9201,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 args: c.args,
                 description: c.description,
                 group: "This project",
+                kind: c.kind,
             })
             .chain(
                 self.skill_commands
@@ -9180,6 +9212,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         args: c.args,
                         description: c.description,
                         group: "Skills",
+                        kind: c.kind,
                     }),
             )
             .chain(
@@ -9190,6 +9223,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         args: c.args,
                         description: c.description,
                         group: "KodAct CLI",
+                        kind: c.kind,
                     }),
             )
             // KodAct's own: a side question (`parse_btw`), answered in a
@@ -9199,6 +9233,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 args: "<question>".into(),
                 description: "Ask a side question; the answer floats over the chat".into(),
                 group: "KodAct",
+                kind: crate::commands::CommandKind::Action,
             }])
             .collect()
     }
@@ -9521,8 +9556,14 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Summarize the conversation to free context: KodAct CLI's `/compact`,
     /// shown as a notice rather than a message of yours.
     pub fn compact(&mut self, cx: &mut Context<Self>) {
+        self.compact_with(None, cx);
+    }
+
+    pub fn compact_with(&mut self, instructions: Option<&str>, cx: &mut Context<Self>) {
         self.context_open = false;
-        let Some(id) = self.current else { return };
+        let Some(id) = self.current else {
+            return self.show_toast("Start or open a conversation first before compacting.", cx);
+        };
         if demo_mode() {
             return self.stub(crate::stubs::COMPACT_DEMO, cx);
         }
@@ -9540,7 +9581,11 @@ fix everything under 8, render it again to check, then tell me the scores before
                 return self.show_toast(format!("Couldn't start KodAct to compact: {e}"), cx);
             }
         }
-        match self.sessions.get(&id).map(|l| l.session.send("/compact")) {
+        let cmd = match instructions.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(extra) => format!("/compact {extra}"),
+            None => "/compact".to_string(),
+        };
+        match self.sessions.get(&id).map(|l| l.session.send(&cmd)) {
             Some(Ok(())) => {
                 self.notice(id, COMPACTING, false);
                 self.compacting.insert(id);
@@ -12054,19 +12099,587 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
+    /// Complete an out-of-band slash command: brief 1-line confirmations show
+    /// as a toast, while multi-line inspection reports open in `command_modal`.
+    fn finish_ephemeral_command(
+        &mut self,
+        command: SharedString,
+        output: String,
+        is_error: bool,
+        toast_only: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let trimmed = output.trim();
+        let single_line = !trimmed.contains('\n') && trimmed.chars().count() <= 140;
+        if toast_only || (!is_error && single_line) {
+            self.command_modal = None;
+            let msg = if trimmed.is_empty() {
+                format!("Ran {command}.")
+            } else {
+                trimmed.to_string()
+            };
+            self.show_toast(msg, cx);
+            return;
+        }
+        let body = if trimmed.is_empty() {
+            if is_error {
+                "KodAct CLI reported an error for this command.".to_string()
+            } else {
+                "(no output)".to_string()
+            }
+        } else {
+            trimmed.to_string()
+        };
+        self.command_modal = Some(CommandModal {
+            command,
+            output: body.into(),
+            pending: false,
+            is_error,
+        });
+        cx.notify();
+    }
+
+    /// Execute an engine slash command (`/status`, `/doctor`, `/reload-plugins`,
+    /// `/diff`, `/fast`…) out-of-band without creating a user or assistant
+    /// message in `c.messages`.
+    fn run_ephemeral_cli_command(&mut self, cli_line: String, toast_only: bool, cx: &mut Context<Self>) {
+        let label: SharedString = cli_line.clone().into();
+        if demo_mode() {
+            let demo_out = format!(
+                "### `{cli_line}` (Demo)\n\nRan out-of-band without entering the conversation transcript."
+            );
+            return self.finish_ephemeral_command(label, demo_out, false, toast_only, cx);
+        }
+        let immediate = crate::commands::is_immediate(&cli_line);
+        // Use the active chat's running KodAct CLI session when available.
+        if let Some(id) = self.current.filter(|id| self.sessions.contains_key(id)) {
+            if immediate {
+                if !toast_only {
+                    self.command_modal = Some(CommandModal {
+                        command: label.clone(),
+                        output: SharedString::default(),
+                        pending: true,
+                        is_error: false,
+                    });
+                }
+                if let Some(live) = self.sessions.get(&id) {
+                    match live.session.send(&cli_line) {
+                        Ok(()) => {
+                            self.immediate_queue
+                                .entry(id)
+                                .or_default()
+                                .push_back(ImmediateSink::Modal(label));
+                        }
+                        Err(e) => self.finish_ephemeral_command(label, e, true, toast_only, cx),
+                    }
+                }
+                cx.notify();
+                return;
+            }
+            if self.busy() {
+                return self.show_toast(
+                    format!("Wait for the current reply to finish before running {cli_line}."),
+                    cx,
+                );
+            }
+            if !toast_only {
+                self.command_modal = Some(CommandModal {
+                    command: label.clone(),
+                    output: SharedString::default(),
+                    pending: true,
+                    is_error: false,
+                });
+            }
+            if let Some(live) = self.sessions.get(&id) {
+                match live.session.send(&cli_line) {
+                    Ok(()) => {
+                        self.ephemeral_turns.insert(
+                            id,
+                            EphemeralTurn {
+                                command: label,
+                                output: String::new(),
+                                is_error: false,
+                                toast_only,
+                            },
+                        );
+                        self.replies.insert(id, Task::ready(()));
+                    }
+                    Err(e) => self.finish_ephemeral_command(label, e, true, toast_only, cx),
+                }
+            }
+            cx.notify();
+            return;
+        }
+
+        // No live session running yet (e.g. on the `+ New` screen or an idle chat):
+        // run a short-lived `--no-session-persistence` CLI process off the UI thread
+        // so zero dummy chats or session files are created.
+        let Some(exe) = crate::backend::find_cli() else {
+            return self.show_toast(
+                "KodAct CLI wasn't found. Check Settings → About or KODACT_CLI.",
+                cx,
+            );
+        };
+        let cwd = self
+            .current
+            .and_then(|id| self.chat_project_dir(id))
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| self.project_dir.clone());
+        let base_launch = self.active_profile().and_then(|profile| {
+            let eff = self.effort.filter(|e| profile.effort_levels().contains(e));
+            let sp = self
+                .settings_profile
+                .as_deref()
+                .and_then(crate::setting_profiles::path_of);
+            crate::backend::launch(
+                profile,
+                eff,
+                self.mode,
+                self.bypass_allowed,
+                crate::backend::Conversation::New("ephemeral"),
+                Some(&cwd),
+                sp.as_deref(),
+            )
+            .ok()
+        });
+        if !toast_only {
+            self.command_modal = Some(CommandModal {
+                command: label.clone(),
+                output: SharedString::default(),
+                pending: true,
+                is_error: false,
+            });
+            cx.notify();
+        }
+        let line_for_bg = cli_line.clone();
+        cx.spawn(async move |this, cx| {
+            let res = cx
+                .background_spawn(async move {
+                    crate::backend::run_oneshot_command(
+                        &exe,
+                        base_launch.as_ref(),
+                        &cwd,
+                        &line_for_bg,
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match res {
+                Ok((out, is_err)) => {
+                    s.finish_ephemeral_command(label, out, is_err, toast_only, cx);
+                }
+                Err(e) => s.finish_ephemeral_command(label, e, true, toast_only, cx),
+            });
+        })
+        .detach();
+    }
+
+    /// Intercept UI, settings, mode, and out-of-band engine slash commands so
+    /// they execute directly without adding a `Message::User` bubble to
+    /// `c.messages` or creating a dummy chat from `+ New`. Returns `true` when
+    /// handled; returns `false` for conversational skills and prompt commands.
+    pub fn try_slash_action(
+        &mut self,
+        raw: &str,
+        window: Option<&mut gpui::Window>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let trimmed = raw.trim();
+        if let Some(spec) = trimmed.strip_prefix("/routine ") {
+            self.add_routine(spec, cx);
+            return true;
+        }
+        if trimmed.eq_ignore_ascii_case("/routine") {
+            self.show_toast("Usage: /routine <when>: <request>", cx);
+            return true;
+        }
+        if let Some(question) = parse_btw(trimmed) {
+            self.ask_side(question, cx);
+            return true;
+        }
+        if trimmed.eq_ignore_ascii_case("/btw") {
+            self.show_toast("Usage: /btw <question>", cx);
+            return true;
+        }
+        let Some((cmd_raw, args)) = crate::commands::parse_slash(trimmed) else {
+            return false;
+        };
+        // Custom project `.md` commands and user/plugin skills with non-core names
+        // stay conversational prompts.
+        let exact_lower = cmd_raw.to_ascii_lowercase();
+        let is_user_or_skill = self.completion_commands().iter().any(|c| {
+            (c.group == "Skills" || c.group == "This project")
+                && c.name.eq_ignore_ascii_case(&exact_lower)
+        });
+        if is_user_or_skill && crate::commands::normalize_action(cmd_raw).is_none() {
+            return false;
+        }
+        if crate::commands::classify(trimmed) != Some(crate::commands::CommandKind::Action) {
+            return false;
+        }
+        let key = crate::commands::normalize_action(cmd_raw)
+            .map(str::to_string)
+            .unwrap_or_else(|| exact_lower.replace('_', "-"));
+
+        match key.as_str() {
+            "plugins" => {
+                if args.is_empty() || args.eq_ignore_ascii_case("list") {
+                    self.open_settings(SettingsTab::Plugins, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/plugin {args}"), false, cx);
+                }
+            }
+            "skills" => self.open_settings(SettingsTab::Skills, cx),
+            "commands" => self.open_settings(SettingsTab::Commands, cx),
+            "environments" => self.open_settings(SettingsTab::Environments, cx),
+            "memory" => self.open_settings(SettingsTab::Memory, cx),
+            "hooks" => {
+                if args.is_empty() {
+                    self.open_settings(SettingsTab::Hooks, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/hooks {args}"), false, cx);
+                }
+            }
+            "agents" => {
+                if args.is_empty() || args.eq_ignore_ascii_case("list") {
+                    self.open_settings(SettingsTab::Agents, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/agents {args}"), false, cx);
+                }
+            }
+            "mcp" => {
+                if args.is_empty() {
+                    self.open_settings(SettingsTab::Mcp, cx);
+                } else {
+                    let mut parts = args.split_whitespace();
+                    let sub = parts.next().unwrap_or_default().to_ascii_lowercase();
+                    let server = parts.next().unwrap_or("all");
+                    match sub.as_str() {
+                        "reconnect" if self.current.is_some_and(|id| self.sessions.contains_key(&id)) => {
+                            self.mcp_reconnect(server.to_string(), cx);
+                            self.show_toast(format!("Reconnecting MCP server ({server})…"), cx);
+                        }
+                        "enable" | "disable"
+                            if self.current.is_some_and(|id| self.sessions.contains_key(&id)) =>
+                        {
+                            let enable = sub == "enable";
+                            if let Some(chat) = self.current {
+                                if let Some(live) = self.sessions.get(&chat) {
+                                    let _ = live.session.mcp_toggle(server, enable);
+                                }
+                                self.ask_mcp_status(chat);
+                            }
+                            self.show_toast(
+                                format!(
+                                    "{} MCP server {server}.",
+                                    if enable { "Enabled" } else { "Disabled" }
+                                ),
+                                cx,
+                            );
+                        }
+                        _ => self.open_settings(SettingsTab::Mcp, cx),
+                    }
+                }
+            }
+            "permissions" => {
+                if args.is_empty() {
+                    self.open_settings(SettingsTab::Permissions, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/permissions {args}"), false, cx);
+                }
+            }
+            "sandbox" => {
+                if args.is_empty() {
+                    self.open_settings(SettingsTab::Sandbox, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/sandbox {args}"), false, cx);
+                }
+            }
+            "autocompact" => {
+                if args.is_empty() {
+                    self.open_settings(SettingsTab::Compaction, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/autocompact {args}"), false, cx);
+                }
+            }
+            "config" => {
+                if args.is_empty() {
+                    self.open_settings(SettingsTab::General, cx);
+                } else {
+                    self.run_ephemeral_cli_command(format!("/config {args}"), false, cx);
+                }
+            }
+            "settings" => self.open_settings(SettingsTab::General, cx),
+            "help" => self.open_settings(SettingsTab::Guide, cx),
+            "about" => self.open_settings(SettingsTab::About, cx),
+            "model" => {
+                if args.is_empty() {
+                    self.picker_open = !self.picker_open;
+                    self.modes_open = false;
+                    self.context_open = false;
+                    cx.notify();
+                } else {
+                    let q = args.to_ascii_lowercase();
+                    let profiles = self
+                        .endpoints
+                        .as_ref()
+                        .map(|e| e.profiles.as_slice())
+                        .unwrap_or(&[]);
+                    let found: Option<String> = profiles
+                        .iter()
+                        .find(|p| {
+                            p.name.eq_ignore_ascii_case(args)
+                                || p.model.eq_ignore_ascii_case(args)
+                                || p.display_name
+                                    .as_deref()
+                                    .is_some_and(|d| d.eq_ignore_ascii_case(args))
+                        })
+                        .or_else(|| {
+                            profiles.iter().find(|p| {
+                                p.name.to_ascii_lowercase().contains(&q)
+                                    || p.model.to_ascii_lowercase().contains(&q)
+                            })
+                        })
+                        .map(|p| p.name.clone());
+                    if let Some(name) = found {
+                        self.select_profile(&name, cx);
+                        self.show_toast(format!("Switched model profile to {name}."), cx);
+                    } else {
+                        self.picker_open = true;
+                        self.show_toast(format!("No profile matched \"{args}\" — choose one here."), cx);
+                    }
+                }
+            }
+            "effort" => {
+                if args.is_empty() {
+                    self.picker_open = true;
+                    cx.notify();
+                } else {
+                    let a = args.to_ascii_lowercase();
+                    if matches!(a.as_str(), "auto" | "none" | "off" | "default") {
+                        self.effort = None;
+                        self.show_toast("Reasoning effort: Auto", cx);
+                    } else {
+                        let parsed = match a.as_str() {
+                            "low" => Some(crate::endpoints::Effort::Low),
+                            "medium" | "med" => Some(crate::endpoints::Effort::Medium),
+                            "high" => Some(crate::endpoints::Effort::High),
+                            "xhigh" | "extra-high" => Some(crate::endpoints::Effort::Xhigh),
+                            "max" => Some(crate::endpoints::Effort::Max),
+                            _ => None,
+                        };
+                        let levels = self
+                            .active_profile()
+                            .map(|p| p.effort_levels())
+                            .unwrap_or_default();
+                        match parsed {
+                            Some(lvl) if levels.contains(&lvl) => {
+                                self.effort = Some(lvl);
+                                self.show_toast(format!("Reasoning effort: {}", lvl.label()), cx);
+                            }
+                            Some(lvl) if levels.is_empty() => {
+                                self.effort = None;
+                                self.show_toast(
+                                    format!("Current model uses automatic effort ({} not offered).", lvl.label()),
+                                    cx,
+                                );
+                            }
+                            _ => {
+                                let allowed: Vec<&str> =
+                                    levels.iter().map(|l| l.cli_name()).collect();
+                                self.show_toast(
+                                    format!(
+                                        "Supported effort levels: auto{}{}",
+                                        if allowed.is_empty() { "" } else { ", " },
+                                        allowed.join(", ")
+                                    ),
+                                    cx,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            "context" | "context-window" => {
+                if key == "context" && !args.is_empty() {
+                    self.run_ephemeral_cli_command(format!("/context {args}"), false, cx);
+                } else if let Some(id) = self.current {
+                    self.session_open = true;
+                    self.ask_context_usage(id);
+                    self.toggle_context(cx);
+                } else {
+                    self.show_toast("Start or open a conversation first to inspect its context.", cx);
+                }
+            }
+            "tasks" => {
+                if let Some(rest) = args.strip_prefix("stop") {
+                    let target = rest.trim();
+                    if target.is_empty() || target.eq_ignore_ascii_case("all") {
+                        self.stop_agents(cx);
+                        self.show_toast("Stopping background subagents…", cx);
+                    } else {
+                        self.stop_agent(target, cx);
+                        self.show_toast(format!("Stopping subagent {target}…"), cx);
+                    }
+                } else if !args.is_empty() {
+                    self.run_ephemeral_cli_command(format!("/tasks {args}"), false, cx);
+                } else {
+                    self.toggle_tasks(cx);
+                }
+            }
+            "compact" => {
+                self.compact_with((!args.is_empty()).then_some(args), cx);
+            }
+            "reload-plugins" | "reload-skills" => {
+                self.custom_commands = None;
+                self.file_index = None;
+                self.ensure_completions(cx);
+                let cli_cmd = format!("/{key}");
+                if self
+                    .current
+                    .is_some_and(|id| self.sessions.contains_key(&id))
+                    && !self.busy()
+                {
+                    self.run_ephemeral_cli_command(cli_cmd, true, cx);
+                } else {
+                    self.show_toast("Reloaded plugins, skills and commands.", cx);
+                }
+            }
+            "plan" => {
+                self.set_mode(ModeId::Plan, cx);
+                self.show_toast("Switched to Plan mode.", cx);
+            }
+            "manual" => {
+                self.set_mode(ModeId::Manual, cx);
+                self.show_toast("Switched to Manual mode.", cx);
+            }
+            "edit-automatically" => {
+                self.set_mode(ModeId::AcceptEdits, cx);
+                self.show_toast("Switched to Edit automatically mode.", cx);
+            }
+            "auto" => {
+                self.set_mode(ModeId::Auto, cx);
+                self.show_toast("Switched to Auto mode.", cx);
+            }
+            "bypass-permissions" => {
+                if self.bypass_allowed {
+                    self.set_mode(ModeId::Bypass, cx);
+                    self.show_toast("Switched to Bypass permissions mode.", cx);
+                } else {
+                    self.bypass_warning = true;
+                    cx.notify();
+                }
+            }
+            "goal" => {
+                if args.eq_ignore_ascii_case("clear") {
+                    if let Some(id) = self.current {
+                        self.goals.remove(&id);
+                        if self.sessions.contains_key(&id) && !self.busy() {
+                            self.run_ephemeral_cli_command("/goal clear".into(), true, cx);
+                            return true;
+                        }
+                    }
+                    self.show_toast("Cleared active goal.", cx);
+                } else if let Some(g) = self.current.and_then(|id| self.goals.get(&id)) {
+                    self.show_toast(format!("Active goal: {}", g.condition), cx);
+                } else {
+                    self.show_toast("Usage: /goal <condition> (or /goal clear)", cx);
+                }
+            }
+            "subtask" => self.show_toast("Usage: /subtask <task>", cx),
+            "loop" => self.show_toast("Usage: /loop [interval] <prompt>", cx),
+            "new" => self.new_chat(cx),
+            "session" => self.toggle_session(cx),
+            "files" => self.toggle_files(cx),
+            "browser" => {
+                let want = match args.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" => Some(true),
+                    "off" | "false" | "0" => Some(false),
+                    _ => None,
+                };
+                if want.is_none() || want != Some(self.browser) {
+                    self.toggle_browser(cx);
+                }
+                self.show_toast(
+                    format!(
+                        "Browser tools: {}",
+                        if self.browser { "on" } else { "off" }
+                    ),
+                    cx,
+                );
+            }
+            "shortcuts" => {
+                self.shortcuts_open = !self.shortcuts_open;
+                cx.notify();
+            }
+            "terminal" => {
+                if let Some(w) = window {
+                    w.dispatch_action(Box::new(crate::ui::ToggleTerminal), cx);
+                } else {
+                    self.terminal_open = !self.terminal_open;
+                    cx.notify();
+                }
+            }
+            "theme" => {
+                if let Some(w) = window {
+                    w.dispatch_action(Box::new(crate::ui::ToggleTheme), cx);
+                } else {
+                    self.dark = !self.dark;
+                    cx.notify();
+                }
+            }
+            "find" => {
+                if let Some(w) = window {
+                    w.dispatch_action(Box::new(crate::ui::ToggleFind), cx);
+                }
+            }
+            "attach" => {
+                if let Some(w) = window {
+                    w.dispatch_action(Box::new(crate::ui::AttachFiles), cx);
+                }
+            }
+            "export" => {
+                if let Some(id) = self.current {
+                    self.export_chat(id, cx);
+                } else {
+                    self.show_toast("No active chat to export.", cx);
+                }
+            }
+            "export-json" => {
+                if let Some(id) = self.current {
+                    self.export_chat_json(id, cx);
+                } else {
+                    self.show_toast("No active chat to export.", cx);
+                }
+            }
+            "status" | "usage" | "doctor" | "diff" | "fast" | "advisor" | "output-style"
+            | "add-dir" | "feedback" | "import" | "release-notes" => {
+                let cli_line = if args.is_empty() {
+                    format!("/{key}")
+                } else {
+                    format!("/{key} {args}")
+                };
+                self.run_ephemeral_cli_command(cli_line, false, cx);
+            }
+            _ => return false,
+        }
+        true
+    }
+
     /// Add your message, and have KodAct answer it (`send_to_forge`).
     pub fn send(&mut self, text: String, cx: &mut Context<Self>) {
         let text = text.trim().to_string();
-        // `/routine <when>: <request>` makes a routine, here.
-        if let Some(spec) = text.strip_prefix("/routine ") {
-            return self.add_routine(spec, cx);
-        }
-        // `/btw` opens the side card (and asks), even while a reply runs.
-        if let Some(question) = parse_btw(&text) {
-            return self.ask_side(question, cx);
+        // UI, settings and out-of-band engine commands never enter `c.messages`.
+        if self.try_slash_action(&text, None, cx) {
+            return;
         }
         if (text.is_empty() && self.attachments.is_empty()) || self.busy() {
             return;
+        }
+        // `/plan <description>` switches into Plan mode as it sends your prompt.
+        if crate::commands::parse_slash(&text)
+            .is_some_and(|(cmd, args)| cmd.eq_ignore_ascii_case("plan") && !args.is_empty())
+        {
+            self.set_mode(ModeId::Plan, cx);
         }
         if let Some(a) = self.attachments.iter().find(|a| a.pending) {
             return self.show_toast(
@@ -12380,7 +12993,10 @@ fix everything under 8, render it again to check, then tell me the scores before
         // A command KodAct CLI answers at once (`/status`) starts no turn: its
         // answer comes back as an immediate result.
         if attachments.is_empty() && crate::commands::is_immediate(&text) {
-            self.immediate_queue.entry(id).or_default().push_back(true);
+            self.immediate_queue
+                .entry(id)
+                .or_default()
+                .push_back(ImmediateSink::Modal(text.clone().into()));
             return;
         }
         self.replies.insert(id, Task::ready(()));
@@ -12788,6 +13404,83 @@ fix everything under 8, render it again to check, then tell me the scores before
                 _ => return,
             }
         }
+        // Out-of-band slash commands (`/doctor`, `/reload-plugins`, `/diff`…)
+        // accumulate into a toast or `command_modal`, never into `c.messages`.
+        if self.ephemeral_turns.contains_key(&chat) {
+            match &ev {
+                Event::Immediate { .. } | Event::ControlReply { .. } | Event::ModeChanged(_) => {}
+                Event::UserAccepted { .. } | Event::Thinking(_) => return,
+                Event::Break => {
+                    if let Some(ep) = self.ephemeral_turns.get_mut(&chat) {
+                        if !ep.output.is_empty() && !ep.output.ends_with('\n') {
+                            ep.output.push_str("\n\n");
+                        }
+                    }
+                    return;
+                }
+                Event::Text(t) | Event::Status(t) => {
+                    if let Some(ep) = self.ephemeral_turns.get_mut(&chat) {
+                        ep.output.push_str(t);
+                        if !ep.toast_only {
+                            self.command_modal = Some(CommandModal {
+                                command: ep.command.clone(),
+                                output: ep.output.clone().into(),
+                                pending: true,
+                                is_error: ep.is_error,
+                            });
+                        }
+                    }
+                    return cx.notify();
+                }
+                Event::Error(e) => {
+                    if let Some(ep) = self.ephemeral_turns.remove(&chat) {
+                        let out = if ep.output.trim().is_empty() {
+                            e.clone()
+                        } else {
+                            format!("{}\n{e}", ep.output.trim())
+                        };
+                        self.finish_ephemeral_command(ep.command, out, true, ep.toast_only, cx);
+                    }
+                    self.finish_turn(chat, cx);
+                    return;
+                }
+                Event::TurnEnd { error, .. } => {
+                    if let Some(ep) = self.ephemeral_turns.remove(&chat) {
+                        let is_err = ep.is_error || error.is_some();
+                        let out = match error {
+                            Some(e) if ep.output.trim().is_empty() => e.clone(),
+                            Some(e) => format!("{}\n{e}", ep.output.trim()),
+                            None => ep.output,
+                        };
+                        self.finish_ephemeral_command(ep.command, out, is_err, ep.toast_only, cx);
+                    }
+                    self.finish_turn(chat, cx);
+                    return;
+                }
+                Event::Exited { code, detail } => {
+                    if let Some(ep) = self.ephemeral_turns.remove(&chat) {
+                        let out = if !ep.output.trim().is_empty() {
+                            ep.output
+                        } else if !detail.is_empty() {
+                            detail.clone()
+                        } else {
+                            format!("KodAct stopped (exit code {}).", code.unwrap_or(-1))
+                        };
+                        self.finish_ephemeral_command(
+                            ep.command,
+                            out,
+                            code.unwrap_or(0) != 0,
+                            ep.toast_only,
+                            cx,
+                        );
+                    }
+                    self.sessions.remove(&chat);
+                    self.finish_turn(chat, cx);
+                    return;
+                }
+                _ => return,
+            }
+        }
         match ev {
             // Sub-agents fill the Agents panel (`on_agent_event`), not the transcript.
             Event::SubTool { .. } | Event::SubResult { .. } | Event::SubText { .. } => {}
@@ -13024,28 +13717,20 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
             }
             Event::Immediate { text, is_error } => {
-                // The oldest question asked of this kind gets it: a typed command's
-                // answer goes in the chat, a `/btw` answer in the side card.
-                let command = self
+                // Out-of-band inspection commands (`/status`, `/usage`…) open in
+                // `command_modal` or toast; `/btw` answers go to the side card.
+                let sink = self
                     .immediate_queue
                     .get_mut(&chat)
                     .and_then(|q| q.pop_front())
-                    .unwrap_or(false);
-                if command {
-                    self.push_block(
-                        chat,
-                        Block::Text(if text.is_empty() {
-                            "(no output)".into()
-                        } else {
-                            format!("```text\n{text}\n```").into()
-                        }),
-                    );
-                    if is_error {
-                        self.notice(chat, "KodAct CLI reported an error for this command.", true);
+                    .unwrap_or(ImmediateSink::Side);
+                match sink {
+                    ImmediateSink::Modal(command) => {
+                        self.finish_ephemeral_command(command, text, is_error, false, cx);
                     }
-                    self.touch(chat, cx);
-                } else {
-                    self.answer_side(chat, text, is_error);
+                    ImmediateSink::Side => {
+                        self.answer_side(chat, text, is_error);
+                    }
                 }
             }
             Event::UserAccepted { uuid, text } => {
@@ -14580,7 +15265,10 @@ impl AppState {
         }
         let live = self.sessions.get(&id).ok_or("KodAct isn't running.")?;
         live.session.send(&format!("/btw {question}"))?;
-        self.immediate_queue.entry(id).or_default().push_back(false);
+        self.immediate_queue
+            .entry(id)
+            .or_default()
+            .push_back(ImmediateSink::Side);
         Ok(())
     }
 
@@ -17416,6 +18104,35 @@ mod tests {
             .messages
             .push(Message::user("and next?".into(), SystemTime::now()));
         assert!(s.take_outgoing_history(42, "and next?", false).is_none());
+    }
+
+    #[test]
+    fn slash_actions_and_prompts_separate_cleanly_in_autocomplete() {
+        let mut s = AppState::new();
+        s.skill_commands = crate::commands::plugin_skills()
+            .chain(crate::commands::bundled_skills())
+            .collect();
+        let trig = crate::ui::autocomplete::trigger("/").expect("slash trigger");
+        let rows = crate::ui::autocomplete::items(&trig, &s);
+        let plugins_row = rows.iter().find(|r| r.label.as_ref() == "/plugins").expect("/plugins");
+        assert!(matches!(
+            &plugins_row.pick,
+            crate::ui::autocomplete::Pick::SlashAction { run, fill: None } if run == "/plugins"
+        ));
+        let reload_row = rows
+            .iter()
+            .find(|r| r.label.as_ref() == "/reload-plugins")
+            .expect("/reload-plugins");
+        assert!(matches!(
+            &reload_row.pick,
+            crate::ui::autocomplete::Pick::SlashAction { run, fill: None } if run == "/reload-plugins"
+        ));
+        let review_row = rows.iter().find(|r| r.label.as_ref() == "/review").expect("/review");
+        assert!(review_row.skill);
+        assert!(matches!(
+            &review_row.pick,
+            crate::ui::autocomplete::Pick::Text(t) if t == "/review "
+        ));
     }
 }
 

@@ -882,11 +882,12 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         // Each window that just closed leaves over a beat of its own.
-        let (palette_now, shortcuts_now, map_now, title_now, chat_now, toast_now) = {
+        let (palette_now, shortcuts_now, command_modal_now, map_now, title_now, chat_now, toast_now) = {
             let s = self.state.read(cx);
             (
                 s.palette_open.then_some(()),
                 s.shortcuts_open.then_some(()),
+                s.command_modal.clone(),
                 s.map_open.then_some(()),
                 s.title_menu,
                 s.chat_menu,
@@ -898,6 +899,9 @@ impl Render for Workspace {
         let shortcuts_f = p
             .shortcuts
             .frame(shortcuts_now, t.size.window_out_ms, window);
+        let command_modal_f = p
+            .command_modal
+            .frame(command_modal_now, t.size.window_out_ms, window);
         let map_f = p.map.frame(map_now, t.size.window_out_ms, window);
         let title_f = p.title.frame(title_now, t.size.menu_out_ms, window);
         let chat_f = p.chat.frame(chat_now, t.size.menu_out_ms, window);
@@ -2056,6 +2060,9 @@ impl Render for Workspace {
                         s.design_set_select(false, cx);
                     } else if s.map_open {
                         s.toggle_map(cx);
+                    } else if s.command_modal.is_some() {
+                        s.command_modal = None;
+                        cx.notify();
                     } else if s.shortcuts_open
                         || s.chat_menu.is_some()
                         || s.title_menu.is_some()
@@ -2535,6 +2542,9 @@ impl Render for Workspace {
             .children(
                 shortcuts_f.map(|(_, leaving)| super::shortcuts::render(&t, &self.state, leaving)),
             )
+            .children(command_modal_f.map(|(modal, leaving)| {
+                super::command_modal::render(&t, &self.state, &modal, window, leaving, cx)
+            }))
             .children(self.chat_menu(chat_f, window, cx))
             .children(self.title_menu(title_f, window, cx))
             .child(self.confirm.clone())
@@ -2549,6 +2559,7 @@ impl Render for Workspace {
 struct Presences {
     palette: super::motion::Presence<()>,
     shortcuts: super::motion::Presence<()>,
+    command_modal: super::motion::Presence<crate::state::CommandModal>,
     map: super::motion::Presence<()>,
     title: super::motion::Presence<(TitleMenu, gpui::Point<gpui::Pixels>)>,
     chat: super::motion::Presence<usize>,
