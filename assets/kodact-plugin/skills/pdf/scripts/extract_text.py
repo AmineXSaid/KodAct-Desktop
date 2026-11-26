@@ -9,6 +9,9 @@ from pathlib import Path
 import sys
 
 
+SHOWN = 10  # pages printed when none were asked for
+
+
 def parse_page_spec(spec: str | None, total_pages: int) -> list[int]:
     """Parse 1-based page spec (e.g. '1-3,5') into sorted 0-based indices."""
     if not spec:
@@ -61,10 +64,52 @@ def _extract_with_pypdf(pdf_path: Path, page_spec: str | None) -> list[dict]:
     ]
 
 
+def _extract_with_pdfium(pdf_path: Path, page_spec: str | None) -> list[dict]:
+    """Text through PDFium (pypdfium2), compiled: far faster than pdfplumber's character-by-
+    character layout, which only tables need."""
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf_path))
+    try:
+        out = []
+        for idx in parse_page_spec(page_spec, len(doc)):
+            page = doc[idx]
+            tp = page.get_textpage()
+            try:
+                text = tp.get_text_range().replace("\r\n", "\n").replace("\r", "\n")
+            finally:
+                tp.close()
+                page.close()
+            out.append({"page": idx + 1, "text": text.strip()})
+        return out
+    finally:
+        doc.close()
+
+
+def page_count(pdf_path: Path) -> int:
+    try:
+        import pypdfium2 as pdfium
+
+        doc = pdfium.PdfDocument(str(pdf_path))
+        try:
+            return len(doc)
+        finally:
+            doc.close()
+    except ImportError:
+        from pypdf import PdfReader
+
+        return len(PdfReader(str(pdf_path)).pages)
+
+
 def extract_pdf(pdf_path: Path, page_spec: str | None, include_tables: bool) -> list[dict]:
     """Extract text (and optionally tables) from pdf_path."""
     if not pdf_path.is_file():
         raise FileNotFoundError(f"Input PDF not found: {pdf_path}")
+    if not include_tables:
+        try:
+            return _extract_with_pdfium(pdf_path, page_spec)
+        except ImportError:
+            pass
 
     try:
         return _extract_with_pdfplumber(pdf_path, page_spec, include_tables)
@@ -107,10 +152,24 @@ def main() -> int:
         "--format", choices=("markdown", "json"), default="markdown", help="Output format"
     )
     parser.add_argument("-o", "--out", type=Path, help="Write output to file instead of stdout")
+    parser.add_argument("--all", action="store_true",
+                        help=f"Print every page even when there are more than {SHOWN} (default: the first {SHOWN})")
     args = parser.parse_args()
 
+    # A long PDF printed whole would flood whoever reads the output (500 pages printed 1.2 million
+    # characters, 2026-11-26): unasked, the screen gets its first pages and the way to the rest.
+    left_out = 0
+    spec = args.pages
+    if not args.pages and not args.out and not args.all and args.format == "markdown":
+        try:
+            total = page_count(args.input_pdf)
+        except Exception:
+            total = 0
+        if total > SHOWN:
+            spec, left_out = f"1-{SHOWN}", total - SHOWN
+
     try:
-        pages = extract_pdf(args.input_pdf, args.pages, args.tables)
+        pages = extract_pdf(args.input_pdf, spec, args.tables)
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -127,6 +186,10 @@ def main() -> int:
         print(f"Wrote {len(pages)} page(s) to {args.out}")
     else:
         print(output)
+        if left_out:
+            print(f"\n… {left_out} more page(s) not shown (pages {SHOWN + 1}-{SHOWN + left_out}). Read the ones the "
+                  f"question needs with --pages {SHOWN + 1}-{min(SHOWN + left_out, 2 * SHOWN)}, or write them all to "
+                  "a file with -o all.md and search it.")
     return 0
 
 

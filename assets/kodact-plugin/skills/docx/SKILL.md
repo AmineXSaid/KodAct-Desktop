@@ -67,7 +67,8 @@ Always write a new file (OUT) and leave the person's original as it was, unless 
 otherwise.
 
 - Read it: `python "$T/docx_tool.py" read in.docx` (headings, lists, paragraphs and tables as
-  Markdown, in order).
+  Markdown, in order). A long document prints its opening and an outline of the later headings;
+  then read the part the task needs with `--section "heading words"` (or `-o all.md` to search).
 - Replace text, keeping each run's formatting, even across Word's run boundaries:
   `python "$T/docx_tool.py" replace in.docx out.docx --find "old" --replace "new"` (repeat pairs).
 - Comment on a passage: `python "$T/docx_tool.py" comment in.docx out.docx --quote "exact words"

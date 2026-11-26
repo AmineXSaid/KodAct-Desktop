@@ -3,7 +3,7 @@ comment, track changes, accept them.
 
     python docx_tool.py init OUT.docx [--audience WORDS | --theme NAME] --title T [--subtitle S] [--tag T] [--page a4|letter]
     python docx_tool.py add FILE --json BLOCK      (BLOCK: JSON object or list, or @file.json; saves in place)
-    python docx_tool.py read FILE
+    python docx_tool.py read FILE [--section WORDS | --all | -o OUT.md]   (a long one: its opening and an outline)
     python docx_tool.py create OUT.docx --markdown FILE.md [--page a4|letter] [--title TEXT]
     python docx_tool.py replace FILE OUT.docx --find TEXT --replace TEXT [--find ... --replace ...]
     python docx_tool.py append FILE OUT.docx --markdown FILE.md
@@ -226,6 +226,49 @@ def read(path):
     notes = _changes_and_comments(d)
     if notes:
         out += ["## Comments and tracked changes", ""] + notes
+    return "\n".join(out).strip() + "\n"
+
+
+CHARS_SHOWN = 20_000  # what `read` prints of a long document unless asked for all of it
+
+
+def bound(markdown, section=None, most=CHARS_SHOWN):
+    """What `read` prints: one section ("--section": from the heading that contains `section` to
+    the next heading of its level or above), or the document's opening up to `most` characters and
+    an outline of the headings after it. A 200-page report printed whole was 127,000 characters."""
+    lines = markdown.splitlines()
+    heads = [(i, len(ln) - len(ln.lstrip("#")), ln.lstrip("#").strip())
+             for i, ln in enumerate(lines) if re.match(r"^#{1,6} ", ln)]
+    if section:
+        want = section.strip().lower()
+        hit = next((h for h in heads if h[2].lower() == want), None) or \
+            next((h for h in heads if want in h[2].lower()), None)
+        if hit is None:
+            names = ", ".join(repr(h[2]) for h in heads[:40])
+            raise SystemExit(f"no heading contains {section!r}; the headings are {names}"
+                             + (" …" if len(heads) > 40 else ""))
+        start, level = hit[0], hit[1]
+        end = next((i for i, lv, _ in heads if i > start and lv <= level), len(lines))
+        return "\n".join(lines[start:end]).strip() + "\n"
+    if most is None or len(markdown) <= most:
+        return markdown
+    used, cut = 0, 0
+    for i, ln in enumerate(lines):
+        if used + len(ln) + 1 > most:
+            break
+        used += len(ln) + 1
+        cut = i + 1
+    # End at a block boundary, not mid-table or mid-paragraph.
+    while cut > 0 and lines[cut - 1].strip():
+        cut -= 1
+    rest = [h for h in heads if h[0] >= cut]
+    out = lines[:cut] + ["", f"… {len(markdown) - used:,} more characters not shown. The headings after this point:"]
+    for _, lv, name in rest[:60]:
+        out.append("  " * (lv - 1) + f"- {name}")
+    if len(rest) > 60:
+        out.append(f"  … and {len(rest) - 60} more headings")
+    out += ["", 'Read one with --section "heading words", all of it with --all, or write it to a file with '
+            "-o out.md and search that."]
     return "\n".join(out).strip() + "\n"
 
 
@@ -562,6 +605,9 @@ def main(argv=None):
     i.add_argument("--page", choices=sorted(PAGES), default="letter")
     b = sub.add_parser("add"); b.add_argument("file"); b.add_argument("--json", required=True); b.add_argument("--theme")
     r = sub.add_parser("read"); r.add_argument("file")
+    r.add_argument("--section", help="print only the section under the heading containing these words")
+    r.add_argument("--all", action="store_true", help=f"print everything (default: the first {CHARS_SHOWN:,} characters)")
+    r.add_argument("-o", "--out", help="write the whole document as Markdown to this file")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--markdown", required=True)
     c.add_argument("--page", choices=sorted(PAGES), default="letter"); c.add_argument("--title")
     p = sub.add_parser("replace"); p.add_argument("file"); p.add_argument("out")
@@ -585,7 +631,13 @@ def main(argv=None):
         n = add(args.file, _json(args.json), args.theme)
         print(f"added {n} block(s); saved {args.file}")
     elif args.cmd == "read":
-        sys.stdout.write(read(args.file))
+        text = read(args.file)
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as f:
+                f.write(text)
+            print(f"wrote {len(text):,} characters to {args.out}")
+        else:
+            sys.stdout.write(bound(text, args.section, None if args.all else CHARS_SHOWN))
     elif args.cmd == "create":
         create(args.out, _text(args.markdown), args.page, args.title)
         print(f"wrote {args.out}")

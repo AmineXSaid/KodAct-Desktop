@@ -73,7 +73,8 @@ none can render, say so, rely on `validate.py`, and don't keep trying other rend
 
 ## Change an existing deck
 
-- Read it: `python "$T/pptx_tool.py" read deck.pptx --shapes` (slides, shape names, text), or
+- Read it: `python "$T/pptx_tool.py" read deck.pptx --shapes` (slides, shape names, text; a deck
+  over 30 slides lists the rest by title: read them with `--slides 31-60`), or
   `python "$T/extract_text.py" deck.pptx` for text, tables and notes as Markdown.
 - Small edits keep the formatting: `replace` (find/replace everywhere), `set-text` (one shape,
   by name or `#index` from `read --shapes`), `notes`, `slides --order 3,1,2` (reorder, and drop the

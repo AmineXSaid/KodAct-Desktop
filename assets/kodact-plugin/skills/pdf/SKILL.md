@@ -35,7 +35,8 @@ Then look at it once: `python "$T/render_preview.py" doc.pdf --out-dir preview -
 
 - `python "$T/extract_text.py" in.pdf [--pages 1-3,5] [--tables] [-o out.md]` (`--format json`
   for data). Empty text means a scanned PDF: render it and read the page images, or OCR them.
-- Read only the pages the question needs; a long PDF's full text costs much context.
+- A PDF of more than 10 pages prints its first 10 and says how many follow: read the pages the
+  question needs with `--pages`, or write all of it to a file (`-o all.md`) and search that.
 
 ## Fill a form
 

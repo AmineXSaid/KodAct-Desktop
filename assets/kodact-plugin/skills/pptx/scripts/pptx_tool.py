@@ -3,7 +3,7 @@ shape's text, write speaker notes, reorder, delete and duplicate slides.
 
     python pptx_tool.py init OUT.pptx [--audience WORDS | --theme NAME] [--title T] [--subtitle S] [--tag T]
     python pptx_tool.py add FILE --json SLIDE      (SLIDE: JSON text, or @file.json; appends, saves in place)
-    python pptx_tool.py read FILE [--shapes]
+    python pptx_tool.py read FILE [--shapes] [--slides 1-5,9]   (a long deck: 30 slides, then titles)
     python pptx_tool.py create OUT.pptx --outline FILE.md
     python pptx_tool.py replace FILE OUT.pptx --find TEXT --replace TEXT [...]
     python pptx_tool.py set-text FILE OUT.pptx --slide N --shape NAME|#INDEX --text TEXT
@@ -268,12 +268,40 @@ def _title_shape(slide):
     return next((s for s in slide.shapes if s.name == "Title" and s.has_text_frame), None)
 
 
-def read(path, shapes=False):
+SLIDES_SHOWN = 30  # slides `read` prints unless --slides names others
+
+
+def _slide_spec(spec, total):
+    """1-based slide numbers from "1-5,9"."""
+    picked = set()
+    for part in str(spec).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        a, _, b = part.partition("-")
+        lo, hi = int(a), int(b or a)
+        picked.update(range(max(1, lo), min(total, hi) + 1))
+    return sorted(picked)
+
+
+def read(path, shapes=False, slides=None):
     """Each slide's title and text, as Markdown; with `shapes`, each text
-    shape by index and name, as `set-text` names them."""
+    shape by index and name, as `set-text` names them. `slides` ("1-5,9") picks slides; without
+    it a deck longer than SLIDES_SHOWN prints its first ones and then every later slide's title."""
     prs = Presentation(path)
+    total = len(prs.slides)
+    if slides:
+        wanted = set(_slide_spec(slides, total))
+    else:
+        wanted = set(range(1, min(total, SLIDES_SHOWN) + 1))
     out = []
+    later = []
     for n, slide in enumerate(prs.slides, start=1):
+        if n not in wanted:
+            if not slides:
+                t = _title_shape(slide)
+                later.append(f"- Slide {n}: " + (t.text_frame.text.strip() if t is not None else "(no title)"))
+            continue
         title_shape = _title_shape(slide)
         title = title_shape.text_frame.text.strip() if title_shape is not None else ""
         out.append(f"## Slide {n}" + (f": {title}" if title else ""))
@@ -293,7 +321,10 @@ def read(path, shapes=False):
         if slide.has_notes_slide and slide.notes_slide.notes_text_frame.text.strip():
             out.append("> Notes: " + slide.notes_slide.notes_text_frame.text.strip())
         out.append("")
-    return "\n".join(out)
+    if later:
+        out += [f"… slides {SLIDES_SHOWN + 1}-{total} by title (read them with --slides "
+                f"{SLIDES_SHOWN + 1}-{min(total, 2 * SLIDES_SHOWN)}):"] + later
+    return "\n".join(out) + "\n"
 
 
 def create(out, outline):
@@ -477,6 +508,7 @@ def main(argv=None):
     a = sub.add_parser("add"); a.add_argument("file"); a.add_argument("--json", required=True)
     a.add_argument("--theme", choices=sorted(deck_design.THEMES))
     r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--shapes", action="store_true")
+    r.add_argument("--slides", help=f"slides to read, e.g. 1-5,9 (default: the first {SLIDES_SHOWN}, then titles)")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--outline", required=True)
     p = sub.add_parser("replace"); p.add_argument("file"); p.add_argument("out")
     p.add_argument("--find", action="append", required=True); p.add_argument("--replace", action="append", required=True)
@@ -498,7 +530,7 @@ def main(argv=None):
             n = add(args.file, one, args.theme)
         print(f"added slide(s) up to {n}; saved {args.file}")
     elif args.cmd == "read":
-        sys.stdout.write(read(args.file, args.shapes))
+        sys.stdout.write(read(args.file, args.shapes, args.slides))
     elif args.cmd == "set-text":
         set_text(args.file, args.out, args.slide, args.shape, args.text)
         print(f"set slide {args.slide} {args.shape}; wrote {args.out}")

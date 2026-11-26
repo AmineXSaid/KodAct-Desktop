@@ -46,7 +46,8 @@ From a CSV in one step: `python "$T/xlsx_tool.py" create book.xlsx --csv data.cs
 
 - Its shape first: `python "$T/inspect_workbook.py" book.xlsx` (sheets, sizes, formula counts).
 - Values as last computed: `python "$T/xlsx_tool.py" read book.xlsx [--sheet NAME]`; formulas:
-  `--formulas`; one range with both: `read book.xlsx --range "Sheet1!B2:D9"`.
+  `--formulas`; one range with both: `read book.xlsx --range "Sheet1!B2:D9"`. It prints 50 rows a
+  sheet and how many more there are: read further with `--range` or `--rows N`, rather than all.
 - Set cells, keeping every style, format and formula untouched:
   `python "$T/xlsx_tool.py" set book.xlsx out.xlsx --cell "Budget!C3=700" --cell "Budget!D3==C3-B3"`
   (`==` starts a formula). A wrong sheet name lists the sheets there are.

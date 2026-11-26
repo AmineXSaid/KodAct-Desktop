@@ -566,3 +566,71 @@ def test_text_is_measured_in_its_font_not_by_counting_letters(tmp_path):
     # Counting letters said this fits on one line; in Calibri it takes two.
     _, out = run("pptx", "validate.py", "w.pptx", cwd=tmp_path, ok=False)
     assert "overflows the box" in out
+
+
+# ---------- phase 3: scale ----------
+
+def test_a_big_csv_becomes_a_workbook_in_linear_time(tmp_path):
+    # 100,000 rows took 19 minutes (ws.max_row after every append); 20,000 now take a second or two.
+    import time
+
+    with open(tmp_path / "r.csv", "w") as f:
+        f.write("Id,Units,Price\n")
+        f.writelines(f"{i},{i % 100},{i % 50 + 0.5}\n" for i in range(20_000))
+    t = time.perf_counter()
+    run("xlsx", "xlsx_tool.py", "create", "b.xlsx", "--csv", "r.csv", cwd=tmp_path)
+    assert time.perf_counter() - t < 20
+    _, out = run("xlsx", "xlsx_tool.py", "read", "b.xlsx", cwd=tmp_path)
+    assert "(20,001 rows × 3 columns)" in out and "19,951 more row(s) not shown" in out
+    assert len(out) < 5_000
+    _, out = run("xlsx", "xlsx_tool.py", "read", "b.xlsx", "--range", "'Sheet1'!A20001:C20001", cwd=tmp_path)
+    assert "19999" in out
+
+
+def _long_pdf(path, pages):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(path), pagesize=letter)
+    for i in range(pages):
+        c.drawString(72, 720, f"Page {i + 1} says hello")
+        c.showPage()
+    c.save()
+
+
+def test_a_long_pdf_prints_its_first_pages_and_the_way_to_the_rest(tmp_path):
+    _long_pdf(tmp_path / "l.pdf", 40)
+    _, out = run("pdf", "extract_text.py", "l.pdf", cwd=tmp_path)
+    assert "## Page 10" in out and "## Page 11" not in out and "30 more page(s) not shown" in out
+    _, out = run("pdf", "extract_text.py", "l.pdf", "--pages", "40", cwd=tmp_path)
+    assert "Page 40 says hello" in out
+    _, out = run("pdf", "extract_text.py", "l.pdf", "--all", cwd=tmp_path)
+    assert "Page 40 says hello" in out
+    run("pdf", "extract_text.py", "l.pdf", "-o", "all.md", cwd=tmp_path)
+    assert (tmp_path / "all.md").read_text().count("## Page ") == 40
+
+
+def test_a_long_document_reads_as_an_opening_an_outline_and_sections(tmp_path):
+    blocks = []
+    for i in range(80):
+        blocks += [{"block": "heading", "text": f"Part {i + 1}", "level": 1},
+                   {"block": "text", "text": "What this part found. " * 30}]
+    (tmp_path / "b.json").write_text(json.dumps(blocks))
+    run("docx", "docx_tool.py", "init", "r.docx", "--title", "Long", cwd=tmp_path)
+    run("docx", "docx_tool.py", "add", "r.docx", "--json", "@b.json", cwd=tmp_path)
+    _, out = run("docx", "docx_tool.py", "read", "r.docx", cwd=tmp_path)
+    assert len(out) < 25_000 and "- Part 80" in out and "--section" in out
+    _, out = run("docx", "docx_tool.py", "read", "r.docx", "--section", "Part 8", cwd=tmp_path)
+    assert out.startswith("# Part 8\n") and "Part 80" not in out and "Part 9" not in out
+    run("docx", "docx_tool.py", "read", "r.docx", "--section", "Nope", cwd=tmp_path, ok=False)
+
+
+def test_a_long_deck_reads_its_first_slides_then_titles(tmp_path):
+    slides = [{"layout": "bullets", "title": f"Point {i + 2}", "items": ["A", "B"]} for i in range(44)]
+    (tmp_path / "s.json").write_text(json.dumps(slides))
+    run("pptx", "pptx_tool.py", "init", "d.pptx", "--title", "Long", cwd=tmp_path)
+    run("pptx", "pptx_tool.py", "add", "d.pptx", "--json", "@s.json", cwd=tmp_path)
+    _, out = run("pptx", "pptx_tool.py", "read", "d.pptx", cwd=tmp_path)
+    assert "## Slide 30" in out and "## Slide 31" not in out and "- Slide 45: Point 45" in out
+    _, out = run("pptx", "pptx_tool.py", "read", "d.pptx", "--slides", "45", cwd=tmp_path)
+    assert "## Slide 45: Point 45" in out

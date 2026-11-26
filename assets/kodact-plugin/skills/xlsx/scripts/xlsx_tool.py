@@ -2,7 +2,7 @@
 
     python xlsx_tool.py init OUT.xlsx [--audience WORDS | --theme NAME] --title T [--subtitle S] [--sheet NAME]
     python xlsx_tool.py add FILE --json BLOCK       (BLOCK: JSON object or list, or @file.json; saves in place)
-    python xlsx_tool.py read FILE [--sheet NAME] [--formulas]
+    python xlsx_tool.py read FILE [--sheet NAME] [--formulas] [--rows N]   (50 rows a sheet unless --rows; 0: all)
     python xlsx_tool.py read FILE --range "Sheet1!B2:D9"   (each cell's value and formula)
     python xlsx_tool.py set FILE OUT.xlsx --cell "Sheet1!B3=42" [--cell "C3==B3*2" ...]
     python xlsx_tool.py append-rows FILE OUT.xlsx --csv ROWS.csv [--sheet NAME]
@@ -163,23 +163,41 @@ def _sheet(wb, name):
     raise SystemExit(f"no sheet {name!r}; the sheets are {', '.join(repr(n) for n in wb.sheetnames)}")
 
 
-def read(path, sheet=None, formulas=False):
-    """Each sheet as a Markdown table, with its column letters and row numbers.
-    Shows computed values (what Excel last saved) unless `formulas`."""
-    wb = openpyxl.load_workbook(path, data_only=not formulas)
-    names = [_sheet(wb, sheet).title] if sheet else wb.sheetnames
-    out = []
-    for name in names:
-        ws = wb[name]
-        out.append(f"## {name} ({ws.max_row} rows × {ws.max_column} columns)\n")
-        cols = [get_column_letter(c) for c in range(1, ws.max_column + 1)]
-        out.append("| | " + " | ".join(cols) + " |")
-        out.append("|---|" + "---|" * len(cols))
-        for r, row in enumerate(ws.iter_rows(values_only=True), start=1):
-            cells = ["" if v is None else str(v) for v in row]
-            out.append(f"| {r} | " + " | ".join(cells) + " |")
-        out.append("")
-    return "\n".join(out)
+ROWS_SHOWN = 50  # rows printed per sheet unless asked for more
+
+
+def read(path, sheet=None, formulas=False, rows=ROWS_SHOWN):
+    """Each sheet as a Markdown table, with its column letters and row numbers, up to `rows` rows
+    a sheet (None: all), then how many more there are and how to read them: 100,000 rows printed
+    whole are 3.7 million characters. Shows computed values (what Excel last saved) unless
+    `formulas`. Streams the file (read-only), so a big workbook reads in seconds."""
+    wb = openpyxl.load_workbook(path, data_only=not formulas, read_only=True)
+    try:
+        names = [_sheet(wb, sheet).title] if sheet else wb.sheetnames
+        out = []
+        for name in names:
+            ws = wb[name]
+            n_rows, n_cols = ws.max_row or 0, ws.max_column or 0
+            out.append(f"## {name} ({n_rows:,} rows × {n_cols} columns)\n")
+            cols = [get_column_letter(c) for c in range(1, n_cols + 1)]
+            out.append("| | " + " | ".join(cols) + " |")
+            out.append("|---|" + "---|" * len(cols))
+            shown = 0
+            for r, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                if rows is not None and shown >= rows:
+                    break
+                cells = ["" if v is None else str(v) for v in row]
+                out.append(f"| {r} | " + " | ".join(cells) + " |")
+                shown += 1
+            if rows is not None and n_rows > shown:
+                last = get_column_letter(max(1, n_cols))
+                out.append(f"\n… {n_rows - shown:,} more row(s) not shown. Read a part with "
+                           f"--range \"'{name}'!A{shown + 1}:{last}{min(n_rows, shown + 50)}\", more with --rows N, "
+                           f"or all with --rows 0 (long).")
+            out.append("")
+        return "\n".join(out)
+    finally:
+        wb.close()
 
 
 def read_range(path, ref):
@@ -247,25 +265,36 @@ def append_rows(path, out, rows, sheet=None):
 
 
 def create(out, rows, sheet=None):
+    """A workbook from CSV rows: a bold header with a rule under it, frozen, numbers formatted per
+    column and columns as wide as their longest entry. Linear in the rows (asking openpyxl for
+    ws.max_row after each append made 100,000 rows take 19 minutes, 2026-11-26)."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = sheet or "Sheet1"  # Excel's name for a first sheet, which formulas and people assume
-    body, head = Font(name=FONT, size=11), Font(name=FONT, size=11, bold=True)
-    for i, row in enumerate(rows):
-        ws.append([_value(c) for c in row])
-        for cell in ws[ws.max_row]:
-            cell.font = head if i == 0 else body
-    if rows:
-        for cell in ws[1]:
-            cell.border = Border(bottom=Side(style="thin", color="FF808080"))
-        ws.freeze_panes = "A2"
-    for c in range(1, ws.max_column + 1):
-        fmt = _number_format([ws.cell(r, c).value for r in range(2, ws.max_row + 1)])
+    # Body cells keep the workbook's default style, Calibri 11 (named, so the font never varies by
+    # app); only the header is styled.
+    values = [[_value(c) for c in row] for row in rows]
+    for row in values:
+        ws.append(row)
+    if not values:
+        _finish(wb, sheet, new=True)
+        wb.save(out)
+        return
+    head = Font(name=FONT, size=11, bold=True)
+    rule = Border(bottom=Side(style="thin", color="FF808080"))
+    for cell in ws[1]:
+        cell.font, cell.border = head, rule
+    ws.freeze_panes = "A2"
+    n_cols = max(len(r) for r in values)
+    for c in range(n_cols):
+        column = [r[c] if c < len(r) else None for r in values[1:]]
+        fmt = _number_format(column)
         if fmt:
-            for r in range(2, ws.max_row + 1):
-                ws.cell(r, c).number_format = fmt
-        width = max(len(str(ws.cell(r, c).value or "")) for r in range(1, ws.max_row + 1))
-        ws.column_dimensions[get_column_letter(c)].width = min(max(10, width + 2), 60)
+            for i, v in enumerate(column, start=2):
+                if v is not None:
+                    ws.cell(i, c + 1).number_format = fmt
+        width = max((len(str(r[c])) for r in values if c < len(r) and r[c] is not None), default=0)
+        ws.column_dimensions[get_column_letter(c + 1)].width = min(max(10, width + 2), 60)
     _finish(wb, sheet, new=True)
     wb.save(out)
 
@@ -312,6 +341,7 @@ def main(argv=None):
     i.add_argument("--title", required=True); i.add_argument("--subtitle"); i.add_argument("--sheet")
     b = sub.add_parser("add"); b.add_argument("file"); b.add_argument("--json", required=True); b.add_argument("--theme")
     r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--sheet"); r.add_argument("--formulas", action="store_true"); r.add_argument("--range")
+    r.add_argument("--rows", type=int, default=ROWS_SHOWN, help=f"rows per sheet (default {ROWS_SHOWN}; 0: all)")
     s = sub.add_parser("set"); s.add_argument("file"); s.add_argument("out"); s.add_argument("--cell", action="append", required=True)
     a = sub.add_parser("append-rows"); a.add_argument("file"); a.add_argument("out"); a.add_argument("--csv", required=True); a.add_argument("--sheet")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--csv", required=True); c.add_argument("--sheet")
@@ -331,7 +361,7 @@ def main(argv=None):
         print(f"saved {args.file}")
         return
     if args.cmd == "read":
-        sys.stdout.write(read_range(args.file, args.range) if args.range else read(args.file, args.sheet, args.formulas))
+        sys.stdout.write(read_range(args.file, args.range) if args.range else read(args.file, args.sheet, args.formulas, args.rows or None))
     elif args.cmd == "set":
         n = set_cells(args.file, args.out, args.cell)
         print(f"set {n} cell(s); wrote {args.out}")
