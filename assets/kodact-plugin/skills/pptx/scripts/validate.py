@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Validate .pptx OOXML integrity, relationships, slide bounds, overlaps, font legibility, and bullet density."""
+"""Validate a .pptx: OOXML integrity and relationships, then what a reader would see: content cut off
+by the slide edge, text overflowing its box, text printed over text, an off-centre title, empty
+placeholders, tiny type and walls of text. Errors are things that look broken; warnings are
+things worth a look. Decoration (shapes without text) may bleed off the slide on purpose."""
 
 from __future__ import annotations
 
@@ -73,57 +76,117 @@ def validate_pptx(pptx_path: Path) -> tuple[list[str], list[str]]:
 
     try:
         from pptx import Presentation
-
-        prs = Presentation(str(pptx_path))
-        sw, sh = prs.slide_width, prs.slide_height
-        slide_area = max(1, sw * sh)
-
-        for s_idx, slide in enumerate(prs.slides, start=1):
-            text_boxes: list[tuple[str, tuple[int, int, int, int]]] = []
-            for shape in slide.shapes:
-                l, t, w, h = (
-                    shape.left or 0,
-                    shape.top or 0,
-                    shape.width or 0,
-                    shape.height or 0,
-                )
-                tol = int(EMU_PER_INCH * 0.05)
-                if l < -tol or t < -tol or l + w > sw + tol or t + h > sh + tol:
-                    warnings.append(
-                        f"Slide {s_idx}: '{shape.name}' extends outside slide canvas."
-                    )
-                if shape.has_text_frame:
-                    paras = [p for p in shape.text_frame.paragraphs if p.text.strip()]
-                    if paras:
-                        if w * h < slide_area * 0.85:
-                            text_boxes.append((shape.name, (l, t, w, h)))
-                        if len(paras) > 8:
-                            warnings.append(
-                                f"Slide {s_idx}: '{shape.name}' has {len(paras)} paragraphs (dense text wall; aim for <= 6)."
-                            )
-                        for p in paras:
-                            for r in p.runs:
-                                if r.font.size is not None and r.font.size.pt < 9.0:
-                                    warnings.append(
-                                        f"Slide {s_idx}: '{shape.name}' uses tiny font ({r.font.size.pt:.1f}pt < 9pt)."
-                                    )
-                                    break
-
-            for i in range(len(text_boxes)):
-                for j in range(i + 1, len(text_boxes)):
-                    n1, b1 = text_boxes[i]
-                    n2, b2 = text_boxes[j]
-                    area = _overlap_area(b1, b2)
-                    min_box = max(1, min(b1[2] * b1[3], b2[2] * b2[3]))
-                    if area / min_box > 0.15:
-                        warnings.append(
-                            f"Slide {s_idx}: text shapes '{n1}' and '{n2}' overlap ({int(area / min_box * 100)}%)."
-                        )
     except ImportError:
         warnings.append("'python-pptx' not installed; skipped slide geometry checks.")
+        return errors, warnings
 
+    prs = Presentation(str(pptx_path))
+    sw, sh = prs.slide_width, prs.slide_height
+    tol = int(EMU_PER_INCH * 0.05)
+    for s_idx, slide in enumerate(prs.slides, start=1):
+        _check_slide(slide, s_idx, sw, sh, tol, errors, warnings)
     return errors, warnings
 
+
+
+# What a reader sees: a shape with text, a picture, a chart or a table. A shape without any of
+# these is decoration (a corner blob, an accent bar, a card's background) and may bleed off the
+# slide on purpose; only content that leaves the canvas is cut off.
+def _content_kind(shape) -> str | None:
+    if shape.has_text_frame and shape.text_frame.text.strip():
+        return "text"
+    if getattr(shape, "has_chart", False) and shape.has_chart:
+        return "chart"
+    if getattr(shape, "has_table", False) and shape.has_table:
+        return "table"
+    if shape.shape_type is not None and int(shape.shape_type) == 13:  # MSO_SHAPE_TYPE.PICTURE
+        return "picture"
+    return None
+
+
+def _text_height_in(shape) -> float | None:
+    """The height in inches the shape's text needs at its font sizes, wrapped to its width; None
+    when a run's size isn't set on the slide (it comes from the layout, unknown here)."""
+    tf = shape.text_frame
+    m = lambda v, d: (v if v is not None else d) / EMU_PER_INCH  # noqa: E731
+    width = (shape.width or 0) / EMU_PER_INCH - m(tf.margin_left, 91440) - m(tf.margin_right, 91440)
+    if width <= 0.1:
+        return None
+    total = m(tf.margin_top, 45720) + m(tf.margin_bottom, 45720)
+    for p in tf.paragraphs:
+        sizes = [r.font.size.pt for r in p.runs if r.font.size is not None]
+        if p.runs and len(sizes) < len(p.runs):
+            return None
+        pt = max(sizes) if sizes else 12.0
+        chars = len(p.text)
+        per_line = max(1, int(width * 72 / (pt * 0.5)))
+        lines = 1
+        if tf.word_wrap is not False and chars > per_line:
+            lines, cur = 1, 0
+            for word in p.text.split():
+                add = len(word) + (1 if cur else 0)
+                if cur + add > per_line and cur:
+                    lines, cur = lines + 1, len(word)
+                else:
+                    cur += add
+        total += lines * pt * 1.15 / 72
+    return total
+
+
+def _autofits(shape) -> bool:
+    """PowerPoint shrinks this text to its box (normAutofit) or grows the box (spAutoFit)."""
+    body = shape.text_frame._txBody
+    return any(el.tag.endswith(("}normAutofit", "}spAutoFit")) for el in body.iter())
+
+
+def _check_slide(slide, s_idx, sw, sh, tol, errors, warnings) -> None:
+    where = f"Slide {s_idx}"
+    texts: list[tuple[str, tuple[int, int, int, int]]] = []
+    for shape in slide.shapes:
+        l, t, w, h = shape.left or 0, shape.top or 0, shape.width or 0, shape.height or 0
+        kind = _content_kind(shape)
+        if kind is None:
+            if shape.is_placeholder and shape.has_text_frame:
+                warnings.append(f"{where}: empty placeholder '{shape.name}' (delete it, or it shows "
+                                "'Click to add text' to whoever edits the deck).")
+            continue
+        if l < -tol or t < -tol or l + w > sw + tol or t + h > sh + tol:
+            errors.append(f"{where}: {kind} '{shape.name}' runs off the slide: it is cut off.")
+        if kind != "text":
+            continue
+        texts.append((shape.name, (l, t, w, h)))
+        paras = [p for p in shape.text_frame.paragraphs if p.text.strip()]
+        if len(paras) > 8:
+            warnings.append(f"{where}: '{shape.name}' has {len(paras)} paragraphs (a wall of text; aim for <= 6).")
+        tiny = [r.font.size.pt for p in paras for r in p.runs if r.font.size is not None and r.font.size.pt < 9.0]
+        if tiny:
+            warnings.append(f"{where}: '{shape.name}' uses tiny text ({min(tiny):.1f}pt < 9pt).")
+        # A glyph or a number in a badge (a 140pt quote mark, "3") is drawn, not read as lines.
+        need = _text_height_in(shape) if len("".join(shape.text_frame.text.split())) > 3 else None
+        have = h / EMU_PER_INCH
+        if need is not None and have > 0 and need > have * 1.2 + 0.1:
+            msg = (f"{where}: the text of '{shape.name}' needs about {need:.1f}in of height but its box "
+                   f"is {have:.1f}in: it overflows the box")
+            if _autofits(shape):
+                warnings.append(msg + " (PowerPoint shrinks it to fit, LibreOffice may not).")
+            else:
+                errors.append(msg + ". Shorten it, enlarge the box or lower the size.")
+        # A centred title placed for another slide size: python-pptx's default template is laid out
+        # for 4:3, so on a 16:9 slide its title sits left of centre.
+        if shape.is_placeholder and paras and getattr(shape.placeholder_format.type, "name", "") in ("TITLE", "CENTER_TITLE"):
+            off = abs((l + w / 2) - sw / 2) / max(1, sw)
+            if off > 0.08:
+                warnings.append(f"{where}: title '{shape.name}' sits {off:.0%} off the slide's centre "
+                                "(a layout made for another slide size); move or resize it.")
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            (n1, b1), (n2, b2) = texts[i], texts[j]
+            area = _overlap_area(b1, b2)
+            share = area / max(1, min(b1[2] * b1[3], b2[2] * b2[3]))
+            if share > 0.3:
+                errors.append(f"{where}: text shapes '{n1}' and '{n2}' overlap ({share:.0%}): words print over words.")
+            elif share > 0.15:
+                warnings.append(f"{where}: text shapes '{n1}' and '{n2}' overlap ({share:.0%}).")
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a .pptx file and its slide hygiene.")

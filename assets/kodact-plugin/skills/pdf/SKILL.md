@@ -1,97 +1,67 @@
 ---
 name: pdf
 description: >-
-  Comprehensive workflow for extracting text and tables from PDFs, creating
-  publication-grade PDFs with ReportLab, manipulating pages (merge, split,
-  rotate), routing and filling both interactive AcroForms and flat/scanned PDF
-  forms with validated bounding boxes, and visually verifying output with Poppler.
+  Make, read, fill and rearrange PDFs: a designed PDF from Markdown in one command (themed cover,
+  styled tables, page numbers) or from any Word, PowerPoint or Excel file (printed by Office itself
+  on Windows); text and tables out of a PDF; fillable forms filled with checked field names and
+  options; flat or scanned forms stamped inside measured boxes with a debug overlay; merge, split
+  and rotate; and rendered pages to look at before replying. Use for any .pdf task.
 ---
 
-# PDF Document Engineering Skill
+# PDFs
 
-Use this skill for all `.pdf` workflows: extracting structured text/tables, generating multi-page PDFs from scratch, merging/splitting/rotating pages, filling both interactive AcroForms and flat/scanned forms, and running visual QA.
+The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and that full path.
+`T="${KODACT_SKILL_DIR}/scripts"` below stands for that folder.
 
----
+## Make a PDF
 
-## 1. Decision Tree
+- **From content** (a report, a guide, a letter, notes): write it as Markdown (headings, lists,
+  tables, `**bold**`), then
+  `python "$T/make_pdf.py" from-markdown doc.md doc.pdf --audience "WHO READS IT" --subtitle "…"`.
+  The first `# Heading` becomes the cover's title. `--keep-docx` also keeps the Word file it was
+  printed from, to edit later.
+- **Richer layouts** (KPIs, callouts, charts, cards, timelines): build a Word document with the
+  docx skill's blocks (`python "${KODACT_SKILL_DIR}/../docx/scripts/docx_tool.py" --help`), or a
+  deck with the pptx skill, then print it:
+  `python "$T/make_pdf.py" from-office report.docx report.pdf` (.docx, .pptx, .xlsx). On Windows
+  with Office installed, Word, PowerPoint or Excel print it themselves; else LibreOffice.
+- Only when neither fits (an invoice laid out to the millimetre, a label sheet), write ReportLab
+  code: the patterns are in `references/pdf_patterns.md`.
 
-```text
-What is the task?
-├── Read / Extract / Inspect
-│   ├── Selectable text & tables ──▶ scripts/extract_text.py (--tables, --pages)
-│   ├── Check form type & fields ──▶ scripts/inspect_forms.py
-│   └── Scanned / image-only PDF ──▶ scripts/render_preview.py ──▶ OCR (tesseract) or visual read
-│
-├── Create New PDF from Scratch
-│   ├── Structured reports, invoices, tables ──▶ ReportLab Platypus (see references/pdf_patterns.md)
-│   ├── HTML/CSS-first layouts               ──▶ WeasyPrint / headless browser print-to-PDF
-│   └── From .docx / .pptx / .xlsx           ──▶ LibreOffice (--headless --convert-to pdf)
-│       ──▶ scripts/render_preview.py --grid ──▶ inspect PNGs
-│
-└── Transform or Fill Existing PDF
-    ├── Merge, split, reorder, rotate ──▶ scripts/merge_split.py
-    └── Fill a PDF Form (ALWAYS run scripts/inspect_forms.py first!)
-        ├── form_mode == "fillable_acroform"
-        │   └── scripts/fill_form.py (validates options & syncs /AS checkbox states)
-        │       ──▶ scripts/render_preview.py ──▶ inspect PNGs
-        └── form_mode == "flat_non_fillable"
-            └── scripts/render_preview.py (inspect blank form)
-                ──▶ scripts/fill_flat_form.py --debug-out debug.pdf -o filled.pdf
-                ──▶ scripts/render_preview.py debug.pdf (verify red/blue bounding boxes)
-```
+Then look at it once: `python "$T/render_preview.py" doc.pdf --out-dir preview --grid` and open
+`preview/grid-1.png` (not every page image). Reply with the file's name and what it holds.
 
----
+## Read a PDF
 
-## 2. Workflows
+- `python "$T/extract_text.py" in.pdf [--pages 1-3,5] [--tables] [-o out.md]` (`--format json`
+  for data). Empty text means a scanned PDF: render it and read the page images, or OCR them.
+- Read only the pages the question needs; a long PDF's full text costs much context.
 
-### A. Extracting Text & Tables
-- Run `python scripts/extract_text.py input.pdf --tables --pages 1-5 -o extracted.md` (or `--format json`).
-- If output is empty, the PDF is scanned—render with `render_preview.py` and OCR or read visually.
+## Fill a form
 
-### B. Creating a New PDF (`reportlab.platypus`)
-1. **Margins & Escape**: Use `>= 0.75 * inch` margins and always wrap dynamic strings in `xml.sax.saxutils.escape(text)` before passing to `Paragraph(...)`.
-2. **Orphan Prevention**: Set `keepWithNext=True` on all heading `ParagraphStyle`s.
-3. **Tables**: Explicit `colWidths=[...]`, wrap cell strings in `Paragraph(...)` so long text wraps instead of overflowing, and set `repeatRows=1`.
+1. **Find what kind it is**: `python "$T/inspect_forms.py" form.pdf`. It prints `fillable_acroform`
+   with each field's exact name, type, options (choices) and states (checkboxes), or
+   `flat_non_fillable`.
+2. **Fillable**: write `{"exact field name": value}` (checkboxes `true`/`false`, choices one of the
+   listed options) and run `python "$T/fill_form.py" form.pdf values.json -o filled.pdf`. It refuses
+   a name or an option that isn't in the form, rather than guessing.
+3. **Flat or scanned**: render the blank form
+   (`python "$T/render_preview.py" form.pdf --out-dir blank`), measure each answer's box on the
+   image as fractions of the page from its top-left corner, write the spec (format in
+   `references/pdf_patterns.md`), then
+   `python "$T/fill_flat_form.py" form.pdf spec.json --debug-out debug.pdf -o filled.pdf`. Render
+   `debug.pdf`: red boxes must sit on the answer lines, apart from the blue labels. Adjust and
+   repeat until they do.
+4. Render `filled.pdf` and look before replying.
 
-### C. Filling PDF Forms (Interactive vs. Flat)
-1. **Route first**:
-   ```bash
-   python scripts/inspect_forms.py form.pdf
-   ```
-2. **Path 1 — Interactive AcroForm (`fillable_acroform`)**:
-   - Inspect exact `name`, `type` (`/Tx`, `/Btn`, `/Ch`), `options`, and `states` (`/_States_`).
-   - Run `python scripts/fill_form.py form.pdf values.json -o filled.pdf`. (`fill_form.py` syncs both `/V` and widget `/AS` appearance states so headless Poppler renders checked checkboxes accurately.)
-3. **Path 2 — Flat / Non-Fillable Form (`flat_non_fillable`)**:
-   - Render blank pages with `render_preview.py`.
-   - Create a JSON spec using DPI-independent `"unit": "normalized"` (`0.0..1.0` from `"top-left"`) — see [pdf_patterns.md](./references/pdf_patterns.md).
-   - Run `fill_flat_form.py` with `--debug-out debug.pdf` (validates zero box overlaps, page bounds, and font height fit, and draws red entry boxes / blue label boxes for visual QA):
-     ```bash
-     python scripts/fill_flat_form.py form.pdf spec.json --debug-out debug.pdf -o filled.pdf
-     python scripts/render_preview.py debug.pdf --out-dir ./debug_preview
-     ```
+## Rearrange pages
 
----
+`python "$T/merge_split.py" merge a.pdf b.pdf -o all.pdf`;
+`split in.pdf --pages 2-4 -o part.pdf`; `rotate in.pdf --pages 1 --angle 90 -o out.pdf`.
 
-## 3. Mandatory Verification & QA Loop
+## Rules
 
-1. **Render Visual Preview**:
-   ```bash
-   python scripts/render_preview.py output.pdf --out-dir ./preview --dpi 150 --grid
-   ```
-2. **Visual Inspection Checklist**:
-   - [ ] Scan `grid-*.png` contact sheets first, then inspect high-density `page-*.png` pages.
-   - [ ] No text clipping, overlapping elements, or overflowing table cells.
-   - [ ] On filled forms: every text value sits cleanly inside its line/box and checkboxes display the expected check state.
-
----
-
-## 4. Helper Scripts Reference
-
-| Script | Purpose | Usage |
-| :--- | :--- | :--- |
-| [extract_text.py](./scripts/extract_text.py) | Extract text & tables (Markdown or JSON) | `python scripts/extract_text.py in.pdf --tables -o out.md` |
-| [inspect_forms.py](./scripts/inspect_forms.py) | Route form mode & list AcroForm fields/rects | `python scripts/inspect_forms.py form.pdf` |
-| [fill_form.py](./scripts/fill_form.py) | Fill AcroForms with `/AS` checkbox state sync | `python scripts/fill_form.py form.pdf data.json -o out.pdf` |
-| [fill_flat_form.py](./scripts/fill_flat_form.py) | Validate boxes & stamp flat/scanned PDF forms | `python scripts/fill_flat_form.py form.pdf spec.json --debug-out dbg.pdf -o out.pdf` |
-| [merge_split.py](./scripts/merge_split.py) | Merge, split/extract, or rotate PDF pages | `python scripts/merge_split.py merge a.pdf b.pdf -o out.pdf` |
-| [render_preview.py](./scripts/render_preview.py) | Render PDF pages & `--grid` contact sheets | `python scripts/render_preview.py out.pdf --grid` |
+- Never change the person's PDF in place: write a new file.
+- A filled form is checked by looking at it; a field that holds the value but shows nothing is
+  not filled.
+- Never claim a PDF was checked or looked at when rendering failed: say so.

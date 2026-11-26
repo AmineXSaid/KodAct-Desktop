@@ -59,7 +59,9 @@ from docx.text.run import Run
 from docx.shared import Mm, Pt
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # mdlite, beside this file
-from mdlite import blocks, inline, plain
+from mdlite import blocks, inline, plain  # noqa: E402
+# The design and icon code the document skills share: kodact-plugin/scripts.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
 
 AUTHOR = "KodAct"
 # Page sizes and margins, in millimetres.
@@ -250,7 +252,44 @@ def _runs(paragraph, text):
             run.font.size = Pt(10)
 
 
+def _doc_theme(d):
+    """The theme `init` gave this document (kept in its category), or None for a plain one."""
+    cat = d.core_properties.category or ""
+    if not cat.startswith(THEME_MARK):
+        return None
+    import deck_design
+
+    return deck_design.theme(cat[len(THEME_MARK):])
+
+
+def _theme_table(t, tbl):
+    """A Markdown table in a themed document, drawn like the `table` block: the header in the
+    accent, banded rows, hairlines, and a header that repeats on each page."""
+    import doc_design as dd
+    from docx.shared import RGBColor
+
+    t = dd.paper(t)
+    a = t["accents"][0]
+    tbl.style = None
+    dd.no_borders(tbl)
+    dd.cell_margins(tbl, 70, 70, 120, 120)
+    dd.put(tbl.rows[0]._tr.get_or_add_trPr(), OxmlElement("w:tblHeader"))
+    for ri, row in enumerate(tbl.rows):
+        for c in row.cells:
+            if ri == 0:
+                dd.shade(c, a)
+            else:
+                dd.shade(c, "FFFFFF" if ri % 2 else dd.mix(a, 0.94))
+                dd.borders(c, bottom=("single", 4, dd.mix(a, 0.8)))
+            for p in c.paragraphs:
+                dd.spacing(p, 0, 0)
+                for r in p.runs:
+                    r.font.size = Pt(10.5)
+                    r.font.color.rgb = RGBColor.from_string("FFFFFF" if ri == 0 else t["ink"])
+
+
 def add_markdown(d, markdown):
+    theme = _doc_theme(d)
     num_id, prev = None, None
     for b in blocks(markdown):
         kind = b[0]
@@ -290,6 +329,9 @@ def add_markdown(d, markdown):
             for j in _numeric_columns(rows, len(header)):
                 for row in t.rows:
                     row.cells[j].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            if theme:
+                _theme_table(theme, t)
+                d.add_paragraph()
 
 
 def _first_heading(markdown):

@@ -8,6 +8,7 @@ compare, quote, chart, image, toc, pagebreak.
 
 import os
 import re
+import sys
 import tempfile
 
 from docx.enum.section import WD_SECTION
@@ -17,8 +18,10 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-import chart_image
-import deck_design
+# The design and icon code the document skills share: kodact-plugin/scripts.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+import chart_image  # noqa: E402
+import deck_design  # noqa: E402
 
 BLOCKS = ("heading", "text", "bullets", "callout", "table", "kpis", "cards", "steps", "timeline", "compare",
           "quote", "chart", "image", "toc", "pagebreak")
@@ -161,6 +164,18 @@ def cell_margins(table, top=80, bottom=80, left=140, right=140):
     put(table._tbl.tblPr, m)
 
 
+def cell_pad(cell, top=80, bottom=80, left=140, right=140):
+    """The cell's own margins (tcMar). LibreOffice ignores a table's default margins (tblCellMar)
+    on some tables, so text that needs room inside a coloured band gets it on the cell too."""
+    m = OxmlElement("w:tcMar")
+    for side, v in (("top", top), ("left", left), ("bottom", bottom), ("right", right)):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:w"), str(v))
+        el.set(qn("w:type"), "dxa")
+        m.append(el)
+    put(cell._tc.get_or_add_tcPr(), m)
+
+
 def col_widths(table, inches):
     """Fixed column widths: Word otherwise spreads columns evenly."""
     table.autofit = False
@@ -291,6 +306,7 @@ def cover(doc, t, title, subtitle=None, tag=None):
     no_borders(tbl)
     cell_margins(tbl, 500, 500, 420, 420)
     c = tbl.cell(0, 0)
+    cell_pad(c, 500, 500, 420, 420)
     shade(c, a[0])
     c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     p = c.paragraphs[0]

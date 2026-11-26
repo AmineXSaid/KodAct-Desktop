@@ -1,10 +1,14 @@
 # Turn an Office file into a PDF with Microsoft Office itself, through COM,
 # with no window and no prompt: PowerPoint for .pptx/.ppt, Word for
-# .docx/.doc/.rtf, Excel for .xlsx/.xls. Used by check_tool.py's render and by
+# .docx/.doc/.rtf, Excel for .xlsx/.xls. Used by the skills' render_preview.py and by
 # KodAct's side panel, so a deck is drawn as PowerPoint draws it.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File office_to_pdf.ps1 IN OUT.pdf
 #   powershell -NoProfile -ExecutionPolicy Bypass -File office_to_pdf.ps1 -Probe
+#   powershell -NoProfile -ExecutionPolicy Bypass -File office_to_pdf.ps1 IN.xlsx OUT.xlsx -Recalc
+#
+# -Recalc has Excel recalculate every formula of IN.xlsx (CalculateFull) and
+# save the result, with its values, as OUT.xlsx; IN is still not changed.
 #
 # -Probe prints the Office apps this computer has (powerpoint word excel) and
 # exits 0, or prints nothing and exits 3. Exit codes: 0 done, 2 bad
@@ -14,7 +18,8 @@
 param(
     [string]$In,
     [string]$Out,
-    [switch]$Probe
+    [switch]$Probe,
+    [switch]$Recalc
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,6 +50,21 @@ $ext = [System.IO.Path]::GetExtension($In).ToLowerInvariant()
 $app = $null
 $doc = $null
 try {
+    if ($Recalc) {
+        if ($ext -notmatch '^\.(xlsx|xlsm)$') {
+            [Console]::Error.WriteLine("-Recalc takes an .xlsx workbook, not $ext")
+            exit 2
+        }
+        if (-not (Test-ComApp "Excel.Application")) { exit 3 }
+        $app = New-Object -ComObject Excel.Application
+        $app.Visible = $false
+        $app.DisplayAlerts = $false
+        $doc = $app.Workbooks.Open($In, 0, $true)
+        $app.CalculateFull()
+        if (Test-Path -LiteralPath $Out) { Remove-Item -LiteralPath $Out -Force }
+        $doc.SaveAs($Out, 51)  # xlOpenXMLWorkbook
+        $ext = ".xlsx"
+    } else {
     switch -Regex ($ext) {
         '^\.(pptx|ppt|pptm|ppsx)$' {
             if (-not (Test-ComApp "PowerPoint.Application")) { exit 3 }
@@ -76,6 +96,7 @@ try {
             exit 2
         }
     }
+    }
 } catch {
     [Console]::Error.WriteLine($_.Exception.Message)
     exit 4
@@ -95,7 +116,7 @@ try {
 }
 
 if (-not (Test-Path -LiteralPath $Out)) {
-    [Console]::Error.WriteLine("Office wrote no PDF")
+    [Console]::Error.WriteLine("Office wrote no file")
     exit 4
 }
 exit 0

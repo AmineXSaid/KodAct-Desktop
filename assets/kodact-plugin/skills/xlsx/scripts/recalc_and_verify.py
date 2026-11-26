@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Force-recalculate .xlsx formulas via isolated LibreOffice and audit for errors, _xlfn traps, and hardcoded totals."""
+"""Recalculate .xlsx formulas (Excel on Windows when installed, else an isolated LibreOffice) and audit
+for errors, uncomputed formulas, _xlfn traps and hardcoded totals."""
 
 from __future__ import annotations
 
@@ -13,6 +14,11 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+import warnings
+
+# openpyxl drops the extension part of conditional formats a recalculation added (the rule itself
+# stays); its warning about that says nothing the person can act on.
+warnings.filterwarnings("ignore", message=r".*extension is not supported.*")
 
 EXCEL_ERROR_PREFIXES = (
     "#REF!",
@@ -43,35 +49,11 @@ XLFN_REGEX = re.compile(
 )
 TOTAL_LABEL_REGEX = re.compile(r"^\s*(sub)?total\b|\bnet\s+total\b", re.IGNORECASE)
 
-MACRO_MODULE_XML = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic">
-Sub ForceRecalcAndSave(fileUrl As String)
-    Dim props(0) As New com.sun.star.beans.PropertyValue
-    props(0).Name = "Hidden"
-    props(0).Value = True
-    Dim doc As Object
-    doc = StarDesktop.loadComponentFromURL(fileUrl, "_blank", 0, props())
-    doc.calculateAll()
-    doc.store()
-    doc.close(True)
-End Sub
-</script:module>
-"""
-
-SCRIPT_XLB_XML = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE library:library PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "library.dtd">
-<library:library xmlns:library="http://openoffice.org/2000/library" library:name="Standard" library:readonly="false" library:passwordprotected="false">
- <library:element library:name="Module1"/>
-</library:library>
-"""
-
-
 SHARED_SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 if str(SHARED_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SHARED_SCRIPTS))
 
-from _kodact_office import find_soffice as _find_soffice, run_soffice  # noqa: E402
+from _kodact_office import recalc_xlsx  # noqa: E402
 
 
 def _patch_full_calc_on_load(xlsx_path: Path) -> None:
@@ -100,65 +82,14 @@ def _patch_full_calc_on_load(xlsx_path: Path) -> None:
             zout.writestr(name, data)
 
 
-def recalculate_xlsx(xlsx_path: Path, output_path: Path, timeout: int = 90) -> Path:
-    """Recalculate all formulas using an isolated temporary LibreOffice profile."""
-    _find_soffice()
-
-    with tempfile.TemporaryDirectory() as tmp_root:
-        tmp = Path(tmp_root)
-        work_xlsx = tmp / xlsx_path.name
-        shutil.copy2(xlsx_path, work_xlsx)
-        _patch_full_calc_on_load(work_xlsx)
-
-        profile_dir = tmp / "lo_profile"
-        basic_dir = profile_dir / "user" / "basic" / "Standard"
-        basic_dir.mkdir(parents=True, exist_ok=True)
-        (basic_dir / "Module1.xba").write_text(MACRO_MODULE_XML, encoding="utf-8")
-        (basic_dir / "script.xlb").write_text(SCRIPT_XLB_XML, encoding="utf-8")
-
-        profile_uri = profile_dir.resolve().as_uri()
-        file_uri = work_xlsx.resolve().as_uri()
-        macro_call = f"macro:///Standard.Module1.ForceRecalcAndSave({file_uri})"
-
-        proc = run_soffice(
-            [
-                f"-env:UserInstallation={profile_uri}",
-                "--headless",
-                "--norestore",
-                "--nolockcheck",
-                macro_call,
-            ],
-            timeout=timeout,
-            check=False,
-        )
-
-        # Fallback to --convert-to xlsx if macro invocation failed on a custom LO build
-        if proc.returncode != 0:
-            conv_dir = tmp / "conv"
-            conv_dir.mkdir(exist_ok=True)
-            run_soffice(
-                [
-                    f"-env:UserInstallation={profile_uri}",
-                    "--headless",
-                    "--norestore",
-                    "--nolockcheck",
-                    "--convert-to",
-                    "xlsx",
-                    "--outdir",
-                    str(conv_dir),
-                    str(work_xlsx),
-                ],
-                timeout=timeout,
-                check=True,
-            )
-            converted = conv_dir / work_xlsx.name
-            if converted.is_file():
-                work_xlsx = converted
-
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(work_xlsx, output_path)
-
-    return output_path
+def recalculate_xlsx(xlsx_path: Path, output_path: Path, timeout: int = 120) -> Path:
+    """Recalculate every formula (Excel on Windows when installed, else an isolated LibreOffice),
+    after marking the workbook for a full calculation on load, so stale cached values go too."""
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / xlsx_path.name
+        shutil.copy2(xlsx_path, work)
+        _patch_full_calc_on_load(work)
+        return recalc_xlsx(work, output_path, timeout=timeout)
 
 
 def audit_workbook(xlsx_path: Path) -> dict:
@@ -171,6 +102,7 @@ def audit_workbook(xlsx_path: Path) -> dict:
     errors: list[dict] = []
     warnings: list[dict] = []
     formula_count = 0
+    uncomputed: list[dict] = []
 
     try:
         for name in wb_vals.sheetnames:
@@ -199,6 +131,9 @@ def audit_workbook(xlsx_path: Path) -> dict:
 
                     if isinstance(raw_f, str) and raw_f.startswith("="):
                         formula_count += 1
+                        if val is None:
+                            uncomputed.append({"type": "not_computed", "sheet": name, "cell": coord,
+                                               "detail": f"No computed value for {raw_f}"})
                         m = XLFN_REGEX.search(raw_f)
                         if m:
                             warnings.append(
@@ -227,6 +162,7 @@ def audit_workbook(xlsx_path: Path) -> dict:
                     ):
                         errors.append(
                             {
+                                "type": "formula_error",
                                 "sheet": name,
                                 "cell": coord,
                                 "value": val,
@@ -236,6 +172,16 @@ def audit_workbook(xlsx_path: Path) -> dict:
     finally:
         wb_vals.close()
         wb_form.close()
+
+    # No formula has a value: the workbook was never calculated (openpyxl writes none), so it shows
+    # empty cells and no error could have been found. That is a failure, not a pass. A few empty
+    # results among computed ones can be formulas that give "" on purpose: a warning each.
+    if formula_count and len(uncomputed) == formula_count:
+        errors.append({"type": "not_recalculated", "sheet": "", "cell": "",
+                       "detail": f"None of the {formula_count} formula(s) has a computed value: "
+                                 "the workbook was not recalculated, so its errors are unknown."})
+    else:
+        warnings.extend(uncomputed)
 
     return {
         "file": str(xlsx_path),
@@ -299,7 +245,8 @@ def main() -> int:
         print(f"WARNING [{w['sheet']}!{w['cell']}]: {w['detail']}", file=sys.stderr)
     for err in report["errors"]:
         print(
-            f"ERROR [{err['sheet']}!{err['cell']}]: {err['value']} (formula={err['formula']!r})",
+            (f"ERROR: {err['detail']}" if err.get("type") == "not_recalculated"
+             else f"ERROR [{err['sheet']}!{err['cell']}]: {err['value']} (formula={err['formula']!r})"),
             file=sys.stderr,
         )
 

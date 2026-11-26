@@ -134,24 +134,36 @@ def shape(slide, kind, x, y, w, h, fill=None, line=None, lw=1.5, radius=None):
     return s
 
 
+def _fits(text, w, h, pt, line=1.18, char_w=0.52):
+    """Whether `text` at `pt` wraps into a w x h inch box."""
+    per_line = max(1, int(w * 72 / (pt * char_w)))
+    lines, cur = 1, 0
+    for word in text.split():
+        add = len(word) + (1 if cur else 0)
+        if cur + add > per_line and cur:
+            lines += 1
+            cur = len(word)
+        else:
+            cur += add
+    lines += text.count("\n")
+    return lines * pt * line / 72 <= h
+
+
 def fit_pt(text, w, h, max_pt, min_pt=12, line=1.18, char_w=0.52):
-    """The largest size from max_pt down at which `text` wraps into a w x h inch box."""
-    words = text.split()
+    """The largest size from max_pt down at which `text` wraps into a w x h inch box. When even
+    min_pt is too big, says so on stderr (the text is too long for this layout) and returns min_pt:
+    smaller type would be unreadable, so the words are what must change."""
     pt = max_pt
     while pt > min_pt:
-        per_line = max(1, int(w * 72 / (pt * char_w)))
-        lines, cur = 1, 0
-        for word in words:
-            add = len(word) + (1 if cur else 0)
-            if cur + add > per_line and cur:
-                lines += 1
-                cur = len(word)
-            else:
-                cur += add
-        lines += text.count("\n")
-        if lines * pt * line / 72 <= h:
+        if _fits(text, w, h, pt, line, char_w):
             return pt
         pt -= 1
+    if not _fits(text, w, h, min_pt, line, char_w):
+        import sys
+
+        short = " ".join(text.split())
+        print(f"note: too long for its box even at {min_pt}pt, so it will overflow: "
+              f"{short[:70] + '…' if len(short) > 70 else short!r}; shorten it or split it", file=sys.stderr)
     return min_pt
 
 
@@ -304,10 +316,21 @@ def header(slide, t, title, accent, icon_kind):
         icon(slide, icon_kind, W - 1.85, 0.35, 0.95, accent, t["ink"])
 
 
-def _items(spec):
+def _items(spec, most=None):
     items = spec.get("items") or []
     if not isinstance(items, list) or not items:
         raise SystemExit(f"layout {spec.get('layout')!r} needs \"items\": a list")
+    return _keep(items, most, f"layout {spec.get('layout')!r}", "items")
+
+
+def _keep(items, most, what, noun):
+    """The first `most` of `items`; says on stderr what was left out, so nothing goes silently."""
+    if most is not None and len(items) > most:
+        import sys
+
+        print(f"note: {what} shows {most} {noun}; {len(items) - most} more were left out "
+              f"(split them over another slide)", file=sys.stderr)
+        return items[:most]
     return items
 
 
@@ -401,6 +424,8 @@ def _label(shp, words, pt, color, font):
 def _rows(n, top=1.75, bottom=6.95, gap=0.2, max_h=1.15):
     """n rows between top and bottom, none taller than max_h; a short list sits
     centred in the space instead of stretching."""
+    if n <= 0:
+        return []
     h = min(max_h, (bottom - top - gap * (n - 1)) / n)
     used = n * h + gap * (n - 1)
     top += (bottom - top - used) / 2 if n <= 3 else 0
@@ -408,7 +433,7 @@ def _rows(n, top=1.75, bottom=6.95, gap=0.2, max_h=1.15):
 
 
 def _cards(slide, t, spec, accent):
-    items = _items(spec)[:6]
+    items = _items(spec, 6)
     numbered = spec.get("numbered", True)
     marks = spec.get("marks", "number" if numbered else "heart")
     a = t["accents"]
@@ -427,7 +452,7 @@ def _cards(slide, t, spec, accent):
 
 
 def _steps(slide, t, spec, accent):
-    items = _items(spec)[:4]
+    items = _items(spec, 4)
     n = len(items)
     gap, arrow = 0.2, 0.5
     w = (W - 1.7 - (n - 1) * (gap * 2 + arrow)) / n
@@ -470,7 +495,7 @@ def _statement(slide, t, spec, accent):
 
 
 def _faces(slide, t, spec, accent):
-    items = _items(spec)[:4]
+    items = _items(spec, 4)
     n = len(items)
     gap = 0.22
     cw = (W - 2.05 - gap * (n - 1)) / n
@@ -496,7 +521,7 @@ def _faces(slide, t, spec, accent):
 
 
 def _bullets(slide, t, spec, accent):
-    items = _items(spec)[:7]
+    items = _items(spec, 7)
     for i, ((y, h), item) in enumerate(zip(_rows(len(items), 1.8, 6.9, 0.12), items)):
         shape(slide, MSO_SHAPE.OVAL, 1.0, y + h / 2 - 0.09, 0.18, 0.18, fill=t["accents"][i % 6])
         text(slide, 1.4, y, W - 2.7, h, str(item), 22, t["soft"], t["body"], anchor=MSO_ANCHOR.MIDDLE)
@@ -608,7 +633,7 @@ def _table(slide, t, spec, accent):
     cols, rows = spec.get("columns"), spec.get("rows")
     if not cols or not rows:
         raise SystemExit('a table needs "columns": [...] and "rows": [[...], ...]')
-    rows = rows[:12]
+    rows = _keep(rows, 12, "a table", "rows")
     n_r, n_c = len(rows) + 1, len(cols)
     h = min(5.1, 0.55 * n_r)
     gf = slide.shapes.add_table(n_r, n_c, Inches(0.85), Inches(1.8), Inches(W - 2.05), Inches(h))
@@ -649,7 +674,7 @@ def _cell(cell, words, pt, color, font, fill, bold=False, align=PP_ALIGN.LEFT):
 
 def _timeline(slide, t, spec, accent):
     """Dated milestones along a line: items as "When: what"."""
-    items = _items(spec)[:6]
+    items = _items(spec, 6)
     n = len(items)
     y = 4.0
     shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, 0.85, y - 0.05, W - 2.05, 0.1, fill=tint(accent, 0.5, t["bg"]), radius=0.5)
@@ -702,7 +727,7 @@ def _compare(slide, t, spec, accent):
 
 def _grid(slide, t, spec, accent):
     """Tiles with an icon, a head and a line: items as {"icon", "head", "text"} (3-6)."""
-    items = _items(spec)[:6]
+    items = _items(spec, 6)
     n = len(items)
     cols = 3 if n in (3, 5, 6) else 2 if n in (2, 4) else n
     rws = (n + cols - 1) // cols
@@ -727,7 +752,7 @@ def _grid(slide, t, spec, accent):
 
 def _kpis(slide, t, spec, accent):
     """Big numbers: items as {"value", "label", "delta"} (2-4)."""
-    items = _items(spec)[:4]
+    items = _items(spec, 4)
     n = len(items)
     gap = 0.3
     w = (W - 2.05 - gap * (n - 1)) / n
@@ -790,7 +815,7 @@ def _image(slide, t, spec, accent):
 def _cycle(slide, t, spec, accent):
     """3-6 stages round a circle, each pointing to the next."""
     import math
-    items = _items(spec)[:6]
+    items = _items(spec, 6)
     n = len(items)
     cx, cy, r = W / 2, 4.35, 2.05
     hub = shape(slide, MSO_SHAPE.OVAL, cx - 0.95, cy - 0.95, 1.9, 1.9, fill=tint(accent, 0.8, t["bg"]))
@@ -817,7 +842,7 @@ def _cycle(slide, t, spec, accent):
 
 def _pyramid(slide, t, spec, accent):
     """Levels stacked from a wide base to a narrow top: items top first."""
-    items = _items(spec)[:5]
+    items = _items(spec, 5)
     n = len(items)
     top, h, gap = 1.8, (5.1 - 0.1 * (n - 1)) / n, 0.1
     full = 7.0
@@ -872,7 +897,7 @@ def mood_pink(a):
 def _feature(slide, t, spec, accent):
     """One big number in a hero card, and icon cards beside it:
     {"stat": "Trillions", "stat_text": "of cells…", "note": "…", "items": [{"icon", "head", "text"}]}."""
-    items = (spec.get("items") or [])[:4]
+    items = _keep(spec.get("items") or [], 4, f"layout {spec.get('layout')!r}", "items")
     hero_w = 4.2 if items else W - 2.05
     shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, 0.85, 1.8, hero_w, 5.05, fill=tint(accent, 0.86, t["bg"]),
           radius=0.06)

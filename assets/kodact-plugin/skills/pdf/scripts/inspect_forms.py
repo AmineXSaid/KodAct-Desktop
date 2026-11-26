@@ -46,7 +46,11 @@ def inspect_pdf_forms(pdf_path: Path) -> dict:
             ap = annot.get("/AP")
             if ap and "/N" in ap.get_object():
                 n_obj = ap.get_object()["/N"].get_object()
-                if hasattr(n_obj, "keys"):
+                # A checkbox's or radio's /N is a dictionary of states (/Off, /Yes); a text
+                # field's is one drawing (a stream), whose keys (/BBox, /Matrix) are no states.
+                from pypdf.generic import StreamObject
+
+                if hasattr(n_obj, "keys") and not isinstance(n_obj, StreamObject):
                     states = [str(k) for k in n_obj.keys()]
                     widget_states[fname] = sorted(set(widget_states.get(fname, []) + states))
 

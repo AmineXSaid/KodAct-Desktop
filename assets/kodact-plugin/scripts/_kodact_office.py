@@ -238,3 +238,49 @@ def render_pdf_to_pngs(
     if not pngs:
         raise RuntimeError("PDF contained 0 renderable pages.")
     return pngs
+
+
+def _excel_recalc(src: Path, out: Path, timeout: int) -> bool:
+    """Windows with Excel: Excel itself recalculates and saves (office_to_pdf.ps1 -Recalc). False
+    when Excel isn't there or failed, so LibreOffice is tried next."""
+    helper = _office_ps1_helper()
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    route = (os.environ.get("KODACT_OFFICE_RENDER") or "").strip().lower()
+    if os.name != "nt" or not helper or not ps or route in ("libreoffice", "none"):
+        return False
+    r = subprocess.run(
+        [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(helper),
+         str(src.resolve()), str(out.resolve()), "-Recalc"],
+        capture_output=True, text=True, timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+    )
+    return r.returncode == 0 and out.is_file()
+
+
+def recalc_xlsx(src: Path, out: Path, timeout: int = 120) -> Path:
+    """Recalculate every formula of an .xlsx and write it, with its values, to `out` (which may be
+    `src`). Excel on Windows when it is installed, else LibreOffice with a throwaway profile.
+
+    openpyxl saves formulas without values, so a workbook it wrote shows empty cells in viewers and
+    can't be checked for #DIV/0! until something computes it: this is that step."""
+    src, out = Path(src), Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        work = tmp_path / "in.xlsx"
+        shutil.copyfile(src, work)
+        result = tmp_path / "recalculated.xlsx"
+        if not _excel_recalc(work, result, timeout):
+            profile = (tmp_path / "profile").resolve().as_uri()
+            conv = tmp_path / "out"
+            run_soffice(
+                [f"-env:UserInstallation={profile}", "--headless", "--norestore", "--nolockcheck",
+                 "--calc", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", str(conv.resolve()),
+                 str(work.resolve())],
+                timeout=timeout, check=True,
+            )
+            if not (conv / "in.xlsx").is_file():
+                raise RuntimeError("LibreOffice wrote no recalculated workbook")
+            shutil.move(str(conv / "in.xlsx"), result)
+        shutil.copyfile(result, out)
+    return out

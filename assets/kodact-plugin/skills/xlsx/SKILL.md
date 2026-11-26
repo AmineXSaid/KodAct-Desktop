@@ -1,80 +1,67 @@
 ---
 name: xlsx
 description: >-
-  Comprehensive workflow for inspecting, creating, editing, force-recalculating
-  via isolated LibreOffice, auditing models (formula errors, missing _xlfn.
-  prefixes, hardcoded totals), and visually verifying Excel (.xlsx) workbooks
-  with Poppler. Use whenever working with .xlsx spreadsheets or financial models.
+  Make, edit and check Excel workbooks (.xlsx): designed sheets in a theme picked for the reader
+  (a title band, real Excel Tables with filters, formulas and totals rows, number formats, data
+  bars and colour scales, KPI tiles, native charts, notes), built block by block so the person
+  watches the file grow; cell edits that keep every style and formula; recalculation by Excel or
+  LibreOffice so the file carries values; and an audit that fails on formula errors and on
+  formulas that were never computed. Use for any .xlsx, spreadsheet, budget or model.
 ---
 
-# XLSX Spreadsheet Engineering Skill
+# Excel workbooks
 
-Use this skill for all `.xlsx` workflows: inspecting existing workbooks, building formula-driven financial models and reports with `openpyxl`, force-recalculating cached values in an isolated LibreOffice session, auditing model hygiene, and running visual QA.
+The scripts are in `${KODACT_SKILL_DIR}/scripts`. Call them with `python` and that full path.
+`T="${KODACT_SKILL_DIR}/scripts"` below stands for that folder.
 
----
+## Make a new workbook: plan, build, compute, audit, look
 
-## 1. Decision Tree
+1. **Plan before any file.** What question does the sheet answer, and what will the person
+   change? Inputs (numbers people type) go in one place, calculations refer to them, results are
+   formulas: never type a number a formula could compute, never type a total.
+2. **Start the real file first**:
+   `python "$T/xlsx_tool.py" init book.xlsx --audience "WHO USES IT" --title "…" --subtitle "…"`.
+3. **Add blocks** as JSON (a list, or `@blocks.json`):
+   `python "$T/xlsx_tool.py" add book.xlsx --json @blocks.json`. Every block and its keys:
+   `python "$T/xlsx_tool.py" --help`. A `table` is a real Excel Table: `formats` per column (usd,
+   eur, money, int, dec, pct, date, text or an Excel format), `formulas` per column in Table
+   syntax (`"=[@Q3]-[@Q2]"`), `totals` (`sum`, `average`…), `bars` and `scale` for data bars and
+   colour scales. `add` prints each table's range: `kpis` formulas and `chart` ranges refer to it.
+   A new sheet: `{"block": "sheet", "sheet": "Data"}`; `"sheet"` on any block targets one.
+4. **Compute and audit**: `python "$T/recalc_and_verify.py" book.xlsx --in-place`. It has Excel
+   (on Windows, when installed) or LibreOffice compute every formula, saves the values in the
+   file, and fails on any formula error (#DIV/0!, #REF!, #NAME?…) or when the formulas could not be
+   computed at all. Fix each error at its cause and run it again. Its warnings flag a total typed
+   as a number and functions that need the `_xlfn.` prefix.
+5. **Look at it once**: `python "$T/render_preview.py" book.xlsx --out-dir preview --grid`, then
+   open `preview/grid-1.png`: columns too narrow (####), a chart over a table, a sheet that prints
+   on ten pages. Don't open every page image.
+6. **Reply** with the file's name, what it calculates, and the key results (from the audit or
+   `read`). Don't paste whole sheets back.
 
-```text
-What is the task?
-├── Read / Inspect / Analyze
-│   ├── Structure, sheets, headers, formula count ──▶ scripts/inspect_workbook.py
-│   └── Tabular data aggregation / stats          ──▶ pandas.read_excel() or openpyxl(data_only=True)
-│
-├── Create New Workbook / Financial Model
-│   └── openpyxl (live formulas, color coding, explicit formats, auto-fit, print-fit)
-│       ──▶ scripts/recalc_and_verify.py --in-place --json
-│       ──▶ scripts/render_preview.py --grid ──▶ inspect PNGs
-│
-└── Edit Existing Workbook
-    └── scripts/inspect_workbook.py (map sheets, headers, existing formulas first)
-        ──▶ openpyxl.load_workbook() (preserve existing sheets/formulas)
-        ──▶ scripts/recalc_and_verify.py --in-place --json (forces .calculateAll() on stale cache)
-        ──▶ scripts/render_preview.py --grid ──▶ inspect PNGs
-```
+From a CSV in one step: `python "$T/xlsx_tool.py" create book.xlsx --csv data.csv` (sheet
+`Sheet1` unless `--sheet NAME`), then audit and look.
 
----
+## Change or read a workbook
 
-## 2. Formula-First & Financial Modeling Standards
+- Its shape first: `python "$T/inspect_workbook.py" book.xlsx` (sheets, sizes, formula counts).
+- Values as last computed: `python "$T/xlsx_tool.py" read book.xlsx [--sheet NAME]`; formulas:
+  `--formulas`; one range with both: `read book.xlsx --range "Sheet1!B2:D9"`.
+- Set cells, keeping every style, format and formula untouched:
+  `python "$T/xlsx_tool.py" set book.xlsx out.xlsx --cell "Budget!C3=700" --cell "Budget!D3==C3-B3"`
+  (`==` starts a formula). A wrong sheet name lists the sheets there are.
+- Append rows: `append-rows book.xlsx out.xlsx --csv rows.csv [--sheet NAME]`.
+- After any formula change, compute and audit again (step 4). openpyxl saves formulas without
+  values: until then the file shows empty cells in viewers.
 
-1. **Always Use Live Excel Formulas (Zero Hardcoded Totals)**:
-   - Write `=SUM(B2:B10)`, `=AVERAGE(...)`, `=SUMIFS(...)`, `=IFERROR(..., 0)`—never compute totals in Python and write static numbers. (`recalc_and_verify.py` automatically flags static numbers sitting on `Total` / `Subtotal` rows!)
-   - Prefer classic cross-version functions (`INDEX`/`MATCH`, `SUMIFS`, `COUNTIFS`). If you must use `XLOOKUP`, `XMATCH`, `FILTER`, or `UNIQUE` in `openpyxl`, prefix with `_xlfn.` (`=_xlfn.XLOOKUP(...)`) or Excel will display `#NAME?`.
-2. **Financial Modeling Color Convention**:
-   - **Blue (`#0000FF`)**: Hardcoded inputs & assumptions.
-   - **Black (`#000000`)**: Same-sheet formulas.
-   - **Green (`#008000`)**: Cross-sheet formula links (`='Assumptions'!B4`).
-3. **Explicit Number Formats**:
-   - Currency: `$#,##0;($#,##0);"-"` | Percentages: `0.0%` | Counts: `#,##0` | Dates: `yyyy-mm-dd`.
-4. **Prevent `###` Truncation & Orphan Print Columns**:
-   - Estimate display width (don't size formula columns by the raw formula string length; give currency/formula columns `>= 14–18` width — see [openpyxl_patterns.md](./references/openpyxl_patterns.md)).
-   - Freeze header rows (`ws.freeze_panes = "A2"`) and configure landscape `fitToWidth = 1`, `fitToHeight = 0`.
+Something the blocks don't cover (a pivot-like summary, named ranges, data validation lists):
+openpyxl directly, with the patterns in `references/openpyxl_patterns.md`; then compute and audit.
 
----
+## Rules that hold for every workbook
 
-## 3. Mandatory Verification & QA Loop
-
-1. **Force Recalculate & Audit Model**:
-   ```bash
-   python scripts/recalc_and_verify.py output.xlsx --in-place --json
-   ```
-   - Patches `fullCalcOnLoad="1"` and invokes `doc.calculateAll()` inside an **isolated temporary LibreOffice profile** (never mutating the user's global LibreOffice config or blocking on open GUI windows).
-   - Audits every cell for `#REF!`, `#DIV/0!`, `#VALUE!`, `#NAME?`, `#N/A`, `#NUM!`, `#NULL!`, `Err:`, missing `_xlfn.` prefixes, and hardcoded numbers in `Total` rows.
-2. **Render Visual Preview**:
-   ```bash
-   python scripts/render_preview.py output.xlsx --out-dir ./preview --dpi 150 --grid
-   ```
-3. **Visual & Data Inspection Checklist**:
-   - [ ] `error_count == 0` and `warning_count == 0` in `recalc_and_verify.py`.
-   - [ ] Zero `###` truncated numbers or clipped headers in `grid-*.png` / `page-*.png`.
-   - [ ] Clean alignment, borders, number formats, and single-page-wide print layout.
-
----
-
-## 4. Helper Scripts Reference
-
-| Script | Purpose | Usage |
-| :--- | :--- | :--- |
-| [inspect_workbook.py](./scripts/inspect_workbook.py) | Summarize sheets, dimensions, formula counts, sample rows | `python scripts/inspect_workbook.py book.xlsx` |
-| [recalc_and_verify.py](./scripts/recalc_and_verify.py) | Isolated `.calculateAll()` recalc + error/`_xlfn`/total audit | `python scripts/recalc_and_verify.py book.xlsx --in-place --json` |
-| [render_preview.py](./scripts/render_preview.py) | Isolated LibreOffice + Poppler PNGs & `--grid` sheets | `python scripts/render_preview.py book.xlsx --grid` |
+- One table per question, a header row, units in the header ("Cost ($)"), frozen panes on long
+  tables. Inputs in a light fill, outputs bold.
+- Percentages as `pct`, money as `usd`/`eur`, never text that looks like a number.
+- A chart only where a trend or a comparison is the point; label its axes.
+- Never claim the workbook was computed or audited when a step failed: say which, and that its
+  numbers are unchecked.

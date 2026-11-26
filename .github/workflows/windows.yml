@@ -73,6 +73,26 @@ jobs:
           RUSTFLAGS: -D warnings
         run: cargo test --locked
 
+  # The document skills (assets/kodact-plugin/skills: pptx, docx, xlsx, pdf), run as the model
+  # runs them, on Linux and on Windows. Rendering and recalculation tests skip where no
+  # LibreOffice is installed.
+  skills:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Libraries the skills use
+        run: python -m pip install python-pptx python-docx openpyxl pypdf pdfplumber reportlab pillow pypdfium2 pytest
+      - name: Skill tests
+        run: python -m pytest tests/skills -q
+
   build:
     runs-on: windows-latest
     timeout-minutes: 90

@@ -19,12 +19,30 @@ saves, so they watch it grow. A slide is JSON:
      "items": ["Billions of tiny parts", "Each has a job"], "icon": "cell",
      "notes": "What to say."}
 
-Layouts: title (title, subtitle, tag, icon, style: dark), feature (stat,
-stat_text, note, items [{"icon", "head", "text"}]), cards (items; "marks":
-number|heart|star|sun), steps (2-4 items, "Head: body"; footer), statement
-(statement, items, art), faces (items [{"label", "mood"}], lines), bullets
-(items), closing (title, items). Icons: any of Lucide's 1,500+ names (`python icons.py search WORD`), or sun
-star heart cloud cell. Any slide takes "section" to start a deck section.
+Layouts (and their keys; every one but title and closing also takes "title" and "icon"):
+  title      title, subtitle, tag, icon, style: "dark"
+  feature    stat, stat_text, note, items [{"icon", "head", "text"}] (up to 4)
+  cards      items (up to 6); marks: number|heart|star|sun
+  steps      items "Head: body" (2-4); footer
+  statement  statement, items, art
+  faces      items [{"label", "mood"}] (up to 4), lines
+  bullets    items (up to 7; indent two spaces per level)
+  chart      chart {"type": bar|column|line|pie|doughnut|area|stacked, "categories": [...],
+             "series": {"Name": [numbers]}}, items (takeaways beside it). A native, editable chart.
+  table      columns [...], rows [[...]] (up to 12), highlight (row index)
+  timeline   items "When: what" (up to 6)
+  compare    left {"title", "items"}, right {...}, verdict
+  grid       items [{"icon", "head", "text"}] or "Head: text" (3-6)
+  kpis       items [{"value", "label", "delta", "better": up|down}] (2-4), footer
+  quote      quote, by
+  image      path (a PNG or JPG), caption, items
+  cycle      items (up to 6), center
+  pyramid    items "Level: what", top first (up to 5)
+  closing    title, items
+Items past a layout's limit are left out, with a note on stderr; so is text too long for its box
+even at 12pt. Icons: any of Lucide's 1,500+ names (`python ../../../scripts/icons.py search WORD`,
+from this folder), or sun star heart cloud cell. Any slide takes "section" to start a deck section,
+"notes" for speaker notes and "accent" (0-5) to pick its colour.
 Moods: happy sad worried angry confused surprised. Text is sized to fit.
 
 `read --shapes` names each slide's shapes (`#0 Title 1: …`), which is what
@@ -52,7 +70,9 @@ from pptx import Presentation
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Emu
 
-import deck_design
+# The design and icon code the document skills share: kodact-plugin/scripts.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+import deck_design  # noqa: E402
 
 AUTHOR = "KodAct"
 # 16:9, as PowerPoint makes new decks.

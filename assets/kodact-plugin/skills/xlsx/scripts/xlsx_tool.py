@@ -50,8 +50,16 @@ import zipfile
 from datetime import datetime, timezone
 
 import openpyxl
+import warnings
+
+# openpyxl drops the extension part of conditional formats a recalculation added (the rule itself
+# stays); its warning about that says nothing the person can act on.
+warnings.filterwarnings("ignore", message=r".*extension is not supported.*")
 from openpyxl.styles import Border, Font, Side
 from openpyxl.utils import get_column_letter
+
+# The design and icon code the document skills share: kodact-plugin/scripts.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
 
 AUTHOR = "KodAct"
 FONT = "Calibri"
@@ -144,11 +152,22 @@ def _json(arg):
         sys.exit(f"--json is not valid JSON ({e}); quote keys and strings with double quotes")
 
 
+def _sheet(wb, name):
+    """The sheet called `name`, or a clear error naming the sheets there are (quotes allowed)."""
+    name = name.strip().strip("'")
+    if name in wb.sheetnames:
+        return wb[name]
+    folded = {n.casefold(): n for n in wb.sheetnames}
+    if name.casefold() in folded:
+        return wb[folded[name.casefold()]]
+    raise SystemExit(f"no sheet {name!r}; the sheets are {', '.join(repr(n) for n in wb.sheetnames)}")
+
+
 def read(path, sheet=None, formulas=False):
     """Each sheet as a Markdown table, with its column letters and row numbers.
     Shows computed values (what Excel last saved) unless `formulas`."""
     wb = openpyxl.load_workbook(path, data_only=not formulas)
-    names = [sheet] if sheet else wb.sheetnames
+    names = [_sheet(wb, sheet).title] if sheet else wb.sheetnames
     out = []
     for name in names:
         ws = wb[name]
@@ -210,7 +229,7 @@ def set_cells(path, out, assignments):
         m = CELL.match(a)
         if not m:
             raise SystemExit(f"not a cell assignment: {a!r} (use Sheet!B3=value)")
-        ws = wb[m.group("sheet")] if m.group("sheet") else wb.active
+        ws = _sheet(wb, m.group("sheet")) if m.group("sheet") else wb.active
         ws[m.group("ref").upper()] = _value(m.group("value"))
     _finish(wb)
     wb.save(out)
@@ -219,7 +238,7 @@ def set_cells(path, out, assignments):
 
 def append_rows(path, out, rows, sheet=None):
     wb = openpyxl.load_workbook(path)
-    ws = wb[sheet] if sheet else wb.active
+    ws = _sheet(wb, sheet) if sheet else wb.active
     for row in rows:
         ws.append([_value(c) for c in row])
     _finish(wb)
@@ -230,8 +249,7 @@ def append_rows(path, out, rows, sheet=None):
 def create(out, rows, sheet=None):
     wb = openpyxl.Workbook()
     ws = wb.active
-    if sheet:
-        ws.title = sheet
+    ws.title = sheet or "Sheet1"  # Excel's name for a first sheet, which formulas and people assume
     body, head = Font(name=FONT, size=11), Font(name=FONT, size=11, bold=True)
     for i, row in enumerate(rows):
         ws.append([_value(c) for c in row])
@@ -253,17 +271,19 @@ def create(out, rows, sheet=None):
 
 
 def recalc(path, out):
-    """Open and save the workbook in LibreOffice so formulas carry values."""
-    soffice = shutil.which("soffice") or shutil.which("libreoffice")
-    if not soffice:
-        raise SystemExit("recalc needs LibreOffice (soffice) on PATH")
+    """Compute every formula (Excel on Windows when installed, else LibreOffice) so the file carries
+    values; fails, naming the cells, when a formula computes to an error."""
+    from _kodact_office import recalc_xlsx
+
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "in.xlsx")
         shutil.copyfile(path, src)
-        profile = "file://" + os.path.join(tmp, "profile").replace(os.sep, "/")
-        subprocess.run([soffice, f"-env:UserInstallation={profile}", "--headless", "--calc", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", os.path.join(tmp, "out"), src],
-                       check=True, capture_output=True, timeout=120)
-        _keep_properties(src, os.path.join(tmp, "out", "in.xlsx"), out)
+        done = os.path.join(tmp, "done.xlsx")
+        try:
+            recalc_xlsx(src, done)
+        except FileNotFoundError as exc:
+            raise SystemExit(f"recalc needs Microsoft Excel (Windows) or LibreOffice: {exc}")
+        _keep_properties(src, done, out)
     bad = errors(out)
     if bad:
         raise SystemExit("recalculated, but these formulas give errors (the file was still written):\n  " + "\n  ".join(bad))

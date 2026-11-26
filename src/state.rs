@@ -1989,9 +1989,13 @@ pub enum Request {
     SendQueuedNow { chat: usize, uuid: String },
     /// What fills the chat's context, for the Session column.
     ContextUsage { chat: usize },
-    /// A mode switch. Refused, KodAct CLI stays in its mode and says which
-    /// (`system/status`), so the chip follows; this says why.
-    SetMode { mode: ModeId },
+    /// A mode switch: `chat` asked to go from `from` to `mode`. Refused, KodAct CLI stays in
+    /// `from`, and the chip goes back to it; the toast says why.
+    SetMode {
+        chat: usize,
+        from: ModeId,
+        mode: ModeId,
+    },
 }
 
 /// The queued messages a replayed message of yours carries, taken out of
@@ -4613,13 +4617,15 @@ impl AppState {
             self.modes_open = true;
             self.bypass_warning = true;
         } else {
+            let from = self.mode;
             self.mode = mode;
             self.modes_open = false;
             self.bypass_warning = false;
             self.keep_mode();
             if let Some(chat) = self.current {
                 if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.set_mode(mode)) {
-                    self.requests.insert(id, Request::SetMode { mode });
+                    self.requests
+                        .insert(id, Request::SetMode { chat, from, mode });
                 }
             }
             // A question already waiting that the new mode allows is
@@ -10188,9 +10194,23 @@ fix everything under 8, render it again to check, then tell me the scores before
         result: Result<serde_json::Value, String>,
         cx: &mut Context<Self>,
     ) {
-        if let Request::SetMode { mode } = req {
+        if let Request::SetMode { chat, from, mode } = req {
             if let Err(e) = result {
-                self.show_toast(format!("Couldn't switch to {}: {e}", mode.label()), cx);
+                // KodAct CLI stayed in `from`: the chip says so too, rather than show a mode
+                // that isn't running (Bypass on the chip while every command still asks).
+                // Unless the chat has moved on to another mode since.
+                if self.chat_mode(chat) == mode {
+                    self.mode_reported(chat, from);
+                }
+                self.show_toast(
+                    format!(
+                        "Couldn't switch to {}; still {}: {e}",
+                        mode.label(),
+                        from.label()
+                    ),
+                    cx,
+                );
+                cx.notify();
             }
             return;
         }

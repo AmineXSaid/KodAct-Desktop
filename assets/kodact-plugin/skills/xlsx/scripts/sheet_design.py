@@ -212,9 +212,11 @@ def _table(wb, ws, t, spec):
         ws.conditional_formatting.add(col_range(name), DataBarRule(start_type="min", end_type="max",
                                                                    color="FF" + t["accents"][1]))
     for name in spec.get("scale") or []:
+        # Light tints, so the numbers stay readable on them, red negatives included (a saturated
+        # red fill under a [Red] number format hid "-$160" on 2026-11-26).
         ws.conditional_formatting.add(col_range(name), ColorScaleRule(
-            start_type="min", start_color="FFF8696B", mid_type="percentile", mid_value=50,
-            mid_color="FFFFEB84", end_type="max", end_color="FF63BE7B"))
+            start_type="min", start_color="FFFAD4D4", mid_type="percentile", mid_value=50,
+            mid_color="FFFFF4CC", end_type="max", end_color="FFD3EEDB"))
     for name in spec.get("icons") or []:
         ws.conditional_formatting.add(col_range(name), IconSetRule("3Arrows", "percent", [0, 33, 67]))
     # Widths from the longest entry; frozen header for a table at the top.

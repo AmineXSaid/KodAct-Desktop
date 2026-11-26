@@ -3,6 +3,13 @@
 
 from __future__ import annotations
 
+import warnings
+
+# openpyxl drops the extension part of conditional formats a recalculation added (the rule itself
+# stays); its warning about that says nothing the person can act on.
+warnings.filterwarnings("ignore", message=r".*extension is not supported.*")
+
+
 import argparse
 import json
 from pathlib import Path
