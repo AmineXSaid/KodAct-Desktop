@@ -15,6 +15,7 @@ mod assets;
 mod attach;
 mod avatars;
 mod backend;
+mod behaviour;
 mod browser;
 mod browser_mcp;
 mod commands;
@@ -85,6 +86,7 @@ mod xlsx_style;
 mod app_settings;
 mod askpass;
 mod model_proxy;
+mod reasoning_detect;
 mod relay;
 
 use gpui::component::TitleBar;

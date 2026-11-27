@@ -170,7 +170,7 @@ const ENDPOINT_VARS: [&str; 11] = [
 /// defaults to `reasoning_effort: "high"` on Turn 1 when effort is `Auto`).
 pub const SAFE_NUDGES: &str = "shellEdit,constraints,namedChecks,passingSnapshots,limitVerdicts,staleDeliverables,thinkingTimeBox,todoTracking,clock,unpinnedInstalls";
 
-const ALL_NUDGES: [&str; 11] = [
+pub(crate) const ALL_NUDGES: [&str; 11] = [
     "shellEdit",
     "constraints",
     "namedChecks",

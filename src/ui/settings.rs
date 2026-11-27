@@ -830,6 +830,7 @@ impl Settings {
         let s = self.state.read(cx);
         let (dark, default_mode, bypass, browser) =
             (s.dark, s.default_mode, s.bypass_allowed, s.browser);
+        let behaviour = s.behaviour.clone();
         let (libreoffice, office_installing) = (s.libreoffice, s.office_installing);
         let name_row = div()
             .flex()
@@ -959,7 +960,31 @@ impl Settings {
                 )
             }
         };
-        let groups: [(&str, Vec<AnyElement>); 4] = [
+        // KodAct CLI's nudges and its reasoning carry-over: one switch each,
+        // saved to settings.json; every chat picks a change up from its next
+        // message (`AppState::set_behaviour`).
+        let behaviour_row = |item: &crate::behaviour::Item| {
+            let on = behaviour.iter().any(|(k, v)| *k == item.key && *v);
+            let state = self.state.clone();
+            let key = item.key;
+            Self::row(
+                t,
+                item.title,
+                Some(item.hint),
+                super::button::Switch::new(SharedString::from(format!("behaviour-{key}")), on, item.title)
+                    .on_toggle(move |on, _, cx| {
+                        state.update(cx, |s, cx| s.set_behaviour(key, on, cx))
+                    })
+                    .into_any_element(),
+                false,
+            )
+        };
+        let nudge_rows: Vec<AnyElement> = crate::behaviour::NUDGES
+            .iter()
+            .map(&behaviour_row)
+            .collect();
+        let reasoning_rows = vec![behaviour_row(&crate::behaviour::CARRY)];
+        let groups: [(&str, Vec<AnyElement>); 6] = [
             (
                 "You",
                 vec![
@@ -1027,6 +1052,8 @@ impl Settings {
                     ),
                 ],
             ),
+            ("Nudges: notes KodAct adds while it works", nudge_rows),
+            ("Reasoning", reasoning_rows),
         ];
         let mut page = div()
             .flex()

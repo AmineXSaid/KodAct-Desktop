@@ -1704,6 +1704,9 @@ struct Live {
     profile: crate::endpoints::Profile,
     /// Effective `--effort` passed when this process started (`None` = Auto).
     effort: Option<crate::endpoints::Effort>,
+    /// `AppState::behaviour_version` when it started: the nudges and
+    /// reasoning carry-over it read from settings.json.
+    behaviour: u64,
     /// Which process this is: events from one that was replaced are dropped.
     generation: u64,
     /// Started as a design chat with this setup (its prompt and tools are
@@ -2138,10 +2141,18 @@ pub struct AppState {
     pub default_mode: ModeId,
     /// Bypass permissions has been allowed, behind its warning.
     pub bypass_allowed: bool,
+    /// KodAct CLI's nudges and reasoning carry-over, as settings.json has
+    /// them (Settings > General, `behaviour.rs`).
+    pub behaviour: Vec<(&'static str, bool)>,
+    /// Bumped by each change to them: a chat's process started before one
+    /// restarts on its next message.
+    behaviour_version: u64,
     /// The web browser tools (`browser_mcp.rs`) are given to new KodAct CLI sessions.
     pub browser: bool,
     /// The Modes menu is open; its Bypass warning is showing.
     pub modes_open: bool,
+    /// Profiles whose reasoning is being checked (`detect_reasoning`).
+    pub reasoning_checking: std::collections::HashSet<String>,
     pub bypass_warning: bool,
     pub dark: bool,
     /// The theme picked in Settings (light or dark is `dark`).
@@ -2707,8 +2718,11 @@ impl AppState {
             kept_modes: Default::default(),
             default_mode: ModeId::Manual,
             bypass_allowed: crate::app_settings::load_window().bypass_allowed,
+            behaviour: crate::behaviour::load(),
+            behaviour_version: 0,
             browser: crate::browser::enabled(),
             modes_open: false,
+            reasoning_checking: Default::default(),
             bypass_warning: false,
             dark: crate::app_settings::load_window().dark,
             look: crate::theme::Look::from_id(&crate::app_settings::load_window().theme)
@@ -3055,6 +3069,7 @@ impl AppState {
                     }
                 }
                 s.load_catalogs(cx);
+                s.detect_reasoning_if_unknown(cx);
                 if check_all {
                     s.sync_all(cx);
                 } else {
@@ -3171,7 +3186,86 @@ impl AppState {
             let _ = crate::endpoints::save_selected(&name);
         })
         .detach();
+        self.detect_reasoning_if_unknown(cx);
         cx.notify();
+    }
+
+    /// The model in use, checked for reasoning once: the first time it is
+    /// used, so the Reasoning chip offers what it really takes.
+    pub fn detect_reasoning_if_unknown(&mut self, cx: &mut Context<Self>) {
+        if self
+            .active_profile()
+            .is_some_and(|p| p.capabilities.reasoning.is_none())
+        {
+            self.detect_reasoning(cx);
+        }
+    }
+
+    /// Ask the model in use whether it reasons and which levels it takes
+    /// (`reasoning_detect`), in the background; the verdict sets the
+    /// profile's effort levels and is saved with it. The Reasoning chip's
+    /// refresh runs it again.
+    pub fn detect_reasoning(&mut self, cx: &mut Context<Self>) {
+        let Some(profile) = self.active_profile().cloned() else {
+            return;
+        };
+        if !self.reasoning_checking.insert(profile.name.clone()) {
+            return;
+        }
+        cx.notify();
+        let probe = profile.clone();
+        let task = cx.background_spawn(async move {
+            crate::reasoning_detect::detect(&probe, Duration::from_secs(120))
+        });
+        cx.spawn(async move |this, cx| {
+            let found = task.await;
+            let _ = this.update(cx, |s, cx| {
+                s.reasoning_checking.remove(&profile.name);
+                match found {
+                    Ok(r) => s.apply_reasoning(&profile.name, r, cx),
+                    Err(e) => s.show_toast(
+                        format!("Couldn't check {}'s reasoning: {e}", profile.model),
+                        cx,
+                    ),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// A verdict, into the profile: the levels it takes (none when it
+    /// doesn't reason or its level is fixed), saved; a level chosen that it
+    /// doesn't take goes back to Auto.
+    fn apply_reasoning(
+        &mut self,
+        name: &str,
+        found: crate::reasoning_detect::Reasoning,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(p) = self
+            .endpoints
+            .as_mut()
+            .and_then(|e| e.profiles.iter_mut().find(|p| p.name == name))
+        else {
+            return;
+        };
+        let levels = found.levels();
+        p.capabilities.effort = !levels.is_empty();
+        p.capabilities.effort_levels = (!levels.is_empty()).then(|| levels.clone());
+        p.capabilities.reasoning = Some(found.clone());
+        let saved = p.clone();
+        let model = saved.model.clone();
+        cx.background_spawn(async move {
+            let _ = crate::endpoints::save_profile(&saved, Some(&saved.name));
+        })
+        .detach();
+        if self.active_profile().is_some_and(|a| a.name == name)
+            && self.effort.is_some_and(|e| !levels.contains(&e))
+        {
+            self.effort = None;
+        }
+        self.show_toast(format!("{model}: {}", found.summary()), cx);
     }
 
     /// Check every profile that is due (at start, and on the timer).
@@ -12935,7 +13029,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             .effort
             .filter(|e| profile.effort_levels().contains(e));
         if let Some(live) = self.sessions.get(&id) {
-            if live.effort != effective_effort {
+            // A nudge or the reasoning carry-over changed in Settings:
+            // KodAct CLI reads them as it starts, so it restarts and resumes.
+            if live.effort != effective_effort || live.behaviour != self.behaviour_version {
                 self.sessions.remove(&id);
             } else if live.profile != profile {
                 let same_endpoint = live.profile.base_url == profile.base_url
@@ -13346,6 +13442,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 _pump: pump,
                 profile,
                 effort: effective_effort,
+                behaviour: self.behaviour_version,
                 generation,
                 design: self
                     .chats
@@ -14116,6 +14213,19 @@ impl AppState {
             theme: self.look.id().into(),
             bypass_allowed: self.bypass_allowed,
         });
+    }
+
+    /// Turn a nudge or the reasoning carry-over on or off (Settings >
+    /// General): written to settings.json at once, and each chat's KodAct CLI
+    /// restarts on its next message to read it, resuming its conversation.
+    pub fn set_behaviour(&mut self, key: &str, on: bool, cx: &mut Context<Self>) {
+        if let Err(e) = crate::behaviour::save(key, on) {
+            return self.show_toast(format!("Couldn't save the setting: {e}"), cx);
+        }
+        self.behaviour = crate::behaviour::load();
+        self.behaviour_version += 1;
+        self.show_toast("Saved. Every chat uses it from its next message.", cx);
+        cx.notify();
     }
 
     /// Open KodAct's settings.json in your editor, writing one with every key

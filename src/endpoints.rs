@@ -94,6 +94,10 @@ pub struct Capabilities {
     /// models, and picking one switches this profile to it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub catalog: bool,
+    /// What asking the model found (`reasoning_detect`): it sets `effort`
+    /// and `effort_levels`. `None` until it has been checked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<crate::reasoning_detect::Reasoning>,
 }
 
 /// A model an endpoint lists: its id, and what the list says about it.
@@ -1188,6 +1192,7 @@ mod tests {
             effort_levels: Some(vec![Effort::Max, Effort::Low, Effort::Xhigh]),
             fast: true,
             catalog: false,
+            reasoning: None,
         };
         assert_eq!(p.effort_levels(), [Effort::Low, Effort::Xhigh, Effort::Max]);
         assert_eq!(p.chips(), ["Max", "Ultracode", "Fast"]);

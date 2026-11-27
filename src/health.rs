@@ -482,7 +482,7 @@ fn probe_body(profile: &Profile) -> serde_json::Value {
 /// When a refusal names the length key the body uses as unsupported (the
 /// one it names first: "'max_tokens' is not supported ... use
 /// 'max_completion_tokens'"), send the other name instead. True when changed.
-fn swap_length_key(body: &mut serde_json::Value, refusal: &str) -> bool {
+pub(crate) fn swap_length_key(body: &mut serde_json::Value, refusal: &str) -> bool {
     let m = refusal.to_ascii_lowercase();
     let (old, new) = (m.find("max_tokens"), m.find("max_completion_tokens"));
     let refused = match (old, new) {
@@ -509,7 +509,7 @@ fn swap_length_key(body: &mut serde_json::Value, refusal: &str) -> bool {
 
 /// When a refusal still names a length key after the swap, take both out.
 /// True when changed.
-fn drop_length_keys(body: &mut serde_json::Value, refusal: &str) -> bool {
+pub(crate) fn drop_length_keys(body: &mut serde_json::Value, refusal: &str) -> bool {
     let m = refusal.to_ascii_lowercase();
     if !m.contains("max_tokens") && !m.contains("max_completion_tokens") {
         return false;
