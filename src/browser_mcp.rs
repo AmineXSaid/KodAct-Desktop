@@ -449,8 +449,23 @@ impl Browser {
         let focus = std::fs::read_to_string(&self.focus_file)
             .ok()
             .map(|s| s.trim().to_string());
+        let blank = |id: &String| {
+            tabs.iter()
+                .find(|t| &t.id == id)
+                .is_some_and(|t| t.url.is_empty() || t.url == "about:blank")
+        };
+        // The tab KodAct was working in, while it still shows a page.
+        let mine = self
+            .current
+            .clone()
+            .filter(|c| tabs.iter().any(|t| &t.id == c) && !blank(c));
         let pick = focus
             .filter(|f| tabs.iter().any(|t| &t.id == f))
+            // A blank tab in focus (a new one, or one the panel opened) does
+            // not take KodAct off its page: a screenshot right after a
+            // navigate showed about:blank, not the diagram it had opened.
+            .filter(|f| !(blank(f) && mine.as_ref().is_some_and(|m| m != f)))
+            .or(mine)
             .or_else(|| {
                 self.current
                     .clone()
@@ -1182,6 +1197,35 @@ mod tests {
             element_selector(&json!({"index": 3})).unwrap(),
             "[data-forge-idx=\"3\"]"
         );
+    }
+
+    /// A page KodAct wrote, opened by its file:// address and screenshotted
+    /// at once, as a chat checks its own diagram: the picture is the page,
+    /// not a blank tab. Needs Playwright's Chromium (or KODACT_CHROME).
+    #[test]
+    #[ignore]
+    fn a_written_page_screenshots_as_itself() {
+        let exe = crate::web_view::find_chromium().expect("no Chromium");
+        let dir = std::env::temp_dir().join(format!("kodact-shot-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("docs dir")).unwrap();
+        let file = dir.join("docs dir").join("can_bus_architecture.html");
+        std::fs::write(&file, r##"<!doctype html><html><head><title>CAN Bus</title><style>body{background:#f9f7f5;margin:0}</style></head><body><h1>CAN</h1><svg viewBox="0 0 600 300" width="600"><rect x="20" y="20" width="200" height="100" fill="#005fb3"/></svg></body></html>"##).unwrap();
+        let (view, _rx) =
+            crate::web_view::start(&exe, &dir.join("profile"), &dir.join("focus")).unwrap();
+        let mut b = Browser::new(&view.cdp_url, &dir.join("focus"));
+        let url = format!("file://{}", file.display());
+        let on = b.run("navigate", &json!({ "url": url })).unwrap();
+        // The panel puts a fresh blank tab in focus before the screenshot.
+        let blank = b.call(None, "Target.createTarget", json!({ "url": "about:blank" })).unwrap();
+        std::fs::write(dir.join("focus"), blank["targetId"].as_str().unwrap()).unwrap();
+        let shot = b.run("screenshot", &json!({})).unwrap();
+        assert!(on[0]["text"].as_str().unwrap().contains("CAN Bus"), "{on:?}");
+        let said = shot[1]["text"].as_str().unwrap();
+        assert!(said.contains("can_bus_architecture.html") && said.contains("CAN Bus"), "{said}");
+        let png = crate::browser::decode_base64(shot[0]["data"].as_str().unwrap()).unwrap();
+        if let Some(out) = std::env::var_os("KODACT_SHOT_OUT") {
+            std::fs::write(out, &png).unwrap();
+        }
     }
 
     /// Every tool against a real Chromium and a page with a form: needs

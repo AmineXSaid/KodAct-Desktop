@@ -990,8 +990,7 @@ pub fn render(
         let pad = t.space.xl;
         let room = fit.width - 1. - 2. * f32::from(pad);
         let page = crate::diagram::drawable(&file.content).unwrap_or_default();
-        let svg = super::diagram_view::themed(&page, t.is_dark);
-        let svg = svg.as_ref();
+        let svg = page.as_ref();
         let natural = super::diagram_view::natural_width(svg).unwrap_or(room);
         let shown = if fit.fit { room } else { natural };
         body.child(

@@ -71,14 +71,6 @@ pub fn fluid(svg: &str, width: f32, scale: f32) -> Option<AnyElement> {
     )
 }
 
-/// The drawing to show in this theme: a KodAct-skinned diagram turns dark
-/// with the app.
-pub fn themed(svg: &str, dark: bool) -> std::borrow::Cow<'_, str> {
-    match dark.then(|| crate::diagram::for_dark(svg)).flatten() {
-        Some(d) => d.into(),
-        None => svg.into(),
-    }
-}
 
 /// The drawing's own width, for "actual size".
 pub fn natural_width(svg: &str) -> Option<f32> {
@@ -158,15 +150,9 @@ pub fn fence(lang: &str, code: &str, t: &crate::theme::Theme) -> Option<Arc<str>
         if f.len() >= 256 {
             f.clear();
         }
-        let drawn = crate::mermaid::fence_svg(lang, code, &palette(t)).map(|svg| {
-            // A drawn SVG follows the app into dark, as diagram files do.
-            let svg = if lang.eq_ignore_ascii_case("mermaid") || lang.eq_ignore_ascii_case("mmd") {
-                svg
-            } else {
-                themed(&svg, t.is_dark).into_owned()
-            };
-            Arc::<str>::from(svg)
-        });
+        // An SVG or page is shown as it was written, never recoloured for
+        // the theme; only Mermaid, which KodAct lays out, takes its palette.
+        let drawn = crate::mermaid::fence_svg(lang, code, &palette(t)).map(Arc::<str>::from);
         f.insert(k, drawn.clone());
         drawn
     })

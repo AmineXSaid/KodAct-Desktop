@@ -450,7 +450,6 @@ fn inline_diagram(
     t: &Theme,
 ) -> Option<AnyElement> {
     let svg = crate::diagram::drawable(&file.content)?;
-    let svg = super::diagram_view::themed(&svg, t.is_dark);
     let natural = super::diagram_view::natural_width(&svg)?;
     let frame = f32::from(t.size.column) - 2.;
     let width = (natural * v.zoom).max(80.);
@@ -696,7 +695,7 @@ fn diagram_card(
     // The drawing sits 8px inside the card, its corners concentric with it.
     let inner = CARD - 2. - 2. * f32::from(t.space.sm);
     let drawing = crate::diagram::drawable(&file.content).and_then(|svg| {
-        super::diagram_view::fluid(&super::diagram_view::themed(&svg, t.is_dark), inner, scale)
+        super::diagram_view::fluid(&svg, inner, scale)
     });
     div()
         .id(SharedString::from(format!("file-{key}")))
@@ -787,7 +786,7 @@ pub fn artifact(
         (None, None) if file.is_diagram() => crate::diagram::drawable(&file.content)
             .and_then(|svg| {
                 super::diagram_view::fluid(
-                    &super::diagram_view::themed(&svg, t.is_dark),
+                    &svg,
                     180.,
                     scale,
                 )

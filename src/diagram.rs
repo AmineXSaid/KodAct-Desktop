@@ -117,8 +117,8 @@ pub fn drawable(content: &str) -> Option<std::borrow::Cow<'_, str>> {
     if !css.trim().is_empty() && !css.contains("]]>") {
         out.push_str(&format!("<style><![CDATA[\n{css}]]></style>"));
     }
-    // A drawing in the KodAct skin paints its own paper (and turns dark
-    // with the app, `for_dark`); any other sits on the page's background.
+    // A drawing in the KodAct skin paints its own paper; any other sits on
+    // the page's background, as in a browser.
     let bg = sheet.background.clone().unwrap_or_else(|| "#ffffff".into());
     if !svg.to_ascii_lowercase().contains("#f9f7f5") && is_paint(&bg) {
         let (x, y) = attr(tag, "viewBox")
@@ -388,49 +388,6 @@ pub fn sized(svg: &str, width: u32) -> Option<String> {
     Some(format!("{new_tag}{}", &svg[tag.len()..]))
 }
 
-/// The KodAct skin's light colours and their dark counterparts (the bundled
-/// skill's `references/style-guide.md`), for drawing a light diagram in the
-/// dark theme.
-const TO_DARK: &[(&str, &str)] = &[
-    ("#f9f7f5", "#1c1b19"),                  // paper
-    ("#f1efeb", "#22211f"),                  // paper-2
-    ("#1c1b19", "#f6f5f4"),                  // ink
-    ("#615d59", "#b5b0aa"),                  // muted
-    ("#6f6a64", "#9d978f"),                  // soft
-    ("#c9c4bd", "#4a4744"),                  // rule-solid
-    ("#005fb3", "#4ba1f3"),                  // accent
-    ("#6a4fb4", "#ac93e6"),                  // link
-    ("#ffffff", "#111111"),                  // ink-strong, on accent fills
-    ("rgba(0,95,179,", "rgba(75,161,243,"),  // accent-tint
-    ("rgba(28,27,25,", "rgba(246,245,244,"), // rule
-];
-
-/// A light, KodAct-skinned drawing in the skin's dark colours; `None` when
-/// the drawing is not in the KodAct skin (it is then shown as it is).
-pub fn for_dark(svg: &str) -> Option<String> {
-    if !svg.to_ascii_lowercase().contains("fill=\"#f9f7f5\"") {
-        return None;
-    }
-    // Every swap at once, so a colour swapped in is never swapped again
-    // (ink and dark paper are the same value).
-    let lower = svg.to_ascii_lowercase();
-    let mut out = String::with_capacity(svg.len());
-    let mut i = 0;
-    'scan: while i < svg.len() {
-        for (from, to) in TO_DARK {
-            if lower[i..].starts_with(from) {
-                out.push_str(to);
-                i += from.len();
-                continue 'scan;
-            }
-        }
-        let ch = svg[i..].chars().next().unwrap_or(' ');
-        out.push(ch);
-        i += ch.len_utf8();
-    }
-    Some(out)
-}
-
 fn inner_text<'a>(content: &'a str, open: &str, close: &str) -> Option<&'a str> {
     let at = content.find(open)?;
     let body = &content[at..];
@@ -577,20 +534,6 @@ mod tests {
     }
 
     #[test]
-    fn a_forge_drawing_turns_dark_in_one_pass() {
-        let light = r##"<svg viewBox="0 0 10 10"><rect fill="#F9F7F5"/><text fill="#1c1b19">x</text><rect fill="rgba(0,95,179,0.08)" stroke="#005fb3"/></svg>"##;
-        let dark = for_dark(light).unwrap();
-        // Paper became dark ink-coloured paper, ink became light: not swapped twice.
-        assert!(dark.contains(r##"<rect fill="#1c1b19"/>"##), "{dark}");
-        assert!(dark.contains(r##"<text fill="#f6f5f4">"##), "{dark}");
-        assert!(dark.contains("rgba(75,161,243,0.08)") && dark.contains("#4ba1f3"));
-        assert!(
-            for_dark(r##"<svg><rect fill="#f5f5f5"/></svg>"##).is_none(),
-            "another skin is left alone"
-        );
-    }
-
-    #[test]
     fn the_bundled_skill_wears_the_forge_skin() {
         let root = concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -638,9 +581,7 @@ mod tests {
             assert!(r >= floor, "#{fg:06x} on #{bg:06x} is {r:.2}:1");
         }
         let page = include_str!("../assets/docs/forge-chat-path.html");
-        assert!(
-            is_diagram("chat-path.html", page) && for_dark(extract_svg(page).unwrap()).is_some()
-        );
+        assert!(is_diagram("chat-path.html", page));
     }
 
     #[test]
