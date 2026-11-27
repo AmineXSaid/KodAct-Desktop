@@ -367,7 +367,14 @@ mod powershell_tests {
         let code = "# draw it\n$app = New-Object -ComObject PowerPoint.Application\nif ($x -eq 3) { Write-Output \"done $x\" }";
         let spans = highlight(code, "ps1");
         let kinds: std::collections::HashSet<Kind> = spans.iter().map(|(_, k)| *k).collect();
-        for k in [Kind::Comment, Kind::Variable, Kind::Keyword, Kind::Str, Kind::Function, Kind::Operator] {
+        for k in [
+            Kind::Comment,
+            Kind::Variable,
+            Kind::Keyword,
+            Kind::Str,
+            Kind::Function,
+            Kind::Operator,
+        ] {
             assert!(kinds.contains(&k), "{k:?} missing from {kinds:?}");
         }
     }

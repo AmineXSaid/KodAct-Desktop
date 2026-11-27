@@ -183,7 +183,10 @@ pub fn parse_forge_remote(url: &str) -> Option<RemoteHost> {
         if host.is_empty() || host.contains('/') {
             return None;
         }
-        let slug = path.trim_start_matches('/').trim_end_matches(".git").to_string();
+        let slug = path
+            .trim_start_matches('/')
+            .trim_end_matches(".git")
+            .to_string();
         if slug.is_empty() || !slug.contains('/') {
             return None;
         }
@@ -206,7 +209,10 @@ pub fn parse_forge_remote(url: &str) -> Option<RemoteHost> {
         .unwrap_or(host_port)
         .trim()
         .to_string();
-    let slug = path.trim_end_matches('/').trim_end_matches(".git").to_string();
+    let slug = path
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .to_string();
     if host.is_empty() || slug.is_empty() || !slug.contains('/') {
         return None;
     }
@@ -527,25 +533,22 @@ fn via_gitlab_api(host: &str, slug: &str) -> Result<Hub, String> {
                 url: i["web_url"].as_str().unwrap_or("").to_string(),
             })
             .collect(),
-        run: pipelines
-            .as_array()
-            .and_then(|a| a.first())
-            .map(|r| {
-                let st = r["status"].as_str().unwrap_or("").to_lowercase();
-                let (status, conclusion) = match st.as_str() {
-                    "success" => ("completed".to_string(), Some("success".to_string())),
-                    "failed" | "canceled" => ("completed".to_string(), Some("failure".to_string())),
-                    "skipped" => ("completed".to_string(), Some("skipped".to_string())),
-                    other => (other.to_string(), None),
-                };
-                Run {
-                    name: "Pipeline".into(),
-                    branch: r["ref"].as_str().unwrap_or("").to_string(),
-                    status,
-                    conclusion,
-                    url: r["web_url"].as_str().unwrap_or("").to_string(),
-                }
-            }),
+        run: pipelines.as_array().and_then(|a| a.first()).map(|r| {
+            let st = r["status"].as_str().unwrap_or("").to_lowercase();
+            let (status, conclusion) = match st.as_str() {
+                "success" => ("completed".to_string(), Some("success".to_string())),
+                "failed" | "canceled" => ("completed".to_string(), Some("failure".to_string())),
+                "skipped" => ("completed".to_string(), Some("skipped".to_string())),
+                other => (other.to_string(), None),
+            };
+            Run {
+                name: "Pipeline".into(),
+                branch: r["ref"].as_str().unwrap_or("").to_string(),
+                status,
+                conclusion,
+                url: r["web_url"].as_str().unwrap_or("").to_string(),
+            }
+        }),
         via: "GitLab API",
     })
 }

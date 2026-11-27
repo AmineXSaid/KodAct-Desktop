@@ -859,10 +859,7 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
 /// `char_end` advances to the new row (`p1.y`, where `char_start` starts at
 /// `origin_x`). Comparing `p0.y` and `p1.y` places wrapped glyphs cleanly on
 /// `p1.y` from `origin_x..p1.x` and never paints a phantom box on `p0.y`.
-fn glyph_rows(
-    origin_x: f32,
-    glyphs: &[(char, (f32, f32), (f32, f32))],
-) -> Vec<(f32, f32, f32)> {
+fn glyph_rows(origin_x: f32, glyphs: &[(char, (f32, f32), (f32, f32))]) -> Vec<(f32, f32, f32)> {
     let mut out: Vec<(f32, f32, f32)> = Vec::new();
     let mut cur: Option<(f32, f32, f32)> = None;
     for &(ch, p0, p1) in glyphs {
@@ -1521,9 +1518,10 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                 ),
         )
         .child({
-            let wrap_plain =
-                matches!(lang.to_ascii_lowercase().as_str(), "" | "text" | "plaintext")
-                    && !shown.lines().any(drawing_line);
+            let wrap_plain = matches!(
+                lang.to_ascii_lowercase().as_str(),
+                "" | "text" | "plaintext"
+            ) && !shown.lines().any(drawing_line);
             div()
                 .id(SharedString::from(format!("code-{key}")))
                 .when(!wrap_plain, |d| d.overflow_x_scroll().whitespace_nowrap())
@@ -1917,8 +1915,22 @@ mod tests {
         assert!(matches!(&b[7], Block::Quote(_)));
         // GitHub's callouts become their own blocks; a plain quote stays a quote.
         let a = parse("> [!WARNING]\n> Back up first.\n>\n> Then run it.\n\n> Just a quote.");
-        assert!(matches!(&a[0], Block::Alert { kind: Alert::Warning, first: true, .. }));
-        assert!(matches!(&a[1], Block::Alert { kind: Alert::Warning, first: false, .. }));
+        assert!(matches!(
+            &a[0],
+            Block::Alert {
+                kind: Alert::Warning,
+                first: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &a[1],
+            Block::Alert {
+                kind: Alert::Warning,
+                first: false,
+                ..
+            }
+        ));
         assert!(matches!(&a[2], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
     }
@@ -2023,9 +2035,7 @@ mod tests {
             .iter()
             .any(|s| s.bold && s.text.contains("myaccount.google.com → Security")));
         assert!(items[0].iter().any(|s| s.code && s.text == "SID"));
-        assert!(items[3]
-            .iter()
-            .any(|s| s.code && s.text == "grpc-web"));
+        assert!(items[3].iter().any(|s| s.code && s.text == "grpc-web"));
 
         // A real 4-space indented code block stays a code block.
         let code_md = "Example:\n\n    fn main() {\n        println!(\"hi\");\n    }";

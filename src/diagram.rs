@@ -92,6 +92,249 @@ pub fn extract_svg(content: &str) -> Option<&str> {
     None
 }
 
+/// The drawing a file holds, ready to draw on its own. A bare SVG is itself.
+/// A page's SVG takes the page's CSS along: class-styled shapes keep their
+/// fills (without it every one falls back to black, the skill's
+/// `references/export.md` step 4), `var()`s are resolved (resvg reads
+/// none), and the page's background goes behind the drawing, which the page
+/// shows on white even when the SVG paints no paper of its own.
+pub fn drawable(content: &str) -> Option<std::borrow::Cow<'_, str>> {
+    let svg = extract_svg(content)?;
+    let at = svg.as_ptr() as usize - content.as_ptr() as usize;
+    let page = format!("{}{}", &content[..at], &content[at + svg.len()..]);
+    if page.trim().is_empty() {
+        return Some(svg.into());
+    }
+    let sheet = Sheet::read(&page);
+    let mut out = String::with_capacity(svg.len() + sheet.rules.len() + 256);
+    let tag = root_tag(svg)?;
+    out.push_str(tag);
+    let mut css = String::new();
+    if !sheet.inherited.is_empty() {
+        css.push_str(&format!("svg{{{}}}\n", sheet.inherited.join(";")));
+    }
+    css.push_str(&sheet.rules);
+    if !css.trim().is_empty() && !css.contains("]]>") {
+        out.push_str(&format!("<style><![CDATA[\n{css}]]></style>"));
+    }
+    // A drawing in the KodAct skin paints its own paper (and turns dark
+    // with the app, `for_dark`); any other sits on the page's background.
+    let bg = sheet.background.clone().unwrap_or_else(|| "#ffffff".into());
+    if !svg.to_ascii_lowercase().contains("#f9f7f5") && is_paint(&bg) {
+        let (x, y) = attr(tag, "viewBox")
+            .map(|vb| {
+                let n: Vec<f32> = vb
+                    .split(|c: char| c.is_whitespace() || c == ',')
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+                (
+                    n.first().copied().unwrap_or(0.),
+                    n.get(1).copied().unwrap_or(0.),
+                )
+            })
+            .unwrap_or((0., 0.));
+        if let Some((w, h)) = view_size(svg) {
+            out.push_str(&format!(
+                r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{bg}"/>"#
+            ));
+        }
+    }
+    out.push_str(&svg[tag.len()..]);
+    Some(sheet.resolve(&out).into())
+}
+
+/// Whether a CSS background value is a plain colour an SVG fill can take.
+fn is_paint(v: &str) -> bool {
+    let v = v.trim().to_ascii_lowercase();
+    !v.is_empty()
+        && !matches!(
+            v.as_str(),
+            "none" | "transparent" | "inherit" | "initial" | "unset"
+        )
+        && !v.contains(['"', '<', '>'])
+        && (v.starts_with('#')
+            || v.starts_with("rgb")
+            || v.starts_with("hsl")
+            || v.chars().all(|c| c.is_ascii_alphabetic()))
+}
+
+/// What a page's stylesheets say about the drawing inside it.
+#[derive(Default)]
+struct Sheet {
+    /// Custom properties from `:root`, `html` and `body`.
+    vars: Vec<(String, String)>,
+    /// `color` and `font-family` the page sets on `html`/`body`, which SVG
+    /// content inherits.
+    inherited: Vec<String>,
+    /// The page's background colour, if it sets one.
+    background: Option<String>,
+    /// Every other rule, as written (minus comments and at-rules).
+    rules: String,
+}
+
+impl Sheet {
+    fn read(page: &str) -> Self {
+        let mut css = String::new();
+        let lower = page.to_ascii_lowercase();
+        let mut from = 0;
+        while let Some(open) = lower[from..].find("<style").map(|i| from + i) {
+            let Some(body) = lower[open..].find('>').map(|i| open + i + 1) else {
+                break;
+            };
+            let end = lower[body..]
+                .find("</style")
+                .map_or(page.len(), |i| body + i);
+            css.push_str(&page[body..end]);
+            css.push('\n');
+            from = end;
+        }
+        let css = strip_comments(&css);
+        let mut s = Sheet::default();
+        let mut rest = css.as_str();
+        while let Some(brace) = rest.find(['{', ';', '}']) {
+            let head = rest[..brace].trim();
+            if rest.as_bytes()[brace] != b'{' {
+                // A statement at-rule (`@import …;`) or a stray `}`.
+                rest = &rest[brace + 1..];
+                continue;
+            }
+            let Some(close) = block_end(&rest[brace..]).map(|i| brace + i) else {
+                break;
+            };
+            let body = &rest[brace + 1..close];
+            rest = &rest[close + 1..];
+            // `@media`, `@font-face`, `@keyframes`: a dark scheme or a
+            // print layout is not the drawing as the page first shows it.
+            if head.starts_with('@') {
+                continue;
+            }
+            let selectors: Vec<&str> = head
+                .split(',')
+                .map(str::trim)
+                .filter(|sel| !sel.is_empty() && !sel.contains("::"))
+                .collect();
+            let page_level =
+                |sel: &str| matches!(sel.to_ascii_lowercase().as_str(), ":root" | "html" | "body");
+            if selectors.iter().any(|sel| page_level(sel)) {
+                for decl in body.split(';') {
+                    let Some((k, v)) = decl.split_once(':') else {
+                        continue;
+                    };
+                    let (k, v) = (k.trim(), v.trim());
+                    match k.to_ascii_lowercase().as_str() {
+                        k if k.starts_with("--") => s.vars.push((k.to_string(), v.to_string())),
+                        "color" | "font-family" => s.inherited.push(format!("{k}:{v}")),
+                        "background-color" => s.background = Some(v.to_string()),
+                        "background" => {
+                            s.background = v.split_whitespace().next().map(str::to_string)
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let kept: Vec<&str> = selectors
+                .into_iter()
+                .filter(|sel| !page_level(sel))
+                .collect();
+            if !kept.is_empty() {
+                s.rules
+                    .push_str(&format!("{}{{{}}}\n", kept.join(","), body.trim()));
+            }
+        }
+        // A background named by a variable.
+        s.background = s.background.take().map(|b| s.resolve(&b));
+        s.inherited = s.inherited.iter().map(|d| s.resolve(d)).collect();
+        s
+    }
+
+    /// `text` with every `var(--name[, fallback])` replaced by its value.
+    fn resolve(&self, text: &str) -> String {
+        let mut text = text.to_string();
+        // Variables naming variables: a few rounds, never forever.
+        for _ in 0..8 {
+            let Some(at) = text.find("var(") else { break };
+            let inner = at + 4;
+            let Some(end) = block_end_paren(&text[inner..]).map(|i| inner + i) else {
+                break;
+            };
+            let call = &text[inner..end];
+            let (name, fallback) = match top_level_comma(call) {
+                Some(c) => (call[..c].trim(), Some(call[c + 1..].trim())),
+                None => (call.trim(), None),
+            };
+            let value = self
+                .vars
+                .iter()
+                .rev()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.as_str())
+                .or(fallback)
+                .unwrap_or("initial")
+                .to_string();
+            text.replace_range(at..=end, &value);
+        }
+        text
+    }
+}
+
+fn strip_comments(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(at) = rest.find("/*") {
+        out.push_str(&rest[..at]);
+        rest = rest[at + 2..]
+            .find("*/")
+            .map_or("", |e| &rest[at + 2 + e + 2..]);
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The index of the `}` closing the block `s` opens with `{`.
+fn block_end(s: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (i, c) in s.char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The index of the `)` closing a call whose arguments `s` starts with.
+fn block_end_paren(s: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return Some(i),
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn top_level_comma(s: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
 /// The root tag of an SVG: `<svg …>`.
 fn root_tag(svg: &str) -> Option<&str> {
     svg.find('>').map(|end| &svg[..=end])
@@ -243,6 +486,53 @@ mod tests {
     }
 
     use super::*;
+
+    /// The CAN bus page a chat drew: shapes styled from the page `<style>`
+    /// through `var()`s, no paper of its own. Drawn bare, every box was black.
+    #[test]
+    fn a_page_styled_drawing_keeps_its_css_and_background() {
+        let page = r#"<!doctype html><html><head><style>
+            /* tokens */ :root { --paper: #ffffff; --ink: #222; --line: var(--ink); }
+            body { background: var(--paper); color: var(--ink); font-family: Inter, sans-serif; }
+            .node rect { fill: var(--paper); stroke: var(--line); }
+            .bus { stroke: var(--accent, #c33); }
+            @media (prefers-color-scheme: dark) { .node rect { fill: #000; } }
+            h1::after { content: "x"; }
+        </style></head><body><h1>CAN</h1>
+        <svg viewBox="10 20 400 200" xmlns="http://www.w3.org/2000/svg"><g class="node"><rect width="80" height="40"/></g><line class="bus" x2="9"/></svg></body></html>"#;
+        let d = drawable(page).unwrap();
+        assert!(d.starts_with("<svg viewBox=\"10 20 400 200\""), "{d}");
+        assert!(
+            d.contains(".node rect{fill: #ffffff; stroke: #222;}"),
+            "{d}"
+        );
+        assert!(d.contains(".bus{stroke: #c33;}"), "{d}");
+        assert!(
+            d.contains("svg{color:#222;font-family:Inter, sans-serif}"),
+            "{d}"
+        );
+        assert!(
+            d.contains(r##"<rect x="10" y="20" width="400" height="200" fill="#ffffff"/>"##),
+            "{d}"
+        );
+        assert!(
+            !d.contains("var(")
+                && !d.contains("#000")
+                && !d.contains("tokens")
+                && !d.contains("::after"),
+            "{d}"
+        );
+        assert_eq!(view_size(&d), Some((400., 200.)));
+    }
+
+    #[test]
+    fn a_bare_svg_and_a_skinned_page_draw_as_they_are() {
+        let svg = r#"<svg viewBox="0 0 4 4"><rect/></svg>"#;
+        assert!(matches!(drawable(svg), Some(std::borrow::Cow::Borrowed(s)) if s == svg));
+        // The skin paints its own paper; none is added under it.
+        let d = drawable(PAGE).unwrap();
+        assert_eq!(d.matches("<rect").count(), 1, "{d}");
+    }
 
     const PAGE: &str = r##"<!DOCTYPE html><html><body><p class="eyebrow">Architecture · Diagram Design</p><h1>How a chat reaches a model</h1>
 <div class="diagram-container"><svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img"><title id="t">Chat path</title><desc id="d">From KodAct to an endpoint &amp; back.</desc>

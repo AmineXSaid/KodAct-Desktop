@@ -48,8 +48,9 @@ pub fn render(
         || call.status == ToolStatus::Declined
         || call.output.starts_with(crate::state::AGENT_STOPPED);
     let interrupted = !stopped && call.status == ToolStatus::Interrupted;
-    let failed =
-        !stopped && !interrupted && (run.is_some_and(|r| r.failed) || call.status == ToolStatus::Failed);
+    let failed = !stopped
+        && !interrupted
+        && (run.is_some_and(|r| r.failed) || call.status == ToolStatus::Failed);
     let inspected = run.is_some_and(|r| cx.inspected_agent.as_deref() == Some(r.id.as_str()));
 
     let now = std::time::Instant::now();
@@ -129,35 +130,34 @@ pub fn render(
 
     // Never hide a sub-agent failure or warning behind collapse.
     let problem_note: Option<String> = if failed || interrupted || stalled {
-        let from_step = run
-            .and_then(|r| {
-                r.steps
-                    .iter()
-                    .rev()
-                    .find(|s| matches!(s.status, ToolStatus::Failed | ToolStatus::Interrupted))
-                    .and_then(|s| {
-                        let first = s.output.lines().map(str::trim).find(|l| !l.is_empty());
-                        match first {
-                            Some(line) => Some(format!("{}: {line}", s.label())),
-                            None => Some(format!("{} failed", s.label())),
-                        }
-                    })
-            });
+        let from_step = run.and_then(|r| {
+            r.steps
+                .iter()
+                .rev()
+                .find(|s| matches!(s.status, ToolStatus::Failed | ToolStatus::Interrupted))
+                .and_then(|s| {
+                    let first = s.output.lines().map(str::trim).find(|l| !l.is_empty());
+                    match first {
+                        Some(line) => Some(format!("{}: {line}", s.label())),
+                        None => Some(format!("{} failed", s.label())),
+                    }
+                })
+        });
         from_step
             .or_else(|| {
-                super::message::failure_line(call).map(|l| l.to_string()).or_else(|| {
-                    run.and_then(|r| {
-                        r.said
-                            .lines()
-                            .map(str::trim)
-                            .find(|l| !l.is_empty())
-                            .map(|l| l.to_string())
+                super::message::failure_line(call)
+                    .map(|l| l.to_string())
+                    .or_else(|| {
+                        run.and_then(|r| {
+                            r.said
+                                .lines()
+                                .map(str::trim)
+                                .find(|l| !l.is_empty())
+                                .map(|l| l.to_string())
+                        })
                     })
-                })
             })
-            .or_else(|| {
-                stalled.then(|| "Agent appears stalled — no recent progress".to_string())
-            })
+            .or_else(|| stalled.then(|| "Agent appears stalled — no recent progress".to_string()))
     } else {
         None
     };
@@ -180,7 +180,9 @@ pub fn render(
         // Rows hold, so a card's corners: a pill's would eat the text.
         .rounded(t.radius.card)
         .when(inspected, |d| d.bg(t.colors.primary_tint.opacity(0.65)))
-        .when(failed && !inspected, |d| d.bg(t.extra.danger_tint.opacity(0.65)))
+        .when(failed && !inspected, |d| {
+            d.bg(t.extra.danger_tint.opacity(0.65))
+        })
         .when((interrupted || stalled) && !failed && !inspected, |d| {
             d.bg(t.extra.warning_tint.opacity(0.65))
         })
@@ -219,51 +221,48 @@ pub fn render(
                             .child(k),
                     )
                 })
-                .when_some(
-                    stop_id.filter(|_| running && !stopping),
-                    |d, id| {
-                        let btn_hover = t.colors.hover;
-                        let id_key = id.clone();
-                        d.child(
-                            div()
-                                .id(SharedString::from(format!("agent-row-stop-{key}")))
-                                .role(gpui::accesskit::Role::Button)
-                                .aria_label(SharedString::from(format!("Stop agent {title}")))
-                                .tab_index(0)
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .px(t.space.sm)
-                                .h(px(20.))
-                                .rounded(t.radius.compact)
-                                .border_1()
-                                .border_color(t.extra.border_strong)
-                                .bg(t.colors.surface)
-                                .text_size(t.text.caption)
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text_muted)
-                                .cursor_pointer()
-                                .hover(move |s| s.bg(btn_hover))
-                                .child(icon(
-                                    "icons/square.svg",
-                                    t.size.icon_xs,
-                                    t.colors.text_muted,
-                                ))
-                                .child("Stop")
-                                .on_click(move |_, _, app| {
+                .when_some(stop_id.filter(|_| running && !stopping), |d, id| {
+                    let btn_hover = t.colors.hover;
+                    let id_key = id.clone();
+                    d.child(
+                        div()
+                            .id(SharedString::from(format!("agent-row-stop-{key}")))
+                            .role(gpui::accesskit::Role::Button)
+                            .aria_label(SharedString::from(format!("Stop agent {title}")))
+                            .tab_index(0)
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .gap(px(4.))
+                            .px(t.space.sm)
+                            .h(px(20.))
+                            .rounded(t.radius.compact)
+                            .border_1()
+                            .border_color(t.extra.border_strong)
+                            .bg(t.colors.surface)
+                            .text_size(t.text.caption)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_muted)
+                            .cursor_pointer()
+                            .hover(move |s| s.bg(btn_hover))
+                            .child(icon(
+                                "icons/square.svg",
+                                t.size.icon_xs,
+                                t.colors.text_muted,
+                            ))
+                            .child("Stop")
+                            .on_click(move |_, _, app| {
+                                app.stop_propagation();
+                                stopper.update(app, |s, cx| s.stop_agent(&id, cx));
+                            })
+                            .on_key_down(move |ev, _, app| {
+                                if matches!(ev.keystroke.key.as_str(), "enter" | "space") {
                                     app.stop_propagation();
-                                    stopper.update(app, |s, cx| s.stop_agent(&id, cx));
-                                })
-                                .on_key_down(move |ev, _, app| {
-                                    if matches!(ev.keystroke.key.as_str(), "enter" | "space") {
-                                        app.stop_propagation();
-                                        stopper_key.update(app, |s, cx| s.stop_agent(&id_key, cx));
-                                    }
-                                }),
-                        )
-                    },
-                )
+                                    stopper_key.update(app, |s, cx| s.stop_agent(&id_key, cx));
+                                }
+                            }),
+                    )
+                })
                 .child(
                     div()
                         .flex_none()

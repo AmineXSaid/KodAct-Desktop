@@ -307,7 +307,11 @@ pub fn parse_slash(text: &str) -> Option<(&str, &str)> {
 /// Normalize a slash command token (converting `_` to `-`, case-insensitively)
 /// to its canonical Desktop/Engine action identifier, if it is an action command.
 pub fn normalize_action(cmd: &str) -> Option<&'static str> {
-    let norm = cmd.trim().trim_start_matches('/').to_ascii_lowercase().replace('_', "-");
+    let norm = cmd
+        .trim()
+        .trim_start_matches('/')
+        .to_ascii_lowercase()
+        .replace('_', "-");
     Some(match norm.as_str() {
         "plugin" | "plugins" | "show-plugin" | "show-plugins" => "plugins",
         "skills" | "show-skill" | "show-skills" => "skills",
@@ -376,13 +380,11 @@ pub fn classify(text: &str) -> Option<CommandKind> {
         } else {
             CommandKind::Prompt
         }),
-        "goal" => Some(
-            if args.is_empty() || args.eq_ignore_ascii_case("clear") {
-                CommandKind::Action
-            } else {
-                CommandKind::Prompt
-            },
-        ),
+        "goal" => Some(if args.is_empty() || args.eq_ignore_ascii_case("clear") {
+            CommandKind::Action
+        } else {
+            CommandKind::Prompt
+        }),
         "subtask" | "loop" => Some(if args.is_empty() {
             CommandKind::Action
         } else {

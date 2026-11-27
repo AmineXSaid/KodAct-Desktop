@@ -101,9 +101,7 @@ fn run_status_icon(status: ToolStatus, t: &Theme, size: gpui::Pixels, key: Strin
         ToolStatus::Interrupted => {
             icon("icons/triangle-alert.svg", size, t.extra.warning).into_any_element()
         }
-        ToolStatus::Done => {
-            icon("icons/check.svg", size, t.colors.text_muted).into_any_element()
-        }
+        ToolStatus::Done => icon("icons/check.svg", size, t.colors.text_muted).into_any_element(),
     }
 }
 
@@ -377,16 +375,12 @@ pub fn render(
         .when(v.runs.len() > 1, |d| {
             d.child(
                 nav_icon_button(t, "agent-prev", "icons/arrow-left.svg", "Previous agent")
-                    .on_click(move |_, _, cx| {
-                        prev_state.update(cx, |s, cx| s.cycle_agent(-1, cx))
-                    }),
+                    .on_click(move |_, _, cx| prev_state.update(cx, |s, cx| s.cycle_agent(-1, cx))),
             )
             .child(jumper_button)
             .child(
                 nav_icon_button(t, "agent-next", "icons/arrow-right.svg", "Next agent")
-                    .on_click(move |_, _, cx| {
-                        next_state.update(cx, |s, cx| s.cycle_agent(1, cx))
-                    }),
+                    .on_click(move |_, _, cx| next_state.update(cx, |s, cx| s.cycle_agent(1, cx))),
             )
             .children(jumper_popover)
         });
@@ -444,13 +438,7 @@ pub fn render(
     .on_activate(move |_, cx| full_state.update(cx, |s, cx| s.toggle_panel_full(cx)));
 
     let tabs_strip = super::agent_strip::render(
-        v.runs,
-        active_idx,
-        equal_row,
-        v.strip,
-        v.strip_at,
-        &state,
-        t,
+        v.runs, active_idx, equal_row, v.strip, v.strip_at, &state, t,
     );
 
     let switcher_base = div()
@@ -539,7 +527,9 @@ pub fn render(
     for s in &run.steps {
         if matches!(
             s.kind,
-            crate::state::ToolKind::Read | crate::state::ToolKind::Edit | crate::state::ToolKind::Write
+            crate::state::ToolKind::Read
+                | crate::state::ToolKind::Edit
+                | crate::state::ToolKind::Write
         ) && !s.what.trim().is_empty()
             && !touched_files.iter().any(|p| p == &s.what)
         {
@@ -889,7 +879,11 @@ pub fn render(
                         .min_h(px(28.))
                         .px(t.space.sm)
                         .hover(move |s| s.bg(notes_hover))
-                        .child(icon("icons/lightbulb.svg", t.size.icon_xs, t.colors.text_subtle))
+                        .child(icon(
+                            "icons/lightbulb.svg",
+                            t.size.icon_xs,
+                            t.colors.text_subtle,
+                        ))
                         .child(
                             div()
                                 .flex_1()
@@ -1121,18 +1115,12 @@ pub fn render(
             )
         })
         .when(!stream_items.is_empty(), |d| {
-            d.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .children(stream_items),
-            )
+            d.child(div().flex().flex_col().gap(px(4.)).children(stream_items))
         });
 
     // ---- 5. Bottom Grounded Footer Bar ----
-    let has_copyable = !run.said.trim().is_empty()
-        || run.steps.iter().any(|s| !s.output.trim().is_empty());
+    let has_copyable =
+        !run.said.trim().is_empty() || run.steps.iter().any(|s| !s.output.trim().is_empty());
     let copy_key = format!("agent-{}", run.id);
     let did_copy = v.copied.as_deref() == Some(copy_key.as_str());
     let copier = state.clone();
@@ -1149,7 +1137,11 @@ pub fn render(
     } else if v.runs.len() > 1 {
         super::agent_roster::agent_line(active_idx, v.runs.len(), run.steps.len(), took)
     } else {
-        super::agent_roster::status_line(super::agent_roster::status(run), run.steps.len(), Some(took))
+        super::agent_roster::status_line(
+            super::agent_roster::status(run),
+            run.steps.len(),
+            Some(took),
+        )
     };
 
     let footer = div()

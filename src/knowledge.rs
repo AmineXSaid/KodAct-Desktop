@@ -342,7 +342,11 @@ mod tests {
         std::fs::write(p.join("README.md"), "Run with pnpm dev.").unwrap();
         // From elsewhere: copied in. From the project: referenced.
         assert_eq!(add(&p, &[outside.clone(), p.join("README.md")]).unwrap(), 2);
-        let copy = format!("{}/{}", dir(&p), outside.file_name().unwrap().to_string_lossy());
+        let copy = format!(
+            "{}/{}",
+            dir(&p),
+            outside.file_name().unwrap().to_string_lossy()
+        );
         assert!(p.join(&copy).is_file());
         // Both start On demand: listed, no text sent.
         let k = compile(&p, 1000);

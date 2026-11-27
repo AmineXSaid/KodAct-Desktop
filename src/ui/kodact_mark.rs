@@ -21,8 +21,7 @@
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, svg, Animation, AnimationExt, AnyElement, App, ElementId, Hsla,
-    Window,
+    div, prelude::*, px, svg, Animation, AnimationExt, AnyElement, App, ElementId, Hsla, Window,
 };
 
 use super::motion;
@@ -53,12 +52,7 @@ const DOT: [(f32, f32); 16] = [
 ];
 
 /// Crisp 14° tilted slash `/` ascending through the centre.
-const SLASH: [(f32, f32); 4] = [
-    (68.0, 224.0),
-    (96.0, 232.0),
-    (148.0, 22.0),
-    (120.0, 14.0),
-];
+const SLASH: [(f32, f32); 4] = [(68.0, 224.0), (96.0, 232.0), (148.0, 22.0), (120.0, 14.0)];
 
 /// Right chevron `<` kissing the slash midpoint to form the K.
 const ANGLE: [(f32, f32); 6] = [

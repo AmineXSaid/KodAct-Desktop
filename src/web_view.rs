@@ -106,7 +106,11 @@ pub enum Cmd {
     Pdf(PathBuf),
     /// Which part of the page is at this point (CSS pixels in the panel):
     /// asked now and then as the mouse moves, at once for a click (`pick`).
-    Inspect { x: f64, y: f64, pick: bool },
+    Inspect {
+        x: f64,
+        y: f64,
+        pick: bool,
+    },
     /// Scroll so this point of the page (CSS pixels from its top left) is
     /// near the top.
     ScrollTo(f64, f64),
@@ -127,7 +131,11 @@ pub enum Cmd {
     ScrollToHeading(usize),
     /// Which part of the page is at this point (CSS pixels from the page's
     /// top left): a new mark's anchor, said as `Update::AnchoredAt`.
-    AnchorAt { id: u64, x: f64, y: f64 },
+    AnchorAt {
+        id: u64,
+        x: f64,
+        y: f64,
+    },
     /// The parts (CSS selectors) comments and marks are on: where each is
     /// now is said as `Update::Anchors` whenever it changes (a zoom, a
     /// wider panel, an edit), so they follow their part.
@@ -258,11 +266,22 @@ pub const ZOOMS: [f64; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 /// The next zoom in (`step` 1) or out (-1) from `at`, as browsers step:
 /// through these, clamped at the ends.
 pub fn zoom_step(at: f64, step: i32) -> f64 {
-    const STEPS: [f64; 13] = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
+    const STEPS: [f64; 13] = [
+        0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0,
+    ];
     if step > 0 {
-        STEPS.iter().copied().find(|z| *z > at + 0.001).unwrap_or(2.0)
+        STEPS
+            .iter()
+            .copied()
+            .find(|z| *z > at + 0.001)
+            .unwrap_or(2.0)
     } else {
-        STEPS.iter().rev().copied().find(|z| *z < at - 0.001).unwrap_or(0.25)
+        STEPS
+            .iter()
+            .rev()
+            .copied()
+            .find(|z| *z < at - 0.001)
+            .unwrap_or(0.25)
     }
 }
 
@@ -281,7 +300,10 @@ pub enum Update {
     Frame(Arc<RenderImage>, FrameInfo),
     /// The part of the page at a point (`Cmd::Inspect`), if there is one;
     /// `pick` when it was a click.
-    Part { part: Option<PagePart>, pick: bool },
+    Part {
+        part: Option<PagePart>,
+        pick: bool,
+    },
     /// The page's headings, in order (`Cmd::Outline`).
     Outline(Vec<Heading>),
     /// The page is a deck: the slide in view and how many (None: not a
@@ -346,7 +368,9 @@ impl Drop for WebView {
         std::thread::spawn(move || {
             let until = Instant::now() + Duration::from_secs(2);
             while Instant::now() < until
-                && child.lock().is_ok_and(|mut c| matches!(c.try_wait(), Ok(None)))
+                && child
+                    .lock()
+                    .is_ok_and(|mut c| matches!(c.try_wait(), Ok(None)))
             {
                 std::thread::sleep(Duration::from_millis(20));
             }
@@ -642,7 +666,12 @@ pub(crate) fn print_pdf(
         .to_string();
     let mut out = vec![];
     loop {
-        let r = c.call(s, "IO.read", json!({ "handle": handle, "size": 512 * 1024 }), events)?;
+        let r = c.call(
+            s,
+            "IO.read",
+            json!({ "handle": handle, "size": 512 * 1024 }),
+            events,
+        )?;
         let data = r["data"].as_str().unwrap_or("");
         // The last piece can be empty, with end of file.
         if data.is_empty() {
@@ -1185,7 +1214,12 @@ fn devtools(
                         Some(id) => id,
                         None if blank => tab.target.clone(),
                         None => {
-                            let made = c.call(None, "Target.createTarget", json!({ "url": "about:blank" }), &mut events)?;
+                            let made = c.call(
+                                None,
+                                "Target.createTarget",
+                                json!({ "url": "about:blank" }),
+                                &mut events,
+                            )?;
                             made["targetId"].as_str().ok_or("no new tab")?.to_string()
                         }
                     };
@@ -1224,7 +1258,11 @@ fn devtools(
                             c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
                             // A draft is a new document: its guides again.
                             if guides.is_some() {
-                                c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                                c.send(
+                                    s,
+                                    "Runtime.evaluate",
+                                    json!({ "expression": guides_js(guides.as_deref()) }),
+                                )?;
                             }
                         }
                         None if on == key => {
@@ -1297,14 +1335,22 @@ fn devtools(
                 }
                 Cmd::Guides(colour) => {
                     guides = colour;
-                    c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                    c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": guides_js(guides.as_deref()) }),
+                    )?;
                 }
                 Cmd::AnchorAt { id, x, y } => {
                     let js = format!(
                         "(() => {{ const x = {x} - scrollX, y = {y} - scrollY; const j = ({})(); if (!j) return ''; const p = JSON.parse(j); const e = document.querySelector(p.selector); if (e) [p.x, p.y, p.w, p.h] = ({CONTENT_BOX_JS})(e); return JSON.stringify(p); }})()",
                         part_fn_js()
                     );
-                    let req = c.send(s, "Runtime.evaluate", json!({ "expression": js, "returnByValue": true }))?;
+                    let req = c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": js, "returnByValue": true }),
+                    )?;
                     anchor_at_req.insert(req, id);
                 }
                 Cmd::Anchors(list) => {
@@ -1319,11 +1365,19 @@ fn devtools(
                     c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
                 }
                 Cmd::SlideTo(n) => {
-                    c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::go_to_slide_js(n) }))?;
+                    c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": crate::design::live::go_to_slide_js(n) }),
+                    )?;
                     deck_asked = Instant::now() - Duration::from_millis(250);
                 }
                 Cmd::Slide(step) => {
-                    c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::slide_step_js(step) }))?;
+                    c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": crate::design::live::slide_step_js(step) }),
+                    )?;
                     // Say where it got to soon, not at the next ask.
                     deck_asked = Instant::now() - Duration::from_millis(250);
                 }
@@ -1337,8 +1391,17 @@ fn devtools(
                         )?);
                     }
                 }
-                Cmd::Picture { before, clip, after } => {
-                    let _ = c.call(s, "Runtime.evaluate", json!({ "expression": before }), &mut events);
+                Cmd::Picture {
+                    before,
+                    clip,
+                    after,
+                } => {
+                    let _ = c.call(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": before }),
+                        &mut events,
+                    );
                     let (x, y, w, h) = clip;
                     let shot = c
                         .call(
@@ -1403,7 +1466,10 @@ fn devtools(
                 json!({ "expression": part_js(x, y), "returnByValue": true }),
             )?);
         }
-        if !anchors.is_empty() && anchors_req.is_none() && anchors_asked.elapsed() > Duration::from_millis(700) {
+        if !anchors.is_empty()
+            && anchors_req.is_none()
+            && anchors_asked.elapsed() > Duration::from_millis(700)
+        {
             anchors_asked = Instant::now();
             anchors_req = Some(c.send(
                 Some(&tab.session),
@@ -1440,8 +1506,9 @@ fn devtools(
                 }
             } else if Some(id) == anchors_req {
                 anchors_req = None;
-                let boxes: Vec<Option<(f64, f64, f64, f64)>> =
-                    value.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or_default();
+                let boxes: Vec<Option<(f64, f64, f64, f64)>> = value
+                    .and_then(|v| serde_json::from_str(&v).ok())
+                    .unwrap_or_default();
                 let now: Vec<_> = anchors
                     .iter()
                     .zip(boxes)
@@ -1578,7 +1645,11 @@ fn devtools(
                 // A page loaded: its guides again, and its headings.
                 let s = Some(tab.session.as_str());
                 if guides.is_some() {
-                    c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                    c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": guides_js(guides.as_deref()) }),
+                    )?;
                 }
                 if outline_on {
                     outline_req = Some(c.send(
@@ -1639,7 +1710,10 @@ fn devtools(
 /// again (by id, else tag, two classes and place, up to six levels), the
 /// start of its text, and its box on the page.
 fn part_js(x: f64, y: f64) -> String {
-    format!("(() => {{ const x = {x}, y = {y}; return ({})(); }})()", part_fn_js())
+    format!(
+        "(() => {{ const x = {x}, y = {y}; return ({})(); }})()",
+        part_fn_js()
+    )
 }
 
 /// The part of the page at viewport point (`x`, `y`, in scope), as a
@@ -1762,7 +1836,12 @@ mod tests {
         assert_eq!(zoom_step(2.0, 1), 2.0);
         assert_eq!(zoom_step(0.25, -1), 0.25);
         // The page lays out in the panel's room over the zoom.
-        let m = Metrics { width: 511, height: 643, scale: 1.0, zoom: 0.5 };
+        let m = Metrics {
+            width: 511,
+            height: 643,
+            scale: 1.0,
+            zoom: 0.5,
+        };
         assert_eq!(m.layout(), (1022, 1286));
         let m = Metrics { zoom: 2.0, ..m };
         assert_eq!(m.layout(), (256, 322));

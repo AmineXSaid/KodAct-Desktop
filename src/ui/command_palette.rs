@@ -422,7 +422,11 @@ impl CommandPalette {
                 } else {
                     "icons/maximize-2.svg"
                 },
-                Some(crate::ui::shortcuts::keys("secondary-alt-f").join(" ").into()),
+                Some(
+                    crate::ui::shortcuts::keys("secondary-alt-f")
+                        .join(" ")
+                        .into(),
+                ),
                 Box::new(TogglePanelFull),
             ),
             act(
@@ -479,7 +483,11 @@ impl CommandPalette {
                 Box::new(NextLanguage),
             ),
             act(
-                if s.pet.is_some() { "Pet: the next one" } else { "Pet: a companion beside the chat" },
+                if s.pet.is_some() {
+                    "Pet: the next one"
+                } else {
+                    "Pet: a companion beside the chat"
+                },
                 "icons/paw-print.svg",
                 None,
                 Box::new(NextPet),
@@ -502,7 +510,12 @@ impl CommandPalette {
                 None,
                 Box::new(OpenSlashCommands),
             ),
-            act("Open Agents…", "icons/boxes.svg", None, Box::new(OpenAgents)),
+            act(
+                "Open Agents…",
+                "icons/boxes.svg",
+                None,
+                Box::new(OpenAgents),
+            ),
             act(
                 "Open Skills…",
                 "icons/scroll-text.svg",
@@ -770,27 +783,72 @@ impl CommandPalette {
             }
             if s.doc_dirty() {
                 out.extend([
-                    act("Save your edits to the open file", "icons/check.svg", Some(shortcut("S")), Box::new(SaveDocEdits)),
-                    act("Discard your edits to the open file", "icons/undo-2.svg", None, Box::new(DiscardDocEdits)),
+                    act(
+                        "Save your edits to the open file",
+                        "icons/check.svg",
+                        Some(shortcut("S")),
+                        Box::new(SaveDocEdits),
+                    ),
+                    act(
+                        "Discard your edits to the open file",
+                        "icons/undo-2.svg",
+                        None,
+                        Box::new(DiscardDocEdits),
+                    ),
                 ]);
             }
             if crate::ui::text_editor::editable(f) && (f.is_markdown() || f.office().is_none()) {
                 out.extend([
-                    act("Undo in the open file", "icons/undo-2.svg", None, Box::new(UndoDocEdit)),
-                    act("Redo in the open file", "icons/redo-2.svg", None, Box::new(RedoDocEdit)),
+                    act(
+                        "Undo in the open file",
+                        "icons/undo-2.svg",
+                        None,
+                        Box::new(UndoDocEdit),
+                    ),
+                    act(
+                        "Redo in the open file",
+                        "icons/redo-2.svg",
+                        None,
+                        Box::new(RedoDocEdit),
+                    ),
                 ]);
             }
             if s.doc_page_count() > 0 || f.is_image() {
                 out.extend([
-                    act("Zoom the file in", "icons/zoom-in.svg", Some(shortcut("=")), Box::new(DocZoomIn)),
-                    act("Zoom the file out", "icons/zoom-out.svg", Some(shortcut("-")), Box::new(DocZoomOut)),
-                    act("Fit the file to the panel's width", "icons/maximize-2.svg", Some(shortcut("0")), Box::new(DocZoomFit)),
+                    act(
+                        "Zoom the file in",
+                        "icons/zoom-in.svg",
+                        Some(shortcut("=")),
+                        Box::new(DocZoomIn),
+                    ),
+                    act(
+                        "Zoom the file out",
+                        "icons/zoom-out.svg",
+                        Some(shortcut("-")),
+                        Box::new(DocZoomOut),
+                    ),
+                    act(
+                        "Fit the file to the panel's width",
+                        "icons/maximize-2.svg",
+                        Some(shortcut("0")),
+                        Box::new(DocZoomFit),
+                    ),
                 ]);
             }
             if s.doc_page_count() > 0 {
                 out.extend([
-                    act("Thumbnails of the file's pages", "icons/panel-left.svg", Some(shortcut("Alt T")), Box::new(ToggleThumbnails)),
-                    act("Go to a page", "icons/hash.svg", Some(shortcut("G")), Box::new(GoToPage)),
+                    act(
+                        "Thumbnails of the file's pages",
+                        "icons/panel-left.svg",
+                        Some(shortcut("Alt T")),
+                        Box::new(ToggleThumbnails),
+                    ),
+                    act(
+                        "Go to a page",
+                        "icons/hash.svg",
+                        Some(shortcut("G")),
+                        Box::new(GoToPage),
+                    ),
                 ]);
             }
             if matches!(
@@ -814,10 +872,22 @@ impl CommandPalette {
             use crate::design::prompt::Surface;
             let now = s.design_setup().map(|d| d.surface);
             let kinds: [(Surface, &str, Box<dyn Action>); 4] = [
-                (Surface::Any, "Design chat: any design", Box::new(DesignChat)),
+                (
+                    Surface::Any,
+                    "Design chat: any design",
+                    Box::new(DesignChat),
+                ),
                 (Surface::Deck, "Design chat: a deck", Box::new(DesignDeck)),
-                (Surface::Prototype, "Design chat: a prototype", Box::new(DesignPrototype)),
-                (Surface::Document, "Design chat: a document", Box::new(DesignDocument)),
+                (
+                    Surface::Prototype,
+                    "Design chat: a prototype",
+                    Box::new(DesignPrototype),
+                ),
+                (
+                    Surface::Document,
+                    "Design chat: a document",
+                    Box::new(DesignDocument),
+                ),
             ];
             for (surface, label, action) in kinds {
                 if now != Some(surface) {
@@ -825,38 +895,98 @@ impl CommandPalette {
                 }
             }
             if now.is_some() {
-                out.push(act("End the design chat", "icons/x.svg", None, Box::new(EndDesignChat)));
+                out.push(act(
+                    "End the design chat",
+                    "icons/x.svg",
+                    None,
+                    Box::new(EndDesignChat),
+                ));
             }
         }
         // A deck in the browser, with no document open: its slides.
         if s.doc.is_none() && s.web_page.deck.is_some() {
-            out.push(act("Next slide", "icons/chevron-down.svg", Some("Alt ↓".into()), Box::new(NextPage)));
-            out.push(act("Previous slide", "icons/chevron-up.svg", Some("Alt ↑".into()), Box::new(PreviousPage)));
+            out.push(act(
+                "Next slide",
+                "icons/chevron-down.svg",
+                Some("Alt ↓".into()),
+                Box::new(NextPage),
+            ));
+            out.push(act(
+                "Previous slide",
+                "icons/chevron-up.svg",
+                Some("Alt ↑".into()),
+                Box::new(PreviousPage),
+            ));
         }
         // The browser's page: zoom it, present it, save it; and the design's.
         if s.web.is_some() {
             out.extend([
-                act("Zoom the page in", "icons/zoom-in.svg", Some(shortcut("=")), Box::new(ZoomIn)),
-                act("Zoom the page out", "icons/zoom-out.svg", Some(shortcut("-")), Box::new(ZoomOut)),
+                act(
+                    "Zoom the page in",
+                    "icons/zoom-in.svg",
+                    Some(shortcut("=")),
+                    Box::new(ZoomIn),
+                ),
+                act(
+                    "Zoom the page out",
+                    "icons/zoom-out.svg",
+                    Some(shortcut("-")),
+                    Box::new(ZoomOut),
+                ),
                 act(
                     "The page at its own size (100%)",
                     "icons/search.svg",
                     Some(shortcut("0")),
                     Box::new(ZoomReset),
                 ),
-                act("Zoom the page to a desktop width", "icons/scan.svg", None, Box::new(ZoomFit)),
+                act(
+                    "Zoom the page to a desktop width",
+                    "icons/scan.svg",
+                    None,
+                    Box::new(ZoomFit),
+                ),
                 act(
                     "Present the page: it fills the window",
                     "icons/play.svg",
                     Some("F11".into()),
                     Box::new(Present),
                 ),
-                act("Save the page as PDF", "icons/file-down.svg", None, Box::new(SavePagePdf)),
-                act("Save the page as PNG", "icons/image.svg", None, Box::new(SavePagePng)),
-                act("Save the deck as PowerPoint", "icons/presentation.svg", None, Box::new(SavePagePptx)),
-                act("Save the deck as editable PowerPoint", "icons/file-pen.svg", None, Box::new(SavePagePptxEditable)),
-                act("Save the page as one HTML file", "icons/file-code.svg", None, Box::new(SavePageHtml)),
-                act("Save the page for Figma (editable layers)", "icons/layers.svg", None, Box::new(SavePageFigma)),
+                act(
+                    "Save the page as PDF",
+                    "icons/file-down.svg",
+                    None,
+                    Box::new(SavePagePdf),
+                ),
+                act(
+                    "Save the page as PNG",
+                    "icons/image.svg",
+                    None,
+                    Box::new(SavePagePng),
+                ),
+                act(
+                    "Save the deck as PowerPoint",
+                    "icons/presentation.svg",
+                    None,
+                    Box::new(SavePagePptx),
+                ),
+                act(
+                    "Save the deck as editable PowerPoint",
+                    "icons/file-pen.svg",
+                    None,
+                    Box::new(SavePagePptxEditable),
+                ),
+                act(
+                    "Save the page as one HTML file",
+                    "icons/file-code.svg",
+                    None,
+                    Box::new(SavePageHtml),
+                ),
+                act(
+                    "Save the page for Figma (editable layers)",
+                    "icons/layers.svg",
+                    None,
+                    Box::new(SavePageFigma),
+                ),
             ]);
         }
         if s.pet.is_some() {
@@ -869,7 +999,12 @@ impl CommandPalette {
                 None,
                 Box::new(CritiquePage),
             ));
-            out.push(act("Ask for a new page", "icons/plus.svg", None, Box::new(NewDesignPage)));
+            out.push(act(
+                "Ask for a new page",
+                "icons/plus.svg",
+                None,
+                Box::new(NewDesignPage),
+            ));
             out.push(act(
                 if s.design_select {
                     "Put the comment tool down"
@@ -891,9 +1026,24 @@ impl CommandPalette {
                     None,
                     Box::new(PageOutline),
                 ),
-                act("Undo the page's last change", "icons/undo-2.svg", None, Box::new(UndoPage)),
-                act("Redo the page's change", "icons/redo-2.svg", None, Box::new(RedoPage)),
-                act("Duplicate the page", "icons/copy.svg", None, Box::new(DuplicatePage)),
+                act(
+                    "Undo the page's last change",
+                    "icons/undo-2.svg",
+                    None,
+                    Box::new(UndoPage),
+                ),
+                act(
+                    "Redo the page's change",
+                    "icons/redo-2.svg",
+                    None,
+                    Box::new(RedoPage),
+                ),
+                act(
+                    "Duplicate the page",
+                    "icons/copy.svg",
+                    None,
+                    Box::new(DuplicatePage),
+                ),
             ]);
         }
         if s.web.is_some() {
@@ -1088,7 +1238,10 @@ impl CommandPalette {
                     ),
                 );
             }
-            if s.current.and_then(|c| s.agents.get(&c)).is_some_and(|r| !r.is_empty()) {
+            if s.current
+                .and_then(|c| s.agents.get(&c))
+                .is_some_and(|r| !r.is_empty())
+            {
                 chat.push(act(
                     "Copy the shown agent's output",
                     "icons/copy.svg",
@@ -1788,13 +1941,17 @@ impl CommandPalette {
                     // "current" is state, not a key: a check, as every menu
                     // marks what is chosen, always shown.
                     if h.as_ref() == "current" {
-                        return div()
-                            .flex_none()
-                            .child(icon("icons/check.svg", t.size.icon_sm, t.colors.text_muted));
+                        return div().flex_none().child(icon(
+                            "icons/check.svg",
+                            t.size.icon_sm,
+                            t.colors.text_muted,
+                        ));
                     }
                     div()
                         .flex_none()
-                        .when(!on, |d| d.invisible().group_hover("cmd-row", |st| st.visible()))
+                        .when(!on, |d| {
+                            d.invisible().group_hover("cmd-row", |st| st.visible())
+                        })
                         .child(keys(&t, h))
                 }))
                 .on_mouse_move(cx.listener(move |this, _, _, cx| {

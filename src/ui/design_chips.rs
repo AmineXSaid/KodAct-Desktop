@@ -177,7 +177,11 @@ pub fn menu(
         DesignTab::Work => {
             for sf in Surface::ALL {
                 let st = state.clone();
-                rows = super::motion::cascade(rows, &mut n, "design-in", t,
+                rows = super::motion::cascade(
+                    rows,
+                    &mut n,
+                    "design-in",
+                    t,
                     row(
                         format!("design-work-{}", sf.name()).into(),
                         sf.name().into(),
@@ -208,7 +212,11 @@ pub fn menu(
                 ),
             };
             let st = state.clone();
-            rows = super::motion::cascade(rows, &mut n, "design-in", t,
+            rows = super::motion::cascade(
+                rows,
+                &mut n,
+                "design-in",
+                t,
                 row(
                     format!("design-none-{kind:?}").into(),
                     none.into(),
@@ -219,7 +227,11 @@ pub fn menu(
             );
             match s.design_index.as_deref() {
                 None => {
-                    rows = super::motion::cascade(rows, &mut n, "design-in", t,
+                    rows = super::motion::cascade(
+                        rows,
+                        &mut n,
+                        "design-in",
+                        t,
                         div()
                             .px(t.space.md)
                             .py(t.space.tight)
@@ -241,7 +253,11 @@ pub fn menu(
                                 .join(" ")
                                 .into()
                         });
-                        rows = super::motion::cascade(rows, &mut n, "design-in", t,
+                        rows = super::motion::cascade(
+                            rows,
+                            &mut n,
+                            "design-in",
+                            t,
                             row(
                                 format!("design-{kind:?}-{}", e.id).into(),
                                 e.title.clone().into(),

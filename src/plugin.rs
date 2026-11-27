@@ -83,7 +83,10 @@ mod tests {
             "kodact:pptx",
             "kodact:xlsx",
         ] {
-            assert!(names.contains(&expected.to_string()), "missing {expected} in {names:?}");
+            assert!(
+                names.contains(&expected.to_string()),
+                "missing {expected} in {names:?}"
+            );
         }
         assert!(!names.contains(&"kodact:office-documents".to_string()));
         assert!(super::skills().iter().all(|(_, d)| !d.is_empty()));

@@ -1863,9 +1863,9 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
 pub fn fence_svg(lang: &str, code: &str, p: &Palette) -> Option<String> {
     match lang.to_ascii_lowercase().as_str() {
         "mermaid" | "mmd" => render(code, p),
-        "svg" | "xml" | "html" | "htm" => crate::diagram::extract_svg(code)
+        "svg" | "xml" | "html" | "htm" => crate::diagram::drawable(code)
             .filter(|s| crate::diagram::view_size(s).is_some())
-            .map(str::to_string),
+            .map(|s| s.into_owned()),
         _ => None,
     }
 }

@@ -41,9 +41,8 @@ pub struct ItemContext {
     /// The cards whose first page is drawn, or failed to be (`card_drawn`).
     pub drawn: std::sync::Arc<std::collections::HashSet<u64>>,
     /// Each file card's strip (`AppState::card_strips`), by `strip::key`.
-    pub strips: std::sync::Arc<
-        std::collections::HashMap<u64, Option<std::sync::Arc<crate::strip::Strip>>>,
-    >,
+    pub strips:
+        std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<crate::strip::Strip>>>>,
     pub chat: usize,
     pub index: usize,
     pub copied: Option<SharedString>,
@@ -459,11 +458,7 @@ fn event_line(
     } else if words.starts_with("Compact") {
         ("icons/layers.svg", t.colors.text_muted, t.colors.hover)
     } else if words.starts_with("Finish check: met") || words.starts_with("Finished, verified") {
-        (
-            "icons/check.svg",
-            t.colors.text_muted,
-            t.colors.hover,
-        )
+        ("icons/check.svg", t.colors.text_muted, t.colors.hover)
     } else if words.starts_with("Finish")
         || words.starts_with("Changes not checked")
         || words.starts_with("Last check failed")
@@ -774,10 +769,14 @@ fn user(
         )
         .child(
             action("attach", "icons/text-quote.svg", t.colors.text_muted)
-                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Attach to your next message").build(w, cx))
+                .tooltip(|w, cx| {
+                    gpui::component::tooltip::Tooltip::new("Attach to your next message")
+                        .build(w, cx)
+                })
                 .on_click(move |_, window, app| {
                     let text = to_attach.clone();
-                    state_attach.update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
+                    state_attach
+                        .update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
                     window.dispatch_action(Box::new(super::FocusComposer), app);
                 }),
         );
@@ -1304,12 +1303,9 @@ fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
             .justify_center()
             .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
             .into_any_element(),
-        ToolStatus::Declined => icon(
-            "icons/minus.svg",
-            t.size.icon_sm,
-            t.colors.text_subtle,
-        )
-        .into_any_element(),
+        ToolStatus::Declined => {
+            icon("icons/minus.svg", t.size.icon_sm, t.colors.text_subtle).into_any_element()
+        }
         // Stopped mid-way: neither failed nor done; it may have taken effect.
         ToolStatus::Interrupted => {
             icon("icons/circle-pause.svg", t.size.icon_sm, t.extra.warning).into_any_element()
@@ -3326,12 +3322,22 @@ mod tests {
     fn a_recovered_failure_folds() {
         use crate::state::{Block, ToolStatus};
         let step = |status| {
-            let mut c = crate::backend::tool_call("Bash", &serde_json::json!({ "command": "which soffice" }));
+            let mut c = crate::backend::tool_call(
+                "Bash",
+                &serde_json::json!({ "command": "which soffice" }),
+            );
             c.status = status;
             Block::Tool(c)
         };
-        let blocks = vec![step(ToolStatus::Failed), step(ToolStatus::Done), step(ToolStatus::Failed)];
+        let blocks = vec![
+            step(ToolStatus::Failed),
+            step(ToolStatus::Done),
+            step(ToolStatus::Failed),
+        ];
         assert!(super::recovered(&blocks, 0), "a later step succeeded");
-        assert!(!super::recovered(&blocks, 2), "nothing after it: still a problem");
+        assert!(
+            !super::recovered(&blocks, 2),
+            "nothing after it: still a problem"
+        );
     }
 }

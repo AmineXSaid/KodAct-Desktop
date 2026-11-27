@@ -384,7 +384,9 @@ fn render_step_row(blocks: &[Block], i: usize, cx: &ItemContext, t: &Theme) -> O
                     .flex()
                     .flex_col()
                     .child(message::tool_header(c, i, blocks, cx, t))
-                    .when(!is_agent, |d| d.children(message::tool_body(c, i, blocks, cx, t)))
+                    .when(!is_agent, |d| {
+                        d.children(message::tool_body(c, i, blocks, cx, t))
+                    })
                     .children(answer.map(|p| message::approval_line(&blocks[p], cx, t))),
                 i,
                 cx,
@@ -450,7 +452,9 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .iter()
         .filter(|c| c.status == ToolStatus::Running && crate::state::is_agent_tool(&c.target))
         .count();
-    let touched = (!open && live_step.is_none()).then(|| touched_paths(&all)).flatten();
+    let touched = (!open && live_step.is_none())
+        .then(|| touched_paths(&all))
+        .flatten();
     let pictures = message::thumbs(
         run.clone()
             .filter_map(|i| match &blocks[i] {
@@ -468,7 +472,11 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let only_agents = roster.total > 0 && roster.total == all.len();
     let header_title = match live_step {
         Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 0 => {
-            super::agent_roster::Counts { running: agents_running, ..roster }.run_line()
+            super::agent_roster::Counts {
+                running: agents_running,
+                ..roster
+            }
+            .run_line()
         }
         Some(c) => step_label(c),
         None if only_agents => roster.run_line(),
@@ -741,7 +749,9 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                                 )
                             },
                         )
-                        .when(adds + dels > 0, |d| d.child(message::diff_counts(adds, dels, t)))
+                        .when(adds + dels > 0, |d| {
+                            d.child(message::diff_counts(adds, dels, t))
+                        })
                         // Closed, the pictures show small at the row's end.
                         .when(!sub_open, |d| {
                             d.children(message::thumbs(pictures.iter().copied(), t))
@@ -775,7 +785,11 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                                 .mt(px(2.))
                                 .border_l_1()
                                 .border_color(t.colors.border)
-                                .children(indices.iter().filter_map(|&i| render_step_row(blocks, i, cx, t))),
+                                .children(
+                                    indices
+                                        .iter()
+                                        .filter_map(|&i| render_step_row(blocks, i, cx, t)),
+                                ),
                         )
                     })
                     .into_any_element();
@@ -793,29 +807,34 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .border_1()
             .border_color(t.colors.border)
             .overflow_hidden()
-            .children(step_rows.into_iter().enumerate().map(|(n, (node, i, row))| {
-                div()
-                    .flex()
-                    .pl(t.space.sm)
-                    .child(super::heat_rail::gutter(
-                        node,
-                        n == 0,
-                        n + 1 == count,
-                        live,
-                        SharedString::from(format!("rail-{chat}-{msg}-{i}")),
-                        t,
-                    ))
-                    .child(
+            .children(
+                step_rows
+                    .into_iter()
+                    .enumerate()
+                    .map(|(n, (node, i, row))| {
                         div()
-                            .flex_1()
-                            .min_w_0()
+                            .flex()
                             .pl(t.space.sm)
-                            .pr(t.space.md)
-                            .py(px(3.))
-                            .when(n > 0, |d| d.border_t_1().border_color(t.colors.border))
-                            .child(row),
-                    )
-            }))
+                            .child(super::heat_rail::gutter(
+                                node,
+                                n == 0,
+                                n + 1 == count,
+                                live,
+                                SharedString::from(format!("rail-{chat}-{msg}-{i}")),
+                                t,
+                            ))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .pl(t.space.sm)
+                                    .pr(t.space.md)
+                                    .py(px(3.))
+                                    .when(n > 0, |d| d.border_t_1().border_color(t.colors.border))
+                                    .child(row),
+                            )
+                    }),
+            )
     });
 
     div()
@@ -929,7 +948,11 @@ mod tests {
         read.status = ToolStatus::Declined;
         assert!(!cut_short(&read));
         // The transcript's count and the panel's agree.
-        let calls = [task(ToolStatus::Declined), task(ToolStatus::Done), task(ToolStatus::Failed)];
+        let calls = [
+            task(ToolStatus::Declined),
+            task(ToolStatus::Done),
+            task(ToolStatus::Failed),
+        ];
         let refs: Vec<&ToolCall> = calls.iter().collect();
         let roster = super::super::agent_roster::Counts::of_calls(&refs);
         assert_eq!(roster.stopped, refs.iter().filter(|c| cut_short(c)).count());

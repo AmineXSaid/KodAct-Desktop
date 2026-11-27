@@ -449,8 +449,8 @@ fn inline_diagram(
     scale: f32,
     t: &Theme,
 ) -> Option<AnyElement> {
-    let svg = crate::diagram::extract_svg(&file.content)?;
-    let svg = super::diagram_view::themed(svg, t.is_dark);
+    let svg = crate::diagram::drawable(&file.content)?;
+    let svg = super::diagram_view::themed(&svg, t.is_dark);
     let natural = super::diagram_view::natural_width(&svg)?;
     let frame = f32::from(t.size.column) - 2.;
     let width = (natural * v.zoom).max(80.);
@@ -695,8 +695,8 @@ fn diagram_card(
     let to_open = file.clone();
     // The drawing sits 8px inside the card, its corners concentric with it.
     let inner = CARD - 2. - 2. * f32::from(t.space.sm);
-    let drawing = crate::diagram::extract_svg(&file.content).and_then(|svg| {
-        super::diagram_view::fluid(&super::diagram_view::themed(svg, t.is_dark), inner, scale)
+    let drawing = crate::diagram::drawable(&file.content).and_then(|svg| {
+        super::diagram_view::fluid(&super::diagram_view::themed(&svg, t.is_dark), inner, scale)
     });
     div()
         .id(SharedString::from(format!("file-{key}")))
@@ -784,10 +784,10 @@ pub fn artifact(
             .child(super::file_mark::render(kind, MARK, scale))
             .into_any_element(),
         // A diagram drawn, as it opens.
-        (None, None) if file.is_diagram() => crate::diagram::extract_svg(&file.content)
+        (None, None) if file.is_diagram() => crate::diagram::drawable(&file.content)
             .and_then(|svg| {
                 super::diagram_view::fluid(
-                    &super::diagram_view::themed(svg, t.is_dark),
+                    &super::diagram_view::themed(&svg, t.is_dark),
                     180.,
                     scale,
                 )
@@ -1181,9 +1181,18 @@ pub fn list(
                 .text_size(t.text.caption)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text_muted)
-                .child(icon("icons/folder.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(icon(
+                    "icons/folder.svg",
+                    t.size.icon_xs,
+                    t.colors.text_muted,
+                ))
                 .child(format!("{n} files")),
         )
-        .child(div().border_t_1().border_color(t.colors.border).children(rows))
+        .child(
+            div()
+                .border_t_1()
+                .border_color(t.colors.border)
+                .children(rows),
+        )
         .into_any_element()
 }
