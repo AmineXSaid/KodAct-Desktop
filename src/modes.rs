@@ -180,6 +180,16 @@ pub fn flag_settings(profile: Option<&std::path::Path>) -> Option<String> {
     profile.map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Whether a chat in `mode` lets `tool` run without a card: with permissions
+/// bypassed, everything but a question for you and a plan to approve, which
+/// only you can answer. The desktop answers these itself, whatever mode the
+/// engine believes it is in, so the chip is what holds: an engine that missed
+/// the switch (launched earlier, or a build that ignores it mid-turn) no
+/// longer puts "Allow KodAct to read this?" up under "Bypass permissions".
+pub fn bypasses(mode: ModeId, tool: &str) -> bool {
+    mode == ModeId::Bypass && !matches!(tool, "AskUserQuestion" | "ExitPlanMode")
+}
+
 /// The flags a chat's `kodact` process starts with for `mode`. The switch
 /// that lets KodAct CLI enter Bypass later is always passed: the gate is the
 /// desktop's own Bypass warning, and `bypass_allowed` is not kept between
@@ -197,6 +207,17 @@ pub fn cli_args(mode: ModeId, _bypass_allowed: bool) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bypass_answers_every_prompt_but_yours() {
+        for tool in ["Read", "Bash", "Write", "Edit", "Grep", "WebFetch", "mcp__x__y"] {
+            assert!(bypasses(ModeId::Bypass, tool), "{tool}");
+            assert!(!bypasses(ModeId::Auto, tool), "{tool}");
+            assert!(!bypasses(ModeId::Manual, tool), "{tool}");
+        }
+        assert!(!bypasses(ModeId::Bypass, "AskUserQuestion"));
+        assert!(!bypasses(ModeId::Bypass, "ExitPlanMode"));
+    }
 
     #[test]
     fn shift_tab_cycles_and_skips_bypass_until_allowed() {

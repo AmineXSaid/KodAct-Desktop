@@ -4670,7 +4670,7 @@ impl AppState {
         // Auto lets edits through as Edit automatically does; a command
         // KodAct CLI still asks about in Auto is one it judged risky.
         let allowed = match mode.permission().cli_name() {
-            "bypassPermissions" => ask.tool_name != "ExitPlanMode",
+            "bypassPermissions" => crate::modes::bypasses(mode, &ask.tool_name),
             "acceptEdits" | "auto" if edit => true,
             _ => self.auto_approves(chat, &ask.tool_name, &ask.input),
         };
@@ -13734,6 +13734,17 @@ fix everything under 8, render it again to check, then tell me the scores before
             } => {
                 // "Always allow" allows the command, not this one use of it.
                 let suggestions = command_rules(suggestions);
+                // The chip says Bypass: no card, whatever mode the engine
+                // thinks it is in. It is told again, so it stops asking.
+                if crate::modes::bypasses(self.chat_mode(chat), &tool_name) {
+                    if let Some(l) = self.sessions.get(&chat) {
+                        let _ =
+                            l.session
+                                .answer(&request_id, true, false, &input, &suggestions, None);
+                        let _ = l.session.set_mode(ModeId::Bypass);
+                    }
+                    return;
+                }
                 // A harmless command, for the mode the chat is in, runs
                 // without a card: its tool row already shows it.
                 if !crate::backend::always_asks(&tool_name)
