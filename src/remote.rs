@@ -790,12 +790,7 @@ cat -- "$f""#
 
 /// Which of `files` are there, each relative to `dir` (or absolute, or from
 /// `~`), checked in one go: a remote page's linked files, for `design_lint`.
-pub fn exist(
-    target: &Target,
-    dir: &str,
-    files: &[String],
-    extra: &Extra,
-) -> Result<Vec<bool>, Error> {
+pub fn exist(target: &Target, dir: &str, files: &[String], extra: &Extra) -> Result<Vec<bool>, Error> {
     let script = format!(
         r#"{TILDE}
 cd "$(x "$1")" 2>/dev/null || exit 3
@@ -805,10 +800,7 @@ for f; do if [ -e "$(x "$f")" ]; then echo 1; else echo 0; fi; done"#
     let mut args = vec![dir.to_string()];
     args.extend(files.iter().cloned());
     let out = run(target, &script, &args, b"", Duration::from_secs(30), extra)?;
-    Ok(String::from_utf8_lossy(&out)
-        .lines()
-        .map(|l| l == "1")
-        .collect())
+    Ok(String::from_utf8_lossy(&out).lines().map(|l| l == "1").collect())
 }
 
 /// A remote project's files, relative to its folder, for the @ list:
@@ -2243,10 +2235,7 @@ mod tests {
     fn boot_writes_the_host_file() {
         let home = std::env::temp_dir().join(format!("forge-boot-file-{}", std::process::id()));
         std::fs::create_dir_all(&home).unwrap();
-        let text = format!(
-            "# Prompt\nwith a \\ and 'quotes' $HOME\n{}",
-            "x".repeat(200_000)
-        );
+        let text = format!("# Prompt\nwith a \\ and 'quotes' $HOME\n{}", "x".repeat(200_000));
         let mut prelude = env_line(HOST_FILE, "~/p/design.md");
         prelude.push_str(&env_line(HOST_TEXT, &text));
         prelude.push('\n');
@@ -2258,18 +2247,10 @@ mod tests {
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(prelude.as_bytes())
-            .unwrap();
+        child.stdin.take().unwrap().write_all(prelude.as_bytes()).unwrap();
         let out = String::from_utf8(child.wait_with_output().unwrap().stdout).unwrap();
         assert_eq!(out, "gone|gone");
-        assert_eq!(
-            std::fs::read_to_string(home.join("p/design.md")).unwrap(),
-            text
-        );
+        assert_eq!(std::fs::read_to_string(home.join("p/design.md")).unwrap(), text);
         std::fs::remove_dir_all(home).ok();
     }
 

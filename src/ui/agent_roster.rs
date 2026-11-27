@@ -267,11 +267,7 @@ mod tests {
     fn the_filter_counts_add_up() {
         let c = Counts::of(&ten());
         assert_eq!(
-            (
-                c.for_filter(Filter::All),
-                c.for_filter(Filter::Running),
-                c.for_filter(Filter::Failed)
-            ),
+            (c.for_filter(Filter::All), c.for_filter(Filter::Running), c.for_filter(Filter::Failed)),
             (10, 3, 1)
         );
         // Each count is the length of its list.
@@ -353,10 +349,7 @@ mod tests {
         assert_eq!(status_line(S::Failed, 0, ten_s), "Failed");
         assert_eq!(status_line(S::Failed, 0, None), "Failed");
         assert_eq!(status_line(S::Declined, 2, None), "Stopped · 2 steps");
-        assert_eq!(
-            status_line(S::Running, 0, Some(Duration::from_secs(3))),
-            "Running · 3s"
-        );
+        assert_eq!(status_line(S::Running, 0, Some(Duration::from_secs(3))), "Running · 3s");
         assert_eq!(steps(1), "1 step");
         assert_eq!(step_summary(1, 0, 1), "1 step (1 passed)");
         assert_eq!(step_summary(3, 1, 4), "4 steps (3 passed, 1 failed)");
@@ -364,13 +357,7 @@ mod tests {
             agent_line(0, 10, 1, Duration::from_secs(9)),
             "Agent 1 of 10 · 1 step · 9s"
         );
-        assert_eq!(
-            agent_line(0, 10, 0, Duration::from_secs(0)),
-            "Agent 1 of 10 · 0s"
-        );
-        assert_eq!(
-            Counts::of(&[run("a", false, false)]).run_line(),
-            "1 agent working"
-        );
+        assert_eq!(agent_line(0, 10, 0, Duration::from_secs(0)), "Agent 1 of 10 · 0s");
+        assert_eq!(Counts::of(&[run("a", false, false)]).run_line(), "1 agent working");
     }
 }

@@ -199,9 +199,7 @@ impl Tools {
                     .ok_or("format is one of pdf, png, pptx, pptx-editable, html")?;
                 let page = self.page(a)?;
                 if page.remote_dir.is_some() {
-                    return Err(
-                        "Exports work on pages on this computer; this one is on the remote.".into(),
-                    );
+                    return Err("Exports work on pages on this computer; this one is on the remote.".into());
                 }
                 let to = export::target(&page.shown, format);
                 let d = export::export(&page.shown, format, &to)?;
@@ -209,18 +207,11 @@ impl Tools {
                     "Saved {} ({}{}) in {}.",
                     d.path.display(),
                     format.label(),
-                    if d.count > 1 {
-                        format!(", {} slides", d.count)
-                    } else {
-                        String::new()
-                    },
+                    if d.count > 1 { format!(", {} slides", d.count) } else { String::new() },
                     export::took(d.took)
                 )];
                 if format == Format::PptxEditable {
-                    if let Ok((_, texts)) = std::fs::read(&d.path)
-                        .map_err(|e| e.to_string())
-                        .and_then(|b| export::pptx_summary(&b))
-                    {
+                    if let Ok((_, texts)) = std::fs::read(&d.path).map_err(|e| e.to_string()).and_then(|b| export::pptx_summary(&b)) {
                         lines.push(format!("{texts} text boxes you can edit in PowerPoint."));
                     }
                 }
@@ -265,11 +256,7 @@ impl Tools {
                     b.background,
                     b.text,
                     b.accent.as_deref().unwrap_or("none found"),
-                    if b.fonts.is_empty() {
-                        "none read".into()
-                    } else {
-                        b.fonts.join(", ")
-                    },
+                    if b.fonts.is_empty() { "none read".into() } else { b.fonts.join(", ") },
                     b.radius.map_or("square".into(), |r| format!("{r}px"))
                 ));
                 if !b.css_failed.is_empty() {
@@ -300,11 +287,7 @@ impl Tools {
                 let project = std::env::current_dir().map_err(|e| e.to_string())?;
                 let folder = a["folder"].as_str().unwrap_or("assets");
                 let dir = crate::design::inline_path(folder);
-                let dir = if dir.is_absolute() {
-                    dir
-                } else {
-                    project.join(dir)
-                };
+                let dir = if dir.is_absolute() { dir } else { project.join(dir) };
                 let started = std::time::Instant::now();
                 let (file, by) = crate::design::services::image(prompt, size, &dir, name)?;
                 let mut out = text(format!(
@@ -330,11 +313,7 @@ impl Tools {
                 }
                 let project = std::env::current_dir().map_err(|e| e.to_string())?;
                 let dir = crate::design::inline_path(a["folder"].as_str().unwrap_or("assets"));
-                let dir = if dir.is_absolute() {
-                    dir
-                } else {
-                    project.join(dir)
-                };
+                let dir = if dir.is_absolute() { dir } else { project.join(dir) };
                 let name = a["name"].as_str().unwrap_or(kind);
                 let started = std::time::Instant::now();
                 let file = match kind {
@@ -353,23 +332,13 @@ impl Tools {
                 }
                 let project = std::env::current_dir().map_err(|e| e.to_string())?;
                 let fig = crate::design::inline_path(a["path"].as_str().ok_or("path is needed")?);
-                let fig = if fig.is_absolute() {
-                    fig
-                } else {
-                    project.join(fig)
-                };
+                let fig = if fig.is_absolute() { fig } else { project.join(fig) };
                 let stem: String = fig
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_lowercase())
                     .unwrap_or_else(|| "figma".into())
                     .chars()
-                    .map(|c| {
-                        if c.is_ascii_alphanumeric() || c == '-' {
-                            c
-                        } else {
-                            '-'
-                        }
-                    })
+                    .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
                     .collect();
                 let to = match a["to"].as_str() {
                     Some(t) => project.join(t),
@@ -387,10 +356,7 @@ impl Tools {
             "design_deploy" => {
                 let page = self.page(a)?;
                 if page.remote_dir.is_some() {
-                    return Err(
-                        "Publishing works on pages on this computer; this one is on the remote."
-                            .into(),
-                    );
+                    return Err("Publishing works on pages on this computer; this one is on the remote.".into());
                 }
                 let name = a["name"].as_str().map(str::to_string).unwrap_or_else(|| {
                     page.shown
@@ -400,11 +366,7 @@ impl Tools {
                 });
                 let host = crate::design::services::host(a["to"].as_str())?;
                 let url = crate::design::services::deploy(&page.shown, &name, host)?;
-                Ok(text(format!(
-                    "Published {} on {} at {url} (one self-contained file).",
-                    page.name,
-                    host.label()
-                )))
+                Ok(text(format!("Published {} on {} at {url} (one self-contained file).", page.name, host.label())))
             }
             _ => Err(format!("no tool {name}")),
         }

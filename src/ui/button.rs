@@ -364,7 +364,13 @@ impl RenderOnce for Button {
                 let face = t.button_face(hover_bg);
                 let filled = self.variant.filled();
                 d.cursor_pointer()
-                    .hover(move |s| if filled { s.bg(face) } else { s.bg(hover_bg) })
+                    .hover(move |s| {
+                        if filled {
+                            s.bg(face)
+                        } else {
+                            s.bg(hover_bg)
+                        }
+                    })
                     // Pressed, it goes down: flat, a shade deeper, no lift.
                     .active(move |s| {
                         if lifted {

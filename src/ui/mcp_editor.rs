@@ -49,12 +49,10 @@ impl McpEditor {
             name: cx.new(|cx| InputState::new(window, cx).placeholder("github")),
             command: cx.new(|cx| InputState::new(window, cx).placeholder("e.g. npx")),
             args: cx.new(|cx| {
-                InputState::new(window, cx)
-                    .placeholder("e.g. -y @modelcontextprotocol/server-github")
+                InputState::new(window, cx).placeholder("e.g. -y @modelcontextprotocol/server-github")
             }),
-            url: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("e.g. https://mcp.example.com/mcp")
-            }),
+            url: cx
+                .new(|cx| InputState::new(window, cx).placeholder("e.g. https://mcp.example.com/mcp")),
             pairs: cx.new(|cx| TextareaState::new(window, cx)),
             state,
             form: None,

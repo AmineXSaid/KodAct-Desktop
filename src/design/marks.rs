@@ -60,13 +60,7 @@ impl Anchor {
     /// content `now`: at the same place across and down it, so a box round
     /// a title still frames it when the title wraps onto two lines.
     pub fn follow(&self, now: (f64, f64, f64, f64), (x, y): (f64, f64)) -> (f64, f64) {
-        let k = |then: f64, now: f64| {
-            if then > 0.0 {
-                (now / then).clamp(0.25, 4.0)
-            } else {
-                1.0
-            }
-        };
+        let k = |then: f64, now: f64| if then > 0.0 { (now / then).clamp(0.25, 4.0) } else { 1.0 };
         (
             now.0 + (x - self.at.0) * k(self.at.2, now.2),
             now.1 + (y - self.at.1) * k(self.at.3, now.3),
@@ -314,10 +308,7 @@ mod tests {
     #[test]
     fn a_mark_follows_its_part() {
         let mut m = mark(Shape::Rect, &[(110.0, 210.0), (150.0, 230.0)], "");
-        m.anchor = Some(Anchor {
-            selector: "h1".into(),
-            at: (100.0, 200.0, 400.0, 40.0),
-        });
+        m.anchor = Some(Anchor { selector: "h1".into(), at: (100.0, 200.0, 400.0, 40.0) });
         // The page laid out again: the title moved, and grew by half.
         let moved = m.followed(Some((50.0, 300.0, 600.0, 60.0)));
         assert_eq!(moved.points, vec![(65.0, 315.0), (125.0, 345.0)]);
@@ -325,10 +316,7 @@ mod tests {
         let wrapped = m.followed(Some((100.0, 200.0, 200.0, 80.0)));
         assert_eq!(wrapped.points, vec![(105.0, 220.0), (125.0, 260.0)]);
         assert_eq!(m.anchor_point(), Some((130.0, 220.0)));
-        assert_eq!(
-            mark(Shape::Arrow, &[(0.0, 0.0), (9.0, 9.0)], "").anchor_point(),
-            Some((9.0, 9.0))
-        );
+        assert_eq!(mark(Shape::Arrow, &[(0.0, 0.0), (9.0, 9.0)], "").anchor_point(), Some((9.0, 9.0)));
         // Nowhere to be found, or where it was: as drawn.
         assert_eq!(m.followed(None), m);
         assert_eq!(m.followed(Some((100.0, 200.0, 400.0, 40.0))), m);

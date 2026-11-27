@@ -41,10 +41,7 @@ pub fn soffice() -> Option<PathBuf> {
 /// On Windows, `soffice.com` is LibreOffice's console-subsystem headless entry point
 /// (avoids GUI wrapper pipe/desktop issues in `soffice.exe` when present).
 fn prefer_console_binary(p: PathBuf) -> PathBuf {
-    if cfg!(windows)
-        && p.file_name()
-            .is_some_and(|n| n.eq_ignore_ascii_case("soffice.exe"))
-    {
+    if cfg!(windows) && p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("soffice.exe")) {
         let com = p.with_file_name("soffice.com");
         if com.is_file() {
             return com;

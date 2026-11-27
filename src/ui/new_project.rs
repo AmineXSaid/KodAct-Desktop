@@ -123,6 +123,7 @@ impl Render for NewProject {
         let close_scrim = self.state.clone();
         let close_btn = self.state.clone();
 
+
         // The two sources, as every single choice is: the app's segmented
         // control (the provider below and Settings' Appearance use it too).
         let (to_local, to_remote) = (cx.entity(), cx.entity());
@@ -280,26 +281,18 @@ impl Render for NewProject {
         let remote_body = {
             let (gh, gl, other) = (cx.entity(), cx.entity(), cx.entity());
             let provider = super::button::Segmented::new("np-host", "Git host")
-                .option(
-                    "GitHub",
-                    self.host_kind == ForgeKind::GitHub,
-                    move |_, _, cx| {
-                        gh.update(cx, |this, cx| {
-                            this.host_kind = ForgeKind::GitHub;
-                            cx.notify();
-                        })
-                    },
-                )
-                .option(
-                    "GitLab",
-                    self.host_kind == ForgeKind::GitLab,
-                    move |_, _, cx| {
-                        gl.update(cx, |this, cx| {
-                            this.host_kind = ForgeKind::GitLab;
-                            cx.notify();
-                        })
-                    },
-                )
+                .option("GitHub", self.host_kind == ForgeKind::GitHub, move |_, _, cx| {
+                    gh.update(cx, |this, cx| {
+                        this.host_kind = ForgeKind::GitHub;
+                        cx.notify();
+                    })
+                })
+                .option("GitLab", self.host_kind == ForgeKind::GitLab, move |_, _, cx| {
+                    gl.update(cx, |this, cx| {
+                        this.host_kind = ForgeKind::GitLab;
+                        cx.notify();
+                    })
+                })
                 .option(
                     "Other server",
                     self.host_kind == ForgeKind::Custom,
@@ -329,13 +322,16 @@ impl Render for NewProject {
                         .trim_end_matches('/')
                 ),
             });
-            let target =
-                crate::templates::normalize_git_clone_url(self.host_kind, Some(&server), &raw)
-                    .and_then(|u| {
-                        crate::templates::projects_home()
-                            .and_then(|h| crate::templates::clone_target(&h, &u))
-                    })
-                    .and_then(|d| d.file_name().map(|n| n.to_string_lossy().into_owned()));
+            let target = crate::templates::normalize_git_clone_url(
+                self.host_kind,
+                Some(&server),
+                &raw,
+            )
+            .and_then(|u| {
+                crate::templates::projects_home()
+                    .and_then(|h| crate::templates::clone_target(&h, &u))
+            })
+            .and_then(|d| d.file_name().map(|n| n.to_string_lossy().into_owned()));
             let repo_box = div()
                 .h(t.size.field_h)
                 .pl(t.space.sm)

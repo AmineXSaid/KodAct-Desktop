@@ -79,8 +79,7 @@ pub fn ready() -> Option<PathBuf> {
 /// chat can't find it otherwise); UTF-8 Python stdio; then, once the document
 /// tools' Python is ready, PATH with its folder first and `KODACT_PYTHON`.
 pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
-    let soffice =
-        crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
+    let soffice = crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
     // How the skill's `render` draws pages: the route the panel uses, so the
     // model never looks for tools (`office`, `libreoffice` or `none`).
     let route = (
@@ -89,10 +88,7 @@ pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
     );
     let utf8 = [
         ("PYTHONUTF8".to_string(), std::ffi::OsString::from("1")),
-        (
-            "PYTHONIOENCODING".to_string(),
-            std::ffi::OsString::from("utf-8"),
-        ),
+        ("PYTHONIOENCODING".to_string(), std::ffi::OsString::from("utf-8")),
     ];
     let Some(python) = ready() else {
         return soffice.into_iter().chain([route]).chain(utf8).collect();

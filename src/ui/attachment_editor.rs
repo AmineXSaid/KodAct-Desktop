@@ -408,7 +408,9 @@ impl AttachmentEditor {
     /// Screen pixels per picture pixel: fitted to the pad, then zoomed.
     fn scale(&self) -> f32 {
         match &self.open {
-            Some(Open::Picture(p)) => (PAD_W / p.w).min(PAD_H / p.h).min(1.) * ZOOMS[self.zoom],
+            Some(Open::Picture(p)) => {
+                (PAD_W / p.w).min(PAD_H / p.h).min(1.) * ZOOMS[self.zoom]
+            }
             _ => 1.,
         }
     }
@@ -549,11 +551,7 @@ fn color_of(c: [u8; 4], alpha: f32) -> gpui::Rgba {
 
 /// A thin vertical rule between groups in a tool row.
 fn rule(t: &Theme) -> gpui::Div {
-    div()
-        .w(px(1.))
-        .h(px(18.))
-        .mx(t.space.xs)
-        .bg(t.colors.border)
+    div().w(px(1.)).h(px(18.)).mx(t.space.xs).bg(t.colors.border)
 }
 
 impl AttachmentEditor {
@@ -584,11 +582,7 @@ impl AttachmentEditor {
                     .child(super::icon(
                         path,
                         t.size.icon_sm,
-                        if on {
-                            t.colors.primary
-                        } else {
-                            t.colors.text_muted
-                        },
+                        if on { t.colors.primary } else { t.colors.text_muted },
                     ))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.tool = tool;
@@ -682,12 +676,8 @@ impl AttachmentEditor {
         }
         row.child(div().flex_1())
             .child(
-                Button::icon(
-                    "edit-rotate",
-                    "icons/rotate-ccw.svg",
-                    "Turn a quarter to the left",
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.push(EditOp::Rotate, cx))),
+                Button::icon("edit-rotate", "icons/rotate-ccw.svg", "Turn a quarter to the left")
+                    .on_click(cx.listener(|this, _, _, cx| this.push(EditOp::Rotate, cx))),
             )
             .child(rule(t))
             .child(
@@ -795,26 +785,22 @@ impl Render for AttachmentEditor {
                     move |bounds, _, _| shown.set(Some(bounds)),
                     move |bounds, _, window, _| {
                         let at = |p: (f32, f32)| {
-                            point(
-                                bounds.origin.x + px(p.0 * scale),
-                                bounds.origin.y + px(p.1 * scale),
-                            )
+                            point(bounds.origin.x + px(p.0 * scale), bounds.origin.y + px(p.1 * scale))
                         };
-                        let stroke =
-                            |pts: &[(f32, f32)], width: f32, c: gpui::Rgba, window: &mut Window| {
-                                let Some(first) = pts.first() else { return };
-                                let mut b = PathBuilder::stroke(px(width.max(1.)));
-                                b.move_to(at(*first));
-                                if pts.len() == 1 {
-                                    b.line_to(at((first.0 + 0.5 / scale, first.1 + 0.5 / scale)));
-                                }
-                                for p in &pts[1..] {
-                                    b.line_to(at(*p));
-                                }
-                                if let Ok(path) = b.build() {
-                                    window.paint_path(path, c);
-                                }
-                            };
+                        let stroke = |pts: &[(f32, f32)], width: f32, c: gpui::Rgba, window: &mut Window| {
+                            let Some(first) = pts.first() else { return };
+                            let mut b = PathBuilder::stroke(px(width.max(1.)));
+                            b.move_to(at(*first));
+                            if pts.len() == 1 {
+                                b.line_to(at((first.0 + 0.5 / scale, first.1 + 0.5 / scale)));
+                            }
+                            for p in &pts[1..] {
+                                b.line_to(at(*p));
+                            }
+                            if let Ok(path) = b.build() {
+                                window.paint_path(path, c);
+                            }
+                        };
                         if let Some((x, y)) = label_at {
                             let c = gpui::Rgba::from(marker);
                             stroke(&[(x, y), (x, y + 18. / scale)], 2., c, window);
@@ -837,8 +823,7 @@ impl Render for AttachmentEditor {
                                     Tool::Rect => stroke(&boxed, line, c, window),
                                     Tool::Ellipse => {
                                         let (cx_, cy_) = ((a.0 + b.0) / 2., (a.1 + b.1) / 2.);
-                                        let (rx, ry) =
-                                            ((a.0 - b.0).abs() / 2., (a.1 - b.1).abs() / 2.);
+                                        let (rx, ry) = ((a.0 - b.0).abs() / 2., (a.1 - b.1).abs() / 2.);
                                         let pts: Vec<_> = (0..=96)
                                             .map(|i| {
                                                 let k = i as f32 / 96. * std::f32::consts::TAU;
@@ -903,19 +888,17 @@ impl Render for AttachmentEditor {
                         MouseButton::Middle,
                         cx.listener(|this, _, _, cx| this.pointer_up(cx)),
                     )
-                    .on_scroll_wheel(cx.listener(
-                        |this, ev: &gpui::ScrollWheelEvent, window, cx| {
-                            let dy = f32::from(ev.delta.pixel_delta(window.rem_size()).y);
-                            if dy > 2. {
-                                this.zoom = (this.zoom + 1).min(ZOOMS.len() - 1);
-                                cx.notify();
-                            } else if dy < -2. {
-                                this.zoom = this.zoom.saturating_sub(1);
-                                cx.notify();
-                            }
-                            cx.stop_propagation();
-                        },
-                    ));
+                    .on_scroll_wheel(cx.listener(|this, ev: &gpui::ScrollWheelEvent, window, cx| {
+                        let dy = f32::from(ev.delta.pixel_delta(window.rem_size()).y);
+                        if dy > 2. {
+                            this.zoom = (this.zoom + 1).min(ZOOMS.len() - 1);
+                            cx.notify();
+                        } else if dy < -2. {
+                            this.zoom = this.zoom.saturating_sub(1);
+                            cx.notify();
+                        }
+                        cx.stop_propagation();
+                    }));
                 let label_row = self.label_at.map(|_| {
                     div()
                         .flex()
@@ -931,9 +914,12 @@ impl Render for AttachmentEditor {
                                 .bg(t.colors.surface)
                                 .child(Input::new(&self.label).appearance(false)),
                         )
-                        .child(Button::secondary("edit-label-add", "Add label").on_click(
-                            cx.listener(|this, _, window, cx| this.place_label(window, cx)),
-                        ))
+                        .child(
+                            Button::secondary("edit-label-add", "Add label")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.place_label(window, cx)
+                                })),
+                        )
                 });
                 let hint = match self.tool {
                     Tool::Text if self.label_at.is_none() => "Click where the label should go",
@@ -980,19 +966,12 @@ impl Render for AttachmentEditor {
             Button::ghost("attachment-editor-cancel", "Cancel")
                 .on_click(cx.listener(|this, _, window, cx| this.close(window, cx)))
                 .into_any_element(),
-            Button::accent(
-                "attachment-editor-save",
-                if is_picture { "Save picture" } else { "Save" },
-            )
-            .loading(self.saving)
-            .on_click(cx.listener(|this, _, window, cx| this.save(window, cx)))
-            .into_any_element(),
+            Button::accent("attachment-editor-save", if is_picture { "Save picture" } else { "Save" })
+                .loading(self.saving)
+                .on_click(cx.listener(|this, _, window, cx| this.save(window, cx)))
+                .into_any_element(),
         ];
-        let width = if is_picture {
-            PAD_W + 48. + 48.
-        } else {
-            PAD_W + 48.
-        };
+        let width = if is_picture { PAD_W + 48. + 48. } else { PAD_W + 48. };
         super::motion::backdrop(
             div()
                 .id("attachment-editor-scrim")

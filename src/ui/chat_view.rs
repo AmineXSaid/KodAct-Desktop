@@ -140,10 +140,10 @@ impl ChatView {
                         })
                         .flatten()
                         .filter_map(|b| match b {
-                            Block::File(f) if crate::strip::applies(f) => {
-                                (!s.card_strips.contains_key(&crate::strip::key(f)))
-                                    .then(|| f.clone())
-                            }
+                            Block::File(f) if crate::strip::applies(f) => (!s
+                                .card_strips
+                                .contains_key(&crate::strip::key(f)))
+                            .then(|| f.clone()),
                             _ => None,
                         })
                         .collect()

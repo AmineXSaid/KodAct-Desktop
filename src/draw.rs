@@ -510,11 +510,8 @@ mod tests {
 
     #[test]
     fn the_pen_edge_is_antialiased() {
-        let out = render(
-            &white(40, 40),
-            &[EditOp::Pen(stroke(vec![(5., 20.), (35., 20.)], 3.))],
-        )
-        .unwrap();
+        let out = render(&white(40, 40), &[EditOp::Pen(stroke(vec![(5., 20.), (35., 20.)], 3.))])
+            .unwrap();
         // The line spans y 18.5..21.5: row 18's centre (18.5) sits on the
         // edge, so it is half covered.
         let edge = out.get_pixel(20, 18).0;
@@ -538,38 +535,16 @@ mod tests {
     #[test]
     fn shapes_draw_outlines_only() {
         let (a, b) = ((10., 10.), (50., 40.));
-        let rect = render(
-            &white(60, 50),
-            &[EditOp::Rect {
-                a,
-                b,
-                color: RED,
-                width: 2.,
-            }],
-        )
-        .unwrap();
+        let rect = render(&white(60, 50), &[EditOp::Rect { a, b, color: RED, width: 2. }]).unwrap();
         assert_eq!(rect.get_pixel(30, 10).0, RED);
         assert_eq!(rect.get_pixel(30, 25).0, WHITE, "hollow");
-        let ell = render(
-            &white(60, 50),
-            &[EditOp::Ellipse {
-                a,
-                b,
-                color: RED,
-                width: 2.,
-            }],
-        )
-        .unwrap();
+        let ell = render(&white(60, 50), &[EditOp::Ellipse { a, b, color: RED, width: 2. }])
+            .unwrap();
         assert_eq!(ell.get_pixel(30, 10).0, RED, "top of the ellipse");
         assert_eq!(ell.get_pixel(11, 11).0, WHITE, "its box's corner is not");
         let arrow = render(
             &white(60, 50),
-            &[EditOp::Arrow {
-                from: (5., 25.),
-                to: (55., 25.),
-                color: RED,
-                width: 2.,
-            }],
+            &[EditOp::Arrow { from: (5., 25.), to: (55., 25.), color: RED, width: 2. }],
         )
         .unwrap();
         assert_eq!(arrow.get_pixel(30, 25).0, RED);
@@ -584,55 +559,32 @@ mod tests {
                 img.put_pixel(x, y, Rgba([0, 0, 0, 255]));
             }
         }
-        let out = render(
-            &png(&img).unwrap(),
-            &[EditOp::Redact {
-                a: (0., 0.),
-                b: (16., 16.),
-            }],
-        )
-        .unwrap();
+        let out = render(&png(&img).unwrap(), &[EditOp::Redact { a: (0., 0.), b: (16., 16.) }])
+            .unwrap();
         assert_eq!(out.get_pixel(0, 0), out.get_pixel(1, 0), "stripes gone");
         assert_eq!(out.get_pixel(20, 20).0, [0, 0, 0, 255], "outside, kept");
     }
 
     #[test]
     fn crop_and_rotate_change_the_size() {
-        let ops = [
-            EditOp::Crop {
-                a: (10., 5.),
-                b: (50., 25.),
-            },
-            EditOp::Rotate,
-        ];
+        let ops = [EditOp::Crop { a: (10., 5.), b: (50., 25.) }, EditOp::Rotate];
         let out = render(&white(64, 40), &ops).unwrap();
         assert_eq!(out.dimensions(), (20, 40));
         assert_eq!(size_after(64, 40, &ops), (20, 40));
         // A crop of nothing is ignored.
-        let none = [EditOp::Crop {
-            a: (3., 3.),
-            b: (3., 9.),
-        }];
+        let none = [EditOp::Crop { a: (3., 3.), b: (3., 9.) }];
         assert_eq!(render(&white(8, 12), &none).unwrap().dimensions(), (8, 12));
     }
 
     #[test]
     fn text_is_drawn_on_a_tag_in_contrasting_ink() {
-        let op = EditOp::Text {
-            at: (2., 2.),
-            text: "Hi".into(),
-            color: RED,
-            size: 14.,
-        };
+        let op = EditOp::Text { at: (2., 2.), text: "Hi".into(), color: RED, size: 14. };
         let out = render(&white(80, 40), &[op]).unwrap();
         let (w, h) = text_size("Hi", 14.);
         assert!(w > 20. && h > 14.);
         // The tag's padding is the tag colour; the H's left stem is white ink.
         assert_eq!(out.get_pixel(5, 10).0, RED);
         assert_eq!(out.get_pixel(7, 8).0, WHITE);
-        assert!(
-            luminance([255, 220, 60, 255]) > 0.18,
-            "yellow takes dark ink"
-        );
+        assert!(luminance([255, 220, 60, 255]) > 0.18, "yellow takes dark ink");
     }
 }

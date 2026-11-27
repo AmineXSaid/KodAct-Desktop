@@ -422,11 +422,7 @@ fn slide_parts(zip: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Vec<(String, Option<
         .unwrap_or_default()
         .into_iter()
         .filter_map(|p| {
-            let n = p
-                .strip_prefix("ppt/slides/slide")?
-                .strip_suffix(".xml")?
-                .parse()
-                .ok()?;
+            let n = p.strip_prefix("ppt/slides/slide")?.strip_suffix(".xml")?.parse().ok()?;
             Some((n, p))
         })
         .collect();

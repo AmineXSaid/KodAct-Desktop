@@ -201,9 +201,7 @@ fn save(project: &Path, list: &[Source]) -> Result<(), String> {
 
 /// Where a repository's files are kept in the project.
 fn local_dir(project: &Path, repo: &str) -> PathBuf {
-    crate::names::project_dir(project)
-        .join(DIR)
-        .join(repo.replace('/', "-"))
+    crate::names::project_dir(project).join(DIR).join(repo.replace('/', "-"))
 }
 
 /// A repository path as a safe path under its folder: no `..`, no root.
@@ -493,7 +491,11 @@ pub fn tree(r: &RepoRef) -> Result<Tree, String> {
                     "blob" => false,
                     _ => return None,
                 };
-                Some(Node { path, dir, size: 0 })
+                Some(Node {
+                    path,
+                    dir,
+                    size: 0,
+                })
             })
             .collect();
         let truncated = nodes.len() >= 100;

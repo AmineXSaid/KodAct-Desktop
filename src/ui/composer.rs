@@ -960,14 +960,12 @@ impl Render for Composer {
             .project_presence
             .frame(project_now, t.size.menu_out_ms, window)
             .map(|(_, leaving)| {
-                let body = super::workspace::switcher_menu(&state, window, cx, px(140.)).when(
-                    !leaving,
-                    |d| {
+                let body = super::workspace::switcher_menu(&state, window, cx, px(140.))
+                    .when(!leaving, |d| {
                         d.on_mouse_down_out(move |ev, _, cx| {
                             dismiss_project(ev.position, Menu::Project, cx)
                         })
-                    },
-                );
+                    });
                 div().absolute().top_0().left_0().child(
                     gpui::deferred(
                         gpui::anchored()
@@ -1106,10 +1104,14 @@ impl Render for Composer {
             .context_presence
             .frame(self.state.read(cx).context_open.then_some(()), out, window)
             .map(|f| f.1);
-        let context_popover =
-            super::context_menu::render(&t, &state, window, context_shown, cx, move |pos, cx| {
-                dismiss_context(pos, Menu::Context, cx)
-            });
+        let context_popover = super::context_menu::render(
+            &t,
+            &state,
+            window,
+            context_shown,
+            cx,
+            move |pos, cx| dismiss_context(pos, Menu::Context, cx),
+        );
 
         // In a chat the box is as wide as the text above it, on the same
         // edges; on the new-chat screen it keeps its own width.
@@ -1368,9 +1370,7 @@ impl Render for Composer {
                                                     // Its top in the window, for the menu's room.
                                                     .child(
                                                         gpui::canvas(
-                                                            move |bounds, _, _| {
-                                                                top.set(f32::from(bounds.origin.y))
-                                                            },
+                                                            move |bounds, _, _| top.set(f32::from(bounds.origin.y)),
                                                             |_, _, _, _| {},
                                                         )
                                                         .absolute()
@@ -1390,7 +1390,7 @@ impl Render for Composer {
                                             .child(send),
                                     ),
                             ),
-                    ),
+                    )
             );
         // Never wider than its own measure, centred wherever it sits.
         div().w_full().flex().justify_center().child(composer)

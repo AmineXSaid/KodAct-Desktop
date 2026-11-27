@@ -80,27 +80,29 @@ pub fn render(
     let (close_scrim, close_btn, copy_state) = (state.clone(), state.clone(), state.clone());
     let raw_output = modal.output.to_string();
 
-    let copy_button = Button::ghost("command-modal-copy", if copied { "Copied" } else { "Copy" })
-        .with_icon(if copied {
-            "icons/check.svg"
-        } else {
-            "icons/copy.svg"
-        })
-        .compact()
-        .disabled(!can_copy)
-        .on_click(move |_, _, cx| {
-            cx.write_to_clipboard(ClipboardItem::new_string(raw_output.clone()));
-            copy_state.update(cx, |s, cx| s.mark_copied(COPY_KEY.into(), cx));
-        })
-        .into_any_element();
+    let copy_button = Button::ghost(
+        "command-modal-copy",
+        if copied { "Copied" } else { "Copy" },
+    )
+    .with_icon(if copied {
+        "icons/check.svg"
+    } else {
+        "icons/copy.svg"
+    })
+    .compact()
+    .disabled(!can_copy)
+    .on_click(move |_, _, cx| {
+        cx.write_to_clipboard(ClipboardItem::new_string(raw_output.clone()));
+        copy_state.update(cx, |s, cx| s.mark_copied(COPY_KEY.into(), cx));
+    })
+    .into_any_element();
 
-    let close_button =
-        super::panel_chrome::close_button("command-modal", "Close (Esc)", move |_, _, cx| {
-            close_btn.update(cx, |s, cx| {
-                s.command_modal = None;
-                cx.notify();
-            });
+    let close_button = super::panel_chrome::close_button("command-modal", "Close (Esc)", move |_, _, cx| {
+        close_btn.update(cx, |s, cx| {
+            s.command_modal = None;
+            cx.notify();
         });
+    });
 
     let header = div()
         .flex_none()
@@ -169,11 +171,11 @@ pub fn render(
             .border_1()
             .border_color(t.extra.danger.opacity(0.35))
             .bg(t.extra.danger_tint)
-            .child(div().pt(px(2.)).child(icon(
-                "icons/triangle-alert.svg",
-                t.size.icon,
-                t.extra.danger,
-            )))
+            .child(
+                div()
+                    .pt(px(2.))
+                    .child(icon("icons/triangle-alert.svg", t.size.icon, t.extra.danger)),
+            )
             .child(
                 div()
                     .flex_1()

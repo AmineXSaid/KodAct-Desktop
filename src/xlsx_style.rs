@@ -698,20 +698,12 @@ mod tests {
     fn formulas_with_quotes_and_comparisons_read_whole() {
         let xlsx = include_bytes!("../tests/fixtures/office/hard.xlsx");
         let looks = read(xlsx);
-        let f = |r, c| {
-            looks["Summary"]
-                .cells
-                .get(&(r, c))
-                .and_then(|l| l.formula.clone())
-        };
+        let f = |r, c| looks["Summary"].cells.get(&(r, c)).and_then(|l| l.formula.clone());
         assert_eq!(
             f(9, 1).as_deref(),
             Some(r#"=COUNTIFS(Sales!B2:B201,"South",Sales!F2:F201,">500")"#)
         );
-        assert_eq!(
-            f(10, 1).as_deref(),
-            Some(r#"=IF(B3>PlanTotal,"Ahead","Behind")"#)
-        );
+        assert_eq!(f(10, 1).as_deref(), Some(r#"=IF(B3>PlanTotal,"Ahead","Behind")"#));
         assert_eq!(f(2, 1).as_deref(), Some("=SUM(SalesRevenue)"));
     }
 
@@ -725,11 +717,7 @@ mod tests {
         let look = sheet(xml, &[]);
         let f = |r| look.cells.get(&(r, 0)).and_then(|l| l.formula.clone());
         assert_eq!(f(0).as_deref(), Some(r#"=B1&"x""#));
-        assert_eq!(
-            f(1).as_deref(),
-            Some(r#"=B1&"x""#),
-            "the shared formula, not its value"
-        );
+        assert_eq!(f(1).as_deref(), Some(r#"=B1&"x""#), "the shared formula, not its value");
         assert_eq!(f(2), None, "a plain value has no formula");
     }
 }

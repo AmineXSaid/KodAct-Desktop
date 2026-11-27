@@ -53,38 +53,9 @@ pub fn counts(text: &str) -> String {
 /// a batch file, a Dockerfile…) is shown coloured, read-only, instead of as
 /// grey text in the editor ([`colours_elsewhere`]).
 const EDITOR_LANGUAGES: &[&str] = &[
-    "rust",
-    "python",
-    "javascript",
-    "typescript",
-    "go",
-    "c",
-    "cpp",
-    "java",
-    "html",
-    "css",
-    "json",
-    "yaml",
-    "toml",
-    "bash",
-    "markdown",
-    "ruby",
-    "sql",
-    "kotlin",
-    "csharp",
-    "scala",
-    "swift",
-    "zig",
-    "lua",
-    "php",
-    "elixir",
-    "graphql",
-    "proto",
-    "make",
-    "cmake",
-    "diff",
-    "svelte",
-    "astro",
+    "rust", "python", "javascript", "typescript", "go", "c", "cpp", "java", "html", "css", "json",
+    "yaml", "toml", "bash", "markdown", "ruby", "sql", "kotlin", "csharp", "scala", "swift", "zig",
+    "lua", "php", "elixir", "graphql", "proto", "make", "cmake", "diff", "svelte", "astro",
 ];
 
 /// The editor would show this file uncoloured, but the highlighter colours it.
@@ -238,14 +209,8 @@ mod tests {
     fn powershell_reads_coloured_instead_of_grey() {
         assert!(colours_elsewhere("render.ps1"));
         assert!(colours_elsewhere("Build.PSM1"));
-        assert!(
-            !colours_elsewhere("main.rs"),
-            "the editor colours Rust itself"
-        );
-        assert!(
-            !colours_elsewhere("notes.txt"),
-            "plain text has nothing to colour"
-        );
+        assert!(!colours_elsewhere("main.rs"), "the editor colours Rust itself");
+        assert!(!colours_elsewhere("notes.txt"), "plain text has nothing to colour");
     }
 
     #[test]

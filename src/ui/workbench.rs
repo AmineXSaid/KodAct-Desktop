@@ -487,45 +487,40 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         PanelTab::Plan => pad(div())
             .when(!todos.is_empty(), |d| {
                 let done = todos.iter().filter(|(s, _)| *s == ToolStatus::Done).count();
-                d.child(section_title(
-                    t,
-                    &format!("Tasks · {done} of {}", todos.len()),
-                ))
-                .child(div().flex().flex_col().gap(t.space.sm).children(
-                    todos.iter().enumerate().map(|(i, (status, text))| {
-                        div()
-                            .flex()
-                            .items_start()
-                            .gap(t.space.sm)
-                            // The reply's card's marks, so the two read alike.
-                            .child(div().pt(px(2.)).child(super::todo_card::mark(
-                                match status {
-                                    ToolStatus::Done => super::todo_card::TodoState::Done,
-                                    ToolStatus::Running => super::todo_card::TodoState::Active,
-                                    _ => super::todo_card::TodoState::Pending,
-                                },
-                                format!("todo-{i}").into(),
-                                t,
-                            )))
-                            .child(
-                                div()
-                                    .text_size(t.text.body_sm)
-                                    .line_height(relative(1.45))
-                                    .text_color(if *status == ToolStatus::Done {
-                                        t.colors.text_muted
-                                    } else {
-                                        t.colors.text
-                                    })
-                                    .child(text.clone()),
-                            )
-                    }),
-                ))
+                d.child(section_title(t, &format!("Tasks · {done} of {}", todos.len())))
+                    .child(div().flex().flex_col().gap(t.space.sm).children(todos.iter().enumerate().map(
+                        |(i, (status, text))| {
+                            div()
+                                .flex()
+                                .items_start()
+                                .gap(t.space.sm)
+                                // The reply's card's marks, so the two read alike.
+                                .child(div().pt(px(2.)).child(super::todo_card::mark(
+                                    match status {
+                                        ToolStatus::Done => super::todo_card::TodoState::Done,
+                                        ToolStatus::Running => super::todo_card::TodoState::Active,
+                                        _ => super::todo_card::TodoState::Pending,
+                                    },
+                                    format!("todo-{i}").into(),
+                                    t,
+                                )))
+                                .child(
+                                    div()
+                                        .text_size(t.text.body_sm)
+                                        .line_height(relative(1.45))
+                                        .text_color(if *status == ToolStatus::Done {
+                                            t.colors.text_muted
+                                        } else {
+                                            t.colors.text
+                                        })
+                                        .child(text.clone()),
+                                )
+                        },
+                    )))
             })
-            .children(
-                plan.as_ref()
-                    .filter(|_| v.source)
-                    .map(|md| super::source_view::render("plan-source", md, "markdown", t)),
-            )
+            .children(plan.as_ref().filter(|_| v.source).map(|md| {
+                super::source_view::render("plan-source", md, "markdown", t)
+            }))
             .children(plan.as_ref().filter(|_| !v.source).map(|md| {
                 div()
                     .flex()
@@ -588,10 +583,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             state.clone(),
             t,
         ),
-        PanelTab::Browser => div()
-            .size_full()
-            .child(v.browser.clone())
-            .into_any_element(),
+        PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
     // The tab arrives from the side its place in the row is on: from the

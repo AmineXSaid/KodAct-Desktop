@@ -82,9 +82,12 @@ pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> A
             .justify_center()
             .child(div().size(px(6.)).rounded(px(3.)).bg(t.extra.danger))
             .into_any_element(),
-        ToolStatus::Declined => {
-            icon("icons/minus.svg", t.size.icon_sm, t.colors.text_subtle).into_any_element()
-        }
+        ToolStatus::Declined => icon(
+            "icons/minus.svg",
+            t.size.icon_sm,
+            t.colors.text_subtle,
+        )
+        .into_any_element(),
         // Stopped mid-way: neither failed nor done; it may have taken effect.
         ToolStatus::Interrupted => {
             icon("icons/circle-pause.svg", t.size.icon_sm, t.extra.warning).into_any_element()
