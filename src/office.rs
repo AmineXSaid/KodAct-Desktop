@@ -166,6 +166,79 @@ fn pages(bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
     Ok((out, total))
 }
 
+/// The first `most` pages of a Word, PowerPoint or PDF file as small
+/// pictures, for its card's strip, and how many pages (slides) it has: a PDF
+/// drawn directly, an Office file through Office or LibreOffice. Blocks for
+/// seconds: run it off the UI thread.
+pub fn first_pages(name: &str, bytes: &[u8], most: usize) -> Result<(Vec<Page>, usize), String> {
+    use hayro::hayro_interpret::InterpreterSettings;
+    use hayro::hayro_syntax::Pdf;
+    let pdf = match Kind::of(name) {
+        Some(Kind::Pdf) => bytes.to_vec(),
+        Some(_) => crate::office_render::to_pdf(name, bytes)?,
+        None => return Err("not an Office file or a PDF".into()),
+    };
+    let doc = Pdf::new(pdf).map_err(|e| format!("not a PDF KodAct can draw: {e:?}"))?;
+    let total = doc.pages().len();
+    let cache = hayro::RenderCache::new();
+    let settings = InterpreterSettings::default();
+    let mut out = vec![];
+    for page in doc.pages().iter().take(most) {
+        let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            hayro::render(
+                page,
+                &cache,
+                &settings,
+                &hayro::RenderSettings::default(),
+                &hayro::PixmapSettings {
+                    x_scale: THUMB_SCALE,
+                    y_scale: THUMB_SCALE,
+                    bg_color: hayro::vello_cpu::color::palette::css::WHITE,
+                },
+            )
+        }));
+        let Ok(pixmap) = drawn else { break };
+        let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
+        let rgba = image::RgbaImage::from_raw(width, height, pixmap.data_as_u8_slice().to_vec())
+            .ok_or("a page KodAct could not draw")?;
+        let mut png = Vec::new();
+        rgba.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+        out.push(Page {
+            image: std::sync::Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, png)),
+            width,
+            height,
+        });
+    }
+    if out.is_empty() {
+        return Err("no page could be drawn".into());
+    }
+    Ok((out, total))
+}
+
+/// Each slide's title, in order (None for a slide without one), for a deck
+/// card's captions.
+pub fn slide_titles(bytes: &[u8]) -> Vec<Option<String>> {
+    let Ok(mut zip) = open_zip(bytes) else {
+        return vec![];
+    };
+    let mut slides: Vec<(usize, String)> = zip
+        .file_names()
+        .filter_map(|n| {
+            n.strip_prefix("ppt/slides/slide")
+                .and_then(|r| r.strip_suffix(".xml"))
+                .and_then(|d| d.parse().ok())
+                .map(|i: usize| (i, n.to_string()))
+        })
+        .collect();
+    slides.sort();
+    slides
+        .into_iter()
+        .take(MAX_PARTS)
+        .map(|(_, path)| slide_text(&part(&mut zip, &path).unwrap_or_default()).0)
+        .collect()
+}
+
 /// A file's first page as a small picture, for its card in a reply, and how
 /// many pages (slides) it has, for the card's "12 slides": a PDF drawn
 /// directly, a Word, PowerPoint or Excel file through Office or LibreOffice

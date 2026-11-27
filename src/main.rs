@@ -68,6 +68,7 @@ mod skill_install;
 mod stage;
 mod status_words;
 mod state;
+mod strip;
 mod stubs;
 #[cfg(test)]
 mod system_md;

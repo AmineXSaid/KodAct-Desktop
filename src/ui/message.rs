@@ -40,6 +40,10 @@ pub struct ItemContext {
     pub pages: std::sync::Arc<std::collections::HashMap<u64, usize>>,
     /// The cards whose first page is drawn, or failed to be (`card_drawn`).
     pub drawn: std::sync::Arc<std::collections::HashSet<u64>>,
+    /// Each file card's strip (`AppState::card_strips`), by `strip::key`.
+    pub strips: std::sync::Arc<
+        std::collections::HashMap<u64, Option<std::sync::Arc<crate::strip::Strip>>>,
+    >,
     pub chat: usize,
     pub index: usize,
     pub copied: Option<SharedString>,
@@ -893,12 +897,13 @@ fn assistant_row(
         rows.push(super::work_group::render(blocks, w, cx, t));
         return true;
     }
-    // Two or more files in a row: one framed list, not a stack of cards.
+    // Up to three files in a row: a card each, their strips shown. More: one
+    // framed list, not a long stack of cards.
     let files = blocks[at..]
         .iter()
         .take_while(|blk| matches!(blk, Block::File(f) if !f.is_diagram()))
         .count();
-    if files > 1 {
+    if files > 3 {
         let list = (at..at + files)
             .filter_map(|i| match &blocks[i] {
                 Block::File(f) => Some((f.clone(), format!("{}-{}-{i}", cx.chat, cx.index))),
@@ -1085,6 +1090,22 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                     .unwrap_or(1.),
                 text_open: cx.sources.contains(&super::file_card::text_key(&key)),
             };
+            if crate::strip::applies(file) {
+                let k = crate::strip::key(file);
+                return super::file_strip::render(
+                    file,
+                    &key,
+                    cx.state.clone(),
+                    cx.open_doc.as_ref() == Some(file),
+                    file.path
+                        .as_ref()
+                        .is_some_and(|p| cx.writing.iter().any(|w| w == p.as_ref())),
+                    cx.drawn
+                        .contains(&k)
+                        .then(|| cx.strips.get(&k).cloned().flatten()),
+                    t,
+                );
+            }
             let doc_key = file
                 .office()
                 .and(file.bytes.as_ref())

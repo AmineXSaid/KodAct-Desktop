@@ -2283,6 +2283,13 @@ pub struct AppState {
     /// The cards whose first page has been drawn or could not be: until
     /// then a card shows a placeholder the page's size.
     pub card_drawn: std::sync::Arc<std::collections::HashSet<u64>>,
+    /// Each file card's strip (`strip.rs`), by `strip::key`; None when the
+    /// file can't be shown (the card then shows its type). Absent while built.
+    pub card_strips:
+        std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<crate::strip::Strip>>>>,
+    /// A page or slide to bring up once the panel's file has drawn its pages
+    /// (a strip's frame was clicked before they were ready).
+    doc_jump: Option<usize>,
     pub doc_preview: Option<(
         SharedString,
         Result<std::sync::Arc<crate::office::Preview>, String>,
@@ -2768,6 +2775,8 @@ impl AppState {
             card_thumbs: Default::default(),
             card_pages: Default::default(),
             card_drawn: Default::default(),
+            card_strips: Default::default(),
+            doc_jump: None,
             doc_text: false,
             sheet_print: false,
             sheet_pages: None,
@@ -5566,6 +5575,7 @@ impl AppState {
                     });
                     let _ = this.update(cx, |s, cx| {
                         s.doc_preview = Some((key.clone(), read.map(std::sync::Arc::new)));
+                        s.apply_doc_jump(cx);
                         cx.notify();
                     });
                     if !drawing {
@@ -5587,6 +5597,7 @@ impl AppState {
                                     (d.pages, d.total) = (pages, total);
                                 }
                             }
+                            s.apply_doc_jump(cx);
                             cx.notify();
                         }
                     });
@@ -15240,6 +15251,60 @@ impl AppState {
 
     // ------------------------------------------------------------ file cards
 
+    /// Build the strip of each of `files` not built yet, off the UI thread
+    /// (`strip::build` reads, and renders a document's first pages).
+    pub fn want_strips(&mut self, files: Vec<FileRef>, cx: &mut Context<Self>) {
+        for file in files {
+            let key = crate::strip::key(&file);
+            if self.card_strips.contains_key(&key) {
+                continue;
+            }
+            std::sync::Arc::make_mut(&mut self.card_strips).insert(key, None);
+            let task = cx.background_spawn(async move { crate::strip::build(&file) });
+            cx.spawn(async move |this, cx| {
+                let strip = task.await.map(std::sync::Arc::new);
+                let _ = this.update(cx, |s, cx| {
+                    std::sync::Arc::make_mut(&mut s.card_strips).insert(key, strip);
+                    std::sync::Arc::make_mut(&mut s.card_drawn).insert(key);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+    }
+
+    /// Open a file beside the chat at one of its parts, a strip's frame: a
+    /// sheet at once, a page or slide when its pages are drawn. Already open,
+    /// it stays open and moves there.
+    pub fn open_doc_at(&mut self, file: FileRef, at: usize, cx: &mut Context<Self>) {
+        let open = self
+            .doc
+            .as_ref()
+            .is_some_and(|d| crate::doc_versions::same_file(d, &file));
+        if !open {
+            self.show_doc(file.clone(), cx);
+        }
+        match file.office() {
+            Some(crate::office::Kind::Xlsx) => self.doc_sheet = at,
+            Some(_) => {
+                self.doc_jump = Some(at);
+                self.apply_doc_jump(cx);
+            }
+            None => {}
+        }
+        cx.notify();
+    }
+
+    /// Bring up the page a strip's frame asked for, once the panel has pages.
+    fn apply_doc_jump(&mut self, cx: &mut Context<Self>) {
+        if let Some(at) = self.doc_jump {
+            if self.doc_page_count() > at {
+                self.doc_jump = None;
+                self.show_doc_page(at, cx);
+            }
+        }
+    }
+
     /// Draw the first page of each of `files` not drawn yet, off the UI
     /// thread, for its card in the reply: a picture is itself; a PDF, Word,
     /// PowerPoint or Excel file its first page (`office::first_page`).
@@ -16044,6 +16109,58 @@ fn demo_deck_check() -> Vec<Step> {
     s
 }
 
+/// One file of every kind, each with its card: a Word memo, a one-page PDF,
+/// a workbook, a Markdown guide, a Python script and a deck of one slide.
+fn demo_every_kind() -> Vec<Step> {
+    let doc = |name: &str, path: &str, bytes: &'static [u8]| {
+        Step::File(FileRef {
+            name: name.to_string().into(),
+            path: Some(path.to_string().into()),
+            content: "".into(),
+            bytes: Some(bytes.into()),
+        })
+    };
+    let text = |name: &str, content: &str| {
+        Step::File(FileRef {
+            name: name.to_string().into(),
+            path: Some(name.to_string().into()),
+            content: content.to_string().into(),
+            bytes: None,
+        })
+    };
+    let mut s = words("Here is the budget pack, in every form you asked for.", Step::Say);
+    s.push(doc(
+        "q3-budget-memo.docx",
+        "finance/q3-budget-memo.docx",
+        include_bytes!("../assets/docs/samples/q3-budget-memo.docx"),
+    ));
+    s.push(doc(
+        "q3-budget.pdf",
+        "finance/q3-budget.pdf",
+        include_bytes!("../assets/docs/samples/q3-budget.pdf"),
+    ));
+    s.push(doc(
+        "q3-budget.xlsx",
+        "finance/q3-budget.xlsx",
+        include_bytes!("../assets/docs/samples/q3-budget.xlsx"),
+    ));
+    s.extend(words("And the notes, the script that builds the numbers, and the title slide:", Step::Say));
+    s.push(text(
+        "BUDGET.md",
+        "# Q3 budget\n\nHow the quarter's budget is built and checked.\n\n## Sources\n\nActuals come from the ledger export; forecasts from each team's plan.\n\n## Method\n\nEach line is the plan, less what was spent, rounded to the nearest hundred.\n\n## Checks\n\nTotals must match the ledger to the cent, and no team may exceed its cap.\n\n## Open questions\n\nWhether hiring moves to Q4, and how travel is split.\n",
+    ));
+    s.push(text(
+        "build_budget.py",
+        "import csv\n\n\ndef load(path):\n    with open(path) as f:\n        return list(csv.DictReader(f))\n\n\ndef remaining(plan, spent):\n    return round(plan - spent, -2)\n\n\nclass Report:\n    def __init__(self, rows):\n        self.rows = rows\n\n    def total(self):\n        return sum(float(r[\"plan\"]) for r in self.rows)\n",
+    ));
+    s.push(doc(
+        "q3-title.pptx",
+        "finance/q3-title.pptx",
+        include_bytes!("../assets/docs/samples/q3-title.pptx"),
+    ));
+    s
+}
+
 /// Questions first (a card with two), then a burst of work: a write that
 /// fails as KodAct CLI's does on a file not read yet, then edits and commands
 /// with thinking between them, as a real build-out goes.
@@ -16666,6 +16783,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if lower.contains("notes") || lower.contains("write a doc") {
         s.extend(demo_notes());
         s.push(Step::End { seconds: 12.0 });
+        return s;
+    }
+    if lower.contains("every kind") {
+        s.extend(demo_every_kind());
+        s.push(Step::End { seconds: 6.2 });
         return s;
     }
     if lower.contains("render") {

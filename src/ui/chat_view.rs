@@ -140,13 +140,10 @@ impl ChatView {
                         })
                         .flatten()
                         .filter_map(|b| match b {
-                            Block::File(f) if f.office().is_some() => {
-                                f.bytes.as_ref().and_then(|bytes| {
-                                    (!s.card_thumbs
-                                        .contains_key(&crate::office_render::key_of(bytes)))
-                                    .then(|| f.clone())
-                                })
-                            }
+                            Block::File(f) if crate::strip::applies(f) => (!s
+                                .card_strips
+                                .contains_key(&crate::strip::key(f)))
+                            .then(|| f.clone()),
                             _ => None,
                         })
                         .collect()
@@ -154,7 +151,7 @@ impl ChatView {
                 .unwrap_or_default();
             if !want.is_empty() {
                 let st = self.state.clone();
-                cx.defer(move |cx| st.update(cx, |s, cx| s.want_thumbs(want, cx)));
+                cx.defer(move |cx| st.update(cx, |s, cx| s.want_strips(want, cx)));
             }
         }
 
@@ -657,6 +654,7 @@ impl Render for ChatView {
                         thumbs: s.card_thumbs.clone(),
                         pages: s.card_pages.clone(),
                         drawn: s.card_drawn.clone(),
+                        strips: s.card_strips.clone(),
                         root: s
                             .project(chat.project)
                             .map(|p| p.path.to_string_lossy().into_owned().into()),
