@@ -2151,6 +2151,8 @@ pub struct AppState {
     pub browser: bool,
     /// The Modes menu is open; its Bypass warning is showing.
     pub modes_open: bool,
+    /// The Reasoning chip's menu is open (`ui::reasoning_menu`).
+    pub reasoning_open: bool,
     /// Profiles whose reasoning is being checked (`detect_reasoning`).
     pub reasoning_checking: std::collections::HashSet<String>,
     pub bypass_warning: bool,
@@ -2723,6 +2725,7 @@ impl AppState {
             browser: crate::browser::enabled(),
             modes_open: false,
             reasoning_checking: Default::default(),
+            reasoning_open: false,
             bypass_warning: false,
             dark: crate::app_settings::load_window().dark,
             look: crate::theme::Look::from_id(&crate::app_settings::load_window().theme)
@@ -3187,6 +3190,15 @@ impl AppState {
         })
         .detach();
         self.detect_reasoning_if_unknown(cx);
+        cx.notify();
+    }
+
+    /// The reasoning level the next message asks for (`None`: Auto, the
+    /// model decides). A chat's KodAct CLI restarts on its next message with
+    /// it (`send_to_forge`).
+    pub fn set_effort(&mut self, effort: Option<crate::endpoints::Effort>, cx: &mut Context<Self>) {
+        self.effort = effort;
+        self.reasoning_open = false;
         cx.notify();
     }
 

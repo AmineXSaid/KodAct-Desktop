@@ -237,13 +237,6 @@ fn effort_tone(t: &Theme, e: Option<Effort>) -> Hsla {
     }
 }
 
-/// The pill's effort suffix: the level, when the model takes effort and one is set.
-pub fn pill_effort(t: &Theme, s: &AppState) -> Option<(SharedString, Hsla)> {
-    let levels = s.active_profile()?.effort_levels();
-    let e = s.effort.filter(|e| levels.contains(e))?;
-    Some((e.label().into(), effort_tone(t, Some(e))))
-}
-
 fn chip(
     t: &Theme,
     text: impl Into<SharedString>,

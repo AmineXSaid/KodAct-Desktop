@@ -63,6 +63,7 @@ pub struct Composer {
     /// The model, mode and + menus, kept while each leaves.
     model_presence: super::motion::Presence<()>,
     modes_presence: super::motion::Presence<()>,
+    reasoning_presence: super::motion::Presence<()>,
     add_presence: super::motion::Presence<()>,
     design_presence: super::motion::Presence<crate::state::DesignTab>,
     /// Where the design chip's top sits in the window (measured each frame),
@@ -230,6 +231,7 @@ impl Composer {
             model_presence: Default::default(),
             ac_presence: Default::default(),
             modes_presence: Default::default(),
+            reasoning_presence: Default::default(),
             add_presence: Default::default(),
             design_presence: Default::default(),
             design_chip_top: Default::default(),
@@ -494,6 +496,7 @@ impl Composer {
         let s = self.state.read(cx);
         let open = self.add_open
             || s.modes_open
+            || s.reasoning_open
             || s.design_menu.is_some()
             || s.project_menu
             || s.context_open
@@ -502,6 +505,7 @@ impl Composer {
             self.add_open = false;
             self.state.update(cx, |s, cx| {
                 s.modes_open = false;
+                s.reasoning_open = false;
                 s.bypass_warning = false;
                 s.design_menu = None;
                 s.project_menu = false;
@@ -635,6 +639,7 @@ impl Render for Composer {
                     match menu {
                         Menu::Models => s.picker_open,
                         Menu::Modes => s.modes_open,
+                        Menu::Reasoning => s.reasoning_open,
                         Menu::Design => s.design_menu.is_some(),
                         Menu::Project => s.project_menu,
                         Menu::Context => s.context_open,
@@ -655,6 +660,7 @@ impl Render for Composer {
                             s.modes_open = false;
                             s.bypass_warning = false;
                         }
+                        Menu::Reasoning => s.reasoning_open = false,
                         Menu::Design => s.design_menu = None,
                         Menu::Project => s.project_menu = false,
                         Menu::Context => s.context_open = false,
@@ -664,6 +670,7 @@ impl Render for Composer {
                 });
             });
         };
+        let dismiss_reasoning = dismiss.clone();
         let (dismiss_models, dismiss_modes, dismiss_design, dismiss_project, dismiss_context) = (
             dismiss.clone(),
             dismiss.clone(),
@@ -685,6 +692,7 @@ impl Render for Composer {
             }
         };
         let skip_modes = skip_for(Menu::Modes);
+        let skip_reasoning = skip_for(Menu::Reasoning);
         let skip_design = skip_for(Menu::Design);
         let skip_project = skip_for(Menu::Project);
         let skip_context = skip_for(Menu::Context);
@@ -736,6 +744,23 @@ impl Render for Composer {
                     window,
                     cx,
                     move |pos, cx| dismiss_modes(pos, Menu::Modes, cx),
+                    leaving,
+                )
+            });
+        // How much the model thinks: its chip beside the model's, its menu
+        // above it (`reasoning_menu`).
+        let reasoning_trigger = super::reasoning_menu::trigger(&t, &state, cx, skip_reasoning);
+        let reasoning_now = self.state.read(cx).reasoning_open.then_some(());
+        let reasoning_menu = self
+            .reasoning_presence
+            .frame(reasoning_now, out, window)
+            .map(|(_, leaving)| {
+                super::reasoning_menu::menu(
+                    &t,
+                    &state,
+                    window,
+                    cx,
+                    move |pos, cx| dismiss_reasoning(pos, Menu::Reasoning, cx),
                     leaving,
                 )
             });
@@ -794,7 +819,6 @@ impl Render for Composer {
             (Some(_), None) => "Choose a model".into(),
             (Some(_), Some(p)) => p.display().to_string().into(),
         };
-        let pill_effort = super::model_menu::pill_effort(&t, s);
         let tint = super::mode_menu::tint(&t, mode);
         // The context meter: this conversation against the window of the
         // model picked now. Hidden when either isn't known.
@@ -936,15 +960,6 @@ impl Render for Composer {
                     gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
                 })
             })
-            .children(pill_effort.map(|(label, color)| {
-                div()
-                    .text_color(if color == t.colors.text_subtle {
-                        t.colors.text_muted
-                    } else {
-                        color
-                    })
-                    .child(label)
-            }))
             .child(super::button::chevron(&t, picker_open))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
                 if !this.just_dismissed(Menu::Models, ev) {
@@ -1385,6 +1400,13 @@ impl Render for Composer {
                                                     .relative()
                                                     .children(context_popover),
                                             )
+                                            .child(
+                                                div()
+                                                    .flex_none()
+                                                    .relative()
+                                                    .child(reasoning_trigger)
+                                                    .children(reasoning_menu),
+                                            )
                                             .child(model_button)
                                             .children(meter)
                                             .child(send),
@@ -1402,6 +1424,7 @@ impl Render for Composer {
 enum Menu {
     Models,
     Modes,
+    Reasoning,
     Design,
     Project,
     Add,

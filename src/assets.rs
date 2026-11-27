@@ -121,6 +121,7 @@ icons!(
     "maximize-2",
     "minimize-2",
     "model",
+    "reasoning",
     "message-square",
     "minus",
     "moon",

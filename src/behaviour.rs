@@ -105,9 +105,11 @@ pub fn read(root: &Map<String, Value>) -> Vec<(&'static str, bool)> {
         .collect()
 }
 
-/// Turn one switch on or off in `root`, keeping every other key. A
-/// `nudges` written as `true`, `false` or a list becomes the object form,
-/// with the others as they were.
+/// Turn one switch on or off in `root`, keeping every other key. Only the
+/// switch turned is written: a nudge the file never named keeps KodAct
+/// CLI's own default (the terminal UI turns some on). A `nudges` written
+/// as `true`, `false` or a list becomes the object form, the others as it
+/// had them.
 pub fn set(root: &mut Map<String, Value>, key: &str, on: bool) {
     if key == CARRY.key {
         root.insert(key.into(), Value::Bool(on));
@@ -116,6 +118,7 @@ pub fn set(root: &mut Map<String, Value>, key: &str, on: bool) {
     let before = read(root);
     let mut nudges = match root.remove("nudges") {
         Some(Value::Object(m)) => m,
+        None | Some(Value::Null) => Map::new(),
         _ => before
             .iter()
             .filter(|(k, _)| *k != CARRY.key)
@@ -188,6 +191,10 @@ mod tests {
         assert_eq!(root["nudges"]["clock"], false);
         assert_eq!(root["nudges"]["shellEdit"], true);
         assert_eq!(root["carryReasoning"], true);
+        // No nudges named yet: only the one switched is written.
+        let mut root = obj(json!({}));
+        set(&mut root, "clock", true);
+        assert_eq!(root["nudges"], json!({"clock": true}));
     }
 
     #[test]

@@ -1983,6 +1983,7 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ToggleModelPicker, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.picker_open = !s.picker_open;
+                    s.reasoning_open = false;
                     s.modes_open = false;
                     s.bypass_warning = false;
                     s.design_menu = None;

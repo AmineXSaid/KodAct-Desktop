@@ -105,6 +105,7 @@ pub fn trigger(
             }
             state.update(cx, |s, cx| {
                 s.modes_open = !s.modes_open;
+                s.reasoning_open = false;
                 s.bypass_warning = false;
                 s.picker_open = false;
                 s.design_menu = None;

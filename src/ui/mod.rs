@@ -62,6 +62,7 @@ pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
+pub mod reasoning_menu;
 pub mod model_menu;
 pub mod motion;
 pub mod new_project;
