@@ -9224,6 +9224,17 @@ fix everything under 8, render it again to check, then tell me the scores before
             .map(|(_, f)| f.clone())
     }
 
+    /// Open the file a reply's file chip names (`verify.rs`,
+    /// `src/ui/markdown.rs`), when this chat's folder has it; else say so.
+    pub fn open_named_file(&mut self, name: &str, cx: &mut Context<Self>) {
+        let index = self.project_file_index();
+        let local = self.current_remote().is_none();
+        match resolve_named_file(name, &self.project_dir, index.as_deref().map(|v| v.as_slice()), local) {
+            Some(rel) => self.open_project_file(rel, cx),
+            None => self.show_toast(format!("{name} isn't in this chat's folder"), cx),
+        }
+    }
+
     /// Open a project file (its path in the project, `/`-separated): a
     /// document in the side panel, anything else in the app the system
     /// opens it with. Read off the UI thread, over the connection when the
@@ -16858,6 +16869,48 @@ fn demo_title(prompt: &str) -> Option<&'static str> {
     .map(|(_, title)| title)
 }
 
+/// The project file `name` means, as a reply names it: its path in the
+/// project (`/`-separated), an absolute path inside it, or a bare file name
+/// found anywhere in it (the shallowest when several share it). `index` is
+/// the project's file list when known; without it, only a path that
+/// exists on this computer (`local`) is found.
+pub fn resolve_named_file(
+    name: &str,
+    root: &std::path::Path,
+    index: Option<&[String]>,
+    local: bool,
+) -> Option<String> {
+    let mut n = name.trim().replace('\\', "/");
+    let base = root.to_string_lossy().replace('\\', "/");
+    let base = base.trim_end_matches('/');
+    if let Some(rest) = n.strip_prefix(base).and_then(|r| r.strip_prefix('/')) {
+        n = rest.to_string();
+    }
+    let n = n.trim_start_matches("./").to_string();
+    if n.is_empty() || n.starts_with('/') || n.contains("..") || n.ends_with('/') {
+        return None;
+    }
+    match index {
+        Some(files) => {
+            let files = files.iter().filter(|f| !f.ends_with('/'));
+            let tail = format!("/{n}");
+            let mut best: Option<&String> = None;
+            for f in files {
+                if *f == n {
+                    return Some(n);
+                }
+                if f.ends_with(&tail)
+                    && best.is_none_or(|b| f.matches('/').count() < b.matches('/').count())
+                {
+                    best = Some(f);
+                }
+            }
+            best.cloned()
+        }
+        None => (local && root.join(&n).is_file()).then_some(n),
+    }
+}
+
 /// The demo reply that shows every reading style (`script`).
 const DEMO_STYLES: &str = "## What changed\n\nThe check in `verify.rs` now counts a batch-mode editor as a check. The skill's `self_check.py` passes, and `cargo test` is green. See [the harness notes](https://example.com/notes) for the details.\n\n> [!IMPORTANT]\n> Two verifier failures were infrastructure, not the agent: `report.py` misread a missing binary.\n\n| Metric | Raw | Adjusted |\n|---|---|---|\n| Pass@1 | 84.3% | 86.2% |\n| Exceptions | 0 | 0 |\n| Output tokens | 2.32M | — |\n\n### Next\n\n- Bound `finish_check_note` in `src/engine.rs` the way `summary_notes` is.\n- Scale the reasoning limit with the time left.\n\n> [!NOTE]\n> The demo replies are scripted; no model is called.";
 
@@ -18556,5 +18609,27 @@ mod device_tests {
         assert!(page("a.html", "<p>hi</p>").is_html());
         assert!(!page("a.html", "<svg></svg>").is_html());
         assert!(!page("a.md", "# hi").is_html());
+    }
+
+    #[test]
+    fn a_file_chip_finds_its_file() {
+        let root = std::path::Path::new("/work/app");
+        let files: Vec<String> = ["Cargo.toml", "src/", "src/engine.rs", "src/ui/verify.rs", "tests/verify.rs", "a/b/c/verify.rs"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let find = |n: &str| super::resolve_named_file(n, root, Some(&files), false);
+        assert_eq!(find("src/engine.rs").as_deref(), Some("src/engine.rs"));
+        assert_eq!(find("./Cargo.toml").as_deref(), Some("Cargo.toml"));
+        assert_eq!(find("/work/app/src/engine.rs").as_deref(), Some("src/engine.rs"));
+        assert_eq!(find("src\\engine.rs").as_deref(), Some("src/engine.rs"));
+        // A bare name: the shallowest of those that share it.
+        assert_eq!(find("verify.rs").as_deref(), Some("tests/verify.rs"));
+        assert_eq!(find("engine.rs").as_deref(), Some("src/engine.rs"));
+        assert_eq!(find("missing.rs"), None);
+        assert_eq!(find("../etc/passwd"), None);
+        assert_eq!(find("/etc/hosts"), None);
+        // Without a list, nothing is guessed on a remote project.
+        assert_eq!(super::resolve_named_file("Cargo.toml", root, None, false), None);
     }
 }

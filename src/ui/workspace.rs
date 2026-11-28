@@ -1686,6 +1686,9 @@ impl Render for Workspace {
             .relative()
             .flex()
             .flex_col()
+            .on_action(cx.listener(|this, a: &super::OpenFileChip, _, cx| {
+                this.state.update(cx, |s, cx| s.open_named_file(&a.name, cx))
+            }))
             .on_action(cx.listener(|this, _: &ToggleSession, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_session(cx))
             }))

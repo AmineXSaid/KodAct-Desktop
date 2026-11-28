@@ -1063,34 +1063,61 @@ fn rows(
         .collect()
 }
 
-fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
-    let mut ranges: Vec<std::ops::Range<usize>> = vec![];
-    let mut urls: Vec<String> = vec![];
+/// What a clickable stretch of a reply opens.
+#[derive(Clone, Debug, PartialEq)]
+enum Target {
+    /// A link: its address, opened in the system browser.
+    Link(String),
+    /// A file chip: the file's name or path, opened from the chat's folder.
+    File(String),
+}
+
+/// The clickable stretches of laid-out text: its links (neighbouring spans
+/// of one link joined) and its file chips.
+fn targets(spans: &[Span]) -> Vec<(std::ops::Range<usize>, Target)> {
+    let mut out: Vec<(std::ops::Range<usize>, Target)> = vec![];
     let mut at = 0;
     for s in spans.iter().filter(|s| !s.text.is_empty()) {
         let len = shown(s).len();
         if let Some(url) = &s.link {
             // Neighbouring spans of one link (bold inside it) join up.
-            match (ranges.last_mut(), urls.last()) {
-                (Some(r), Some(u)) if *u == *url && r.end == at => r.end = at + len,
-                _ => {
-                    ranges.push(at..at + len);
-                    urls.push(url.clone());
-                }
+            match out.last_mut() {
+                Some((r, Target::Link(u))) if u == url && r.end == at => r.end = at + len,
+                _ => out.push((at..at + len, Target::Link(url.clone()))),
             }
+        } else if s.code && file_like(&s.text) {
+            out.push((at..at + len, Target::File(s.text.clone())));
         }
         at += len;
     }
-    if ranges.is_empty() {
+    out
+}
+
+fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
+    let found = targets(spans);
+    if found.is_empty() {
         return text.into_any_element();
     }
-    let urls = std::rc::Rc::new(urls);
-    let (open, tip, by_range) = (urls.clone(), urls, ranges.clone());
+    let ranges: Vec<_> = found.iter().map(|(r, _)| r.clone()).collect();
+    let found = std::rc::Rc::new(found);
+    let (open, tip) = (found.clone(), found);
     InteractiveText::new(id, text)
-        .on_click(ranges, move |i, _, cx| open_link(&open[i], cx))
+        .on_click(ranges, move |i, window, cx| match &open[i].1 {
+            Target::Link(url) => open_link(url, cx),
+            Target::File(name) => window.dispatch_action(
+                Box::new(super::OpenFileChip {
+                    name: name.clone().into(),
+                }),
+                cx,
+            ),
+        })
         .tooltip(move |ix, window, cx| {
-            let i = by_range.iter().position(|r| r.contains(&ix))?;
-            Some(gpui::component::tooltip::Tooltip::new(tip[i].clone()).build(window, cx))
+            let (_, target) = tip.iter().find(|(r, _)| r.contains(&ix))?;
+            let words = match target {
+                Target::Link(url) => url.clone(),
+                Target::File(name) => format!("Open {name}"),
+            };
+            Some(gpui::component::tooltip::Tooltip::new(words).build(window, cx))
         })
         .into_any_element()
 }
@@ -2120,6 +2147,46 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(shown(&word), "cargo test", "a command is laid out as itself");
+    }
+
+    #[test]
+    fn file_chips_and_links_are_both_clickable() {
+        let spans = vec![
+            Span {
+                text: "see ".into(),
+                ..Default::default()
+            },
+            Span {
+                text: "verify.rs".into(),
+                code: true,
+                ..Default::default()
+            },
+            Span {
+                text: " and ".into(),
+                ..Default::default()
+            },
+            Span {
+                text: "the notes".into(),
+                link: Some("https://example.com".into()),
+                ..Default::default()
+            },
+            Span {
+                text: " via ".into(),
+                ..Default::default()
+            },
+            Span {
+                text: "cargo test".into(),
+                code: true,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            targets(&spans),
+            vec![
+                (4..16, Target::File("verify.rs".into())),
+                (21..30, Target::Link("https://example.com".into())),
+            ]
+        );
     }
 
     #[test]

@@ -118,6 +118,15 @@ use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
 use crate::theme::{ActiveTheme, Theme};
 
+/// Open the file a reply's file chip names (`markdown.rs`): clicked, not
+/// keyed, so it has no binding and no palette entry; the workspace opens it
+/// when the chat's folder has it (`AppState::open_named_file`).
+#[derive(Clone, PartialEq, gpui::Action)]
+#[action(namespace = forge, no_json)]
+pub struct OpenFileChip {
+    pub name: SharedString,
+}
+
 /// The Agents panel's jumper is open (a `ui_toggles` key).
 pub const AGENT_JUMPER: &str = "agent-list-open";
 
