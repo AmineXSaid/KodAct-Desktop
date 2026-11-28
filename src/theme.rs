@@ -558,10 +558,20 @@ pub struct ExtraColors {
     // Memory and rules: the reference's ochre.
     pub memory: Hsla,
     pub memory_tint: Hsla,
-    // Inline code in prose (a file, a command): ink on a faint wash, a
-    // rounded chip (`ui/markdown.rs`); peach is left to links.
+    // Inline code in prose (a file, a command): a deep sky ink on a wash of
+    // its own hue, a soft rounded pill (`ui/markdown.rs`): a name reads as a
+    // thing at a glance.
     pub code_inline_fg: Hsla,
     pub code_inline_bg: Hsla,
+    // A link in a reply: KodAct's burgundy as ink (the interface's own links
+    // stay ink, `colors.primary`), with a faint underline of its own hue.
+    pub reply_link: Hsla,
+    // Your message's bubble: the card's ground warmed by a breath of burgundy.
+    pub user_bubble: Hsla,
+    // The icon of a folded row, by kind: reasoning (sky), a nudge
+    // (marigold). A failure uses `danger`. UI parts: 3:1 on the session.
+    pub thought: Hsla,
+    pub nudge: Hsla,
     // Permission modes, as KodAct for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,   // Edit automatically
     pub mode_auto: Hsla,   // Auto
@@ -633,8 +643,12 @@ impl ExtraColors {
                 agent: None,
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x332b19).into(),
-                code_inline_fg: rgb(0xf0f0f0).into(),
-                code_inline_bg: Hsla::from(rgb(0xf0f0f0)).opacity(0.09),
+                code_inline_fg: rgb(0x9fd0f7).into(),
+                code_inline_bg: Hsla::from(rgb(0x62aef0)).opacity(0.16),
+                reply_link: rgb(0xeb9cb0).into(),
+                user_bubble: rgb(0x3a3034).into(),
+                thought: rgb(0x7cc0f5).into(),
+                nudge: rgb(0xffc85a).into(),
                 mode_edit: rgb(0x2da160).into(),
                 mode_auto: rgb(0xa08cf2).into(),
                 mode_plan: rgb(0x428fdc).into(),
@@ -708,8 +722,12 @@ impl ExtraColors {
                 agent: None,
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
-                code_inline_fg: rgb(0x262626).into(),
-                code_inline_bg: Hsla::from(rgb(0x212121)).opacity(0.065),
+                code_inline_fg: rgb(0x1b5a8f).into(),
+                code_inline_bg: Hsla::from(rgb(0x2a7fc9)).opacity(0.10),
+                reply_link: rgb(0x7a1f3d).into(),
+                user_bubble: rgb(0xf8eef1).into(),
+                thought: rgb(0x2f7cc0).into(),
+                nudge: rgb(0x9a6400).into(),
                 mode_edit: rgb(0x108548).into(),
                 mode_auto: rgb(0x6247c7).into(),
                 mode_plan: rgb(0x1f75cb).into(),

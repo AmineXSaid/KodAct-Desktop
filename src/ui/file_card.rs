@@ -61,6 +61,9 @@ fn tile_preview(
         .w_full()
         .h(px(TILE_PREVIEW_H))
         .overflow_hidden()
+        // The well's ground follows the card's top corners (inside its
+        // 1px edge): a parent clips its children square, not round.
+        .rounded_t(t.radius.card - px(1.))
         .border_b_1()
         .border_color(t.colors.border);
     match (&preview.page, preview.ready) {
@@ -85,6 +88,7 @@ fn tile_preview(
             .child(
                 gpui::img(image.clone())
                     .size_full()
+                    .rounded_t(t.radius.card - px(1.))
                     .object_fit(gpui::ObjectFit::Cover),
             )
             .into_any_element(),
@@ -109,6 +113,7 @@ fn tile_preview(
                     .child(
                         gpui::img(image.clone())
                             .w_full()
+                            .rounded_t(t.radius.small - px(1.))
                             .object_fit(gpui::ObjectFit::Cover),
                     ),
             )
@@ -773,6 +778,7 @@ pub fn artifact(
     let sheet: AnyElement = match (&thumb, file.office()) {
         (Some(img), _) => gpui::img(img.clone())
             .size_full()
+            .rounded_t(t.radius.small - px(1.))
             .object_fit(gpui::ObjectFit::Cover)
             .into_any_element(),
         (None, Some(kind)) => div()
@@ -825,6 +831,7 @@ pub fn artifact(
                 .w_full()
                 .h(px(ARTIFACT_WELL_H))
                 .overflow_hidden()
+                .rounded_t(t.radius.card - px(1.))
                 .bg(t.artifact_well(file.path.as_deref().unwrap_or(&file.name)))
                 .border_b_1()
                 .border_color(t.colors.border)

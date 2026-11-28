@@ -298,6 +298,7 @@ fn card(
         .child(match pic {
             Some(Thumb::Ready(p)) => img(p.clone())
                 .size_full()
+                .rounded_t(t.radius.card)
                 .object_fit(ObjectFit::Cover)
                 .into_any_element(),
             // No picture (yet, or ever): a cover set in type, its kind

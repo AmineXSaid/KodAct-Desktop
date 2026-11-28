@@ -91,7 +91,7 @@ fn chip(a: &Attachment, id: SharedString, t: &Theme, remove: Option<OnRemove>) -
             .flex_none()
             .rounded(t.radius.small)
             .overflow_hidden()
-            .child(img(i).size_full().object_fit(ObjectFit::Cover))
+            .child(img(i).size_full().rounded(t.radius.small).object_fit(ObjectFit::Cover))
             .into_any_element(),
         None => div()
             .size(t.size.attach_thumb)
@@ -232,10 +232,13 @@ fn tile(
     let group: SharedString = format!("{id}-group").into();
     let side = t.size.attach_tile;
     let body: AnyElement = match (a.kind, thumbnail(a)) {
+        // The picture's own corners follow the tile's (inside its 1px
+        // edge): a child is clipped to a rectangle, not to the curve.
         (_, Some(image)) => img(image)
             .absolute()
             .inset_0()
             .size_full()
+            .rounded(t.radius.card - px(1.))
             .object_fit(ObjectFit::Cover)
             .into_any_element(),
         _ => {

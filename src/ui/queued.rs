@@ -200,6 +200,7 @@ fn attachment_tiles(t: &Theme, attachments: &[Attachment]) -> AnyElement {
         let thumb = match super::attachments::thumbnail(a) {
             Some(image) => img(image)
                 .size_full()
+                .rounded(t.radius.compact)
                 .object_fit(ObjectFit::Cover)
                 .into_any_element(),
             None => icon(a.icon(), t.size.icon_xs, t.colors.text_muted).into_any_element(),

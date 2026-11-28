@@ -482,6 +482,9 @@ fn event_line(
         )
     } else if words.starts_with("File no longer parses") || words.starts_with("Errors after") {
         ("icons/bug.svg", t.extra.danger, t.extra.danger_tint)
+    } else if words.starts_with("Nudge") {
+        // KodAct stepping in: marigold, a nudge, never an alarm.
+        ("icons/zap.svg", t.extra.nudge, t.extra.nudge.opacity(0.14))
     } else if words.starts_with("Loop guard") || words.starts_with("Tool call repaired") {
         ("icons/refresh-cw.svg", t.colors.text_muted, t.colors.hover)
     } else {
@@ -797,7 +800,7 @@ fn user(
                     .max_w(relative(0.8))
                     .px(t.space.lg)
                     .py(t.space.sm + px(2.))
-                    .bg(t.colors.surface)
+                    .bg(t.extra.user_bubble)
                     .rounded(t.radius.card)
                     .text_size(t.size.chat_text)
                     .line_height(relative(t.size.line_height_chat))
@@ -1194,7 +1197,7 @@ fn thinking(
             d.child(icon(
                 "icons/lightbulb.svg",
                 t.size.icon_xs,
-                t.colors.text_subtle,
+                t.extra.thought,
             ))
         })
         .child(label.clone())
@@ -1445,6 +1448,7 @@ pub(super) fn thumbs<'a>(
                     .child(
                         img(i.image.clone())
                             .size_full()
+                            .rounded(t.radius.small - px(1.))
                             .object_fit(ObjectFit::Cover),
                     )
             }))
@@ -1477,6 +1481,7 @@ fn pictures(call: &ToolCall, t: &Theme) -> gpui::Div {
                 .child(
                     img(i.image.clone())
                         .size_full()
+                        .rounded(t.radius.button)
                         .object_fit(ObjectFit::Contain),
                 )
         }))

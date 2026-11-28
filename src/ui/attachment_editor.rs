@@ -1,8 +1,10 @@
 //! The attachment editor: the pencil on a tile in the composer opens it.
 //! A pasted text opens as text to edit (all of it erased removes the card).
-//! A picture opens as a small studio: a tool rail (pen, highlighter, arrow,
-//! box, ellipse, text, redact, crop, pan), five colours, three line
-//! weights, crop shapes, a quarter turn, zoom, Undo / Redo and Reset.
+//! A picture opens as itself: the picture on the scrim, fitted to the
+//! window, and one slim toolbar under it (pen, highlighter, arrow, box,
+//! ellipse, text, redact, crop, pan; the colours, three line weights or
+//! the crop shapes; a quarter turn, zoom, Undo / Redo, Reset; then Cancel
+//! and Save).
 //! Every edit is kept as an op beside the untouched original (`draw.rs`),
 //! so nothing loses quality and reopening carries on where you left off.
 //! Esc closes it without saving; Ctrl+Z undoes, Ctrl+Shift+Z / Ctrl+Y redo.
@@ -88,10 +90,14 @@ enum Live {
     Pan(gpui::Point<Pixels>),
 }
 
-/// The pad's area: the picture is fitted inside it.
-const PAD_W: f32 = 720.;
-const PAD_H: f32 = 420.;
-/// Line weights, in the pad's pixels.
+/// A pasted text's editing area.
+const TEXT_W: f32 = 720.;
+const TEXT_H: f32 = 420.;
+/// How much of the window a picture may take, across and down; the
+/// toolbar and its caption keep `CHROME_H` under it.
+const FIT_SHARE: f32 = 0.8;
+const CHROME_H: f32 = 120.;
+/// Line weights, in screen pixels.
 const WIDTHS: [f32; 3] = [2., 4., 8.];
 /// Text cap heights, in the pad's pixels, for each weight.
 const TEXT_SIZES: [f32; 3] = [14., 21., 28.];
@@ -115,6 +121,9 @@ pub struct AttachmentEditor {
     aspect: usize,
     zoom: usize,
     pan: (f32, f32),
+    /// Screen pixels per picture pixel at 100%: the picture fitted to the
+    /// window (set each render, from the window's size).
+    fit: f32,
     /// Bumped on every render request, so a slow one never wins late.
     generation: u64,
     /// Where the picture was painted last frame, for the pointer's position.
@@ -186,6 +195,7 @@ impl AttachmentEditor {
             aspect: 0,
             zoom: 2,
             pan: (0., 0.),
+            fit: 1.,
             generation: 0,
             shown: Rc::new(Cell::new(None)),
             saving: false,
@@ -405,14 +415,19 @@ impl AttachmentEditor {
         Some((x, y))
     }
 
-    /// Screen pixels per picture pixel: fitted to the pad, then zoomed.
+    /// Screen pixels per picture pixel: fitted to the window, then zoomed.
     fn scale(&self) -> f32 {
         match &self.open {
-            Some(Open::Picture(p)) => {
-                (PAD_W / p.w).min(PAD_H / p.h).min(1.) * ZOOMS[self.zoom]
-            }
+            Some(Open::Picture(_)) => self.fit * ZOOMS[self.zoom],
             _ => 1.,
         }
+    }
+
+    /// The picture's fit for a window `vw` × `vh`: as large as it can be
+    /// in its share of the window, never above its own size.
+    fn fit_for(p: &Picture, vw: f32, vh: f32) -> f32 {
+        let (w, h) = ((vw * FIT_SHARE).max(120.), (vh * FIT_SHARE - CHROME_H).max(120.));
+        (w / p.w.max(1.)).min(h / p.h.max(1.)).min(1.)
     }
 
     /// A drag's far corner, held to the crop shape when cropping.
@@ -555,26 +570,20 @@ fn rule(t: &Theme) -> gpui::Div {
 }
 
 impl AttachmentEditor {
-    /// The left rail: one square button per tool, the chosen one washed.
-    fn rail(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut rail = div()
-            .flex()
-            .flex_col()
-            .gap(px(2.))
-            .p(px(4.))
-            .rounded(t.radius.field)
-            .bg(t.extra.inset);
+    /// The tools: one round button each, the chosen one washed.
+    fn tools(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
+        let mut rail = div().flex().items_center().gap(px(2.));
         for (i, &(tool, path, name)) in TOOLS.iter().enumerate() {
             let on = tool == self.tool;
             let hover = t.colors.hover;
             rail = rail.child(
                 div()
                     .id(("edit-tool", i))
-                    .size(px(32.))
+                    .size(px(30.))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(t.radius.button)
+                    .rounded_full()
                     .cursor_pointer()
                     .when(on, |d| d.bg(t.colors.primary_tint))
                     .when(!on, move |d| d.hover(move |d| d.bg(hover)))
@@ -595,10 +604,17 @@ impl AttachmentEditor {
         rail
     }
 
-    /// The row above the pad: colours, weights (or crop shapes), then turn,
-    /// zoom, Undo / Redo, Reset.
+    /// The one toolbar under the picture: the tools; colours and weights
+    /// (or crop shapes); turn, zoom, Undo / Redo, Reset; Cancel and Save.
     fn toolbar(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut row = div().flex().items_center().gap(t.space.xs);
+        let mut row = div()
+            .flex()
+            .flex_wrap()
+            .justify_center()
+            .items_center()
+            .gap(t.space.xs)
+            .child(self.tools(t, cx))
+            .child(rule(t));
         let cropping = self.tool == Tool::Crop;
         let colors_matter = !matches!(self.tool, Tool::Crop | Tool::Redact | Tool::Pan);
         if colors_matter {
@@ -608,7 +624,7 @@ impl AttachmentEditor {
                 row = row.child(
                     div()
                         .id(("pen-color", i))
-                        .size(px(24.))
+                        .size(px(22.))
                         .p(px(2.))
                         .rounded_full()
                         .border_1()
@@ -640,12 +656,12 @@ impl AttachmentEditor {
                 row = row.child(
                     div()
                         .id(("pen-width", i))
-                        .w(px(30.))
+                        .w(px(28.))
                         .h(px(26.))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .rounded(t.radius.button)
+                        .rounded_full()
                         .when(on, |d| d.bg(t.colors.primary_tint))
                         .cursor_pointer()
                         .hover(move |d| d.bg(hover))
@@ -674,8 +690,10 @@ impl AttachmentEditor {
                 );
             }
         }
-        row.child(div().flex_1())
-            .child(
+        if colors_matter || cropping {
+            row = row.child(rule(t));
+        }
+        row.child(
                 Button::icon("edit-rotate", "icons/rotate-ccw.svg", "Turn a quarter to the left")
                     .on_click(cx.listener(|this, _, _, cx| this.push(EditOp::Rotate, cx))),
             )
@@ -721,241 +739,292 @@ impl AttachmentEditor {
                     .disabled(self.ops.is_empty())
                     .on_click(cx.listener(|this, _, _, cx| this.reset(cx))),
             )
+            .child(rule(t))
+            .child(
+                Button::ghost("attachment-editor-cancel", "Cancel")
+                    .compact()
+                    .on_click(cx.listener(|this, _, window, cx| this.close(window, cx))),
+            )
+            .child(
+                Button::accent("attachment-editor-save", "Save")
+                    .compact()
+                    .loading(self.saving)
+                    .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
+            )
     }
 }
 
-impl Render for AttachmentEditor {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl AttachmentEditor {
+    /// What the pointer is drawing, over the picture: the stroke or shape
+    /// in progress, a crop or redact frame, the text caret.
+    fn overlay(&self, scale: f32, t: &Theme) -> impl IntoElement {
+        let live = self.live.clone();
+        let tool = self.tool;
+        let color = rgba(palette(t)[self.color]);
+        let line = WIDTHS[self.width];
+        let marker = t.colors.primary;
+        let label_at = self.label_at;
+        let shown = self.shown.clone();
+        canvas(
+            move |bounds, _, _| shown.set(Some(bounds)),
+            move |bounds, _, window, _| {
+                let at = |p: (f32, f32)| {
+                    point(bounds.origin.x + px(p.0 * scale), bounds.origin.y + px(p.1 * scale))
+                };
+                let stroke = |pts: &[(f32, f32)], width: f32, c: gpui::Rgba, window: &mut Window| {
+                    let Some(first) = pts.first() else { return };
+                    let mut b = PathBuilder::stroke(px(width.max(1.)));
+                    b.move_to(at(*first));
+                    if pts.len() == 1 {
+                        b.line_to(at((first.0 + 0.5 / scale, first.1 + 0.5 / scale)));
+                    }
+                    for p in &pts[1..] {
+                        b.line_to(at(*p));
+                    }
+                    if let Ok(path) = b.build() {
+                        window.paint_path(path, c);
+                    }
+                };
+                if let Some((x, y)) = label_at {
+                    let c = gpui::Rgba::from(marker);
+                    stroke(&[(x, y), (x, y + 18. / scale)], 2., c, window);
+                }
+                match &live {
+                    Some(Live::Points(pts)) => match tool {
+                        Tool::Highlight => stroke(
+                            pts,
+                            line * 3.,
+                            color_of(color, crate::draw::HIGHLIGHT_ALPHA),
+                            window,
+                        ),
+                        _ => stroke(pts, line, color_of(color, 1.), window),
+                    },
+                    Some(Live::Drag(a, b)) => {
+                        let c = color_of(color, 1.);
+                        let boxed = [*a, (b.0, a.1), *b, (a.0, b.1), *a];
+                        match tool {
+                            Tool::Arrow => stroke(&[*a, *b], line, c, window),
+                            Tool::Rect => stroke(&boxed, line, c, window),
+                            Tool::Ellipse => {
+                                let (cx_, cy_) = ((a.0 + b.0) / 2., (a.1 + b.1) / 2.);
+                                let (rx, ry) = ((a.0 - b.0).abs() / 2., (a.1 - b.1).abs() / 2.);
+                                let pts: Vec<_> = (0..=96)
+                                    .map(|i| {
+                                        let k = i as f32 / 96. * std::f32::consts::TAU;
+                                        (cx_ + rx * k.cos(), cy_ + ry * k.sin())
+                                    })
+                                    .collect();
+                                stroke(&pts, line, c, window);
+                            }
+                            _ => stroke(&boxed, 1.5, gpui::Rgba::from(marker), window),
+                        }
+                    }
+                    _ => {}
+                }
+            },
+        )
+        .absolute()
+        .inset_0()
+    }
+
+    /// A picture being edited: the picture itself on the scrim, as large as
+    /// the window allows, a caption line above it and the toolbar under it.
+    fn picture_view(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = cx.theme().clone();
-        let Some(open) = &self.open else {
+        let Some(Open::Picture(p)) = &self.open else {
             return div().into_any_element();
         };
-        let (title, name, is_picture) = match open {
-            Open::Text { name, .. } => ("Edit the pasted text", name.clone(), false),
-            Open::Picture(p) => ("Edit the picture", p.name.clone(), true),
-        };
-        let body: gpui::AnyElement = match open {
-            Open::Text { .. } => {
-                let lines = self.text.read(cx).value().lines().count();
+        let vp = window.viewport_size();
+        let fit = Self::fit_for(p, f32::from(vp.width), f32::from(vp.height));
+        let (pw, ph, image, name) = (p.w, p.h, p.shown.clone(), p.name.clone());
+        self.fit = fit;
+        // The frame: the picture's size at 100%. Zoomed in, the picture
+        // moves inside it; zoomed out, it sits in its middle.
+        let (fw, fh) = (pw * fit, ph * fit);
+        let scale = self.scale();
+        let (w, h) = (pw * scale, ph * scale);
+        let (left, top) = ((fw - w) / 2. + self.pan.0, (fh - h) / 2. + self.pan.1);
+        let overlay = self.overlay(scale, &t);
+        let toolbar = self.toolbar(&t, cx);
+        let cursor_pan = self.tool == Tool::Pan;
+        let frame = div()
+            .id("draw-pad")
+            .relative()
+            .flex_none()
+            .w(px(fw))
+            .h(px(fh))
+            .overflow_hidden()
+            .rounded(t.radius.card)
+            .shadow(t.elevation_popover())
+            .when(cursor_pan, |d| d.cursor_grab())
+            .when(!cursor_pan, |d| d.cursor_crosshair())
+            .child(
                 div()
-                    .flex()
-                    .flex_col()
-                    .gap(t.space.xs)
+                    .absolute()
+                    .left(px(left))
+                    .top(px(top))
+                    .w(px(w))
+                    .h(px(h))
                     .child(
-                        div()
-                            .rounded(t.radius.field)
-                            .bg(t.colors.surface)
-                            .border_1()
-                            .border_color(t.extra.border_strong)
-                            .p(t.space.sm)
-                            .font_family(t.font_mono.clone())
-                            .text_size(t.text.body_sm)
-                            .child(super::hold_wheel(
-                                div().child(Textarea::new(&self.text).appearance(false).h(px(PAD_H))),
-                            )),
+                        img(image)
+                            .size_full()
+                            // Its own corners follow the frame's: a
+                            // parent clips square, not round.
+                            .rounded(t.radius.card)
+                            .object_fit(ObjectFit::Fill),
                     )
-                    .child(
-                        div()
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_muted)
-                            .child(format!(
-                                "{lines} {} · sent whole with your message; erase it all to remove it",
-                                if lines == 1 { "line" } else { "lines" }
-                            )),
-                    )
-                    .into_any_element()
-            }
-            Open::Picture(p) => {
-                let scale = self.scale();
-                let (w, h) = (p.w * scale, p.h * scale);
-                let (left, top) = ((PAD_W - w) / 2. + self.pan.0, (PAD_H - h) / 2. + self.pan.1);
-                let image = p.shown.clone();
-                let toolbar = self.toolbar(&t, cx);
-                let rail = self.rail(&t, cx);
-
-                // The edit under the pointer, drawn over the picture.
-                let live = self.live.clone();
-                let tool = self.tool;
-                let color = rgba(palette(&t)[self.color]);
-                let line = WIDTHS[self.width];
-                let marker = t.colors.primary;
-                let label_at = self.label_at;
-                let shown = self.shown.clone();
-                let overlay = canvas(
-                    move |bounds, _, _| shown.set(Some(bounds)),
-                    move |bounds, _, window, _| {
-                        let at = |p: (f32, f32)| {
-                            point(bounds.origin.x + px(p.0 * scale), bounds.origin.y + px(p.1 * scale))
-                        };
-                        let stroke = |pts: &[(f32, f32)], width: f32, c: gpui::Rgba, window: &mut Window| {
-                            let Some(first) = pts.first() else { return };
-                            let mut b = PathBuilder::stroke(px(width.max(1.)));
-                            b.move_to(at(*first));
-                            if pts.len() == 1 {
-                                b.line_to(at((first.0 + 0.5 / scale, first.1 + 0.5 / scale)));
-                            }
-                            for p in &pts[1..] {
-                                b.line_to(at(*p));
-                            }
-                            if let Ok(path) = b.build() {
-                                window.paint_path(path, c);
-                            }
-                        };
-                        if let Some((x, y)) = label_at {
-                            let c = gpui::Rgba::from(marker);
-                            stroke(&[(x, y), (x, y + 18. / scale)], 2., c, window);
-                        }
-                        match &live {
-                            Some(Live::Points(pts)) => match tool {
-                                Tool::Highlight => stroke(
-                                    pts,
-                                    line * 3.,
-                                    color_of(color, crate::draw::HIGHLIGHT_ALPHA),
-                                    window,
-                                ),
-                                _ => stroke(pts, line, color_of(color, 1.), window),
-                            },
-                            Some(Live::Drag(a, b)) => {
-                                let c = color_of(color, 1.);
-                                let boxed = [*a, (b.0, a.1), *b, (a.0, b.1), *a];
-                                match tool {
-                                    Tool::Arrow => stroke(&[*a, *b], line, c, window),
-                                    Tool::Rect => stroke(&boxed, line, c, window),
-                                    Tool::Ellipse => {
-                                        let (cx_, cy_) = ((a.0 + b.0) / 2., (a.1 + b.1) / 2.);
-                                        let (rx, ry) = ((a.0 - b.0).abs() / 2., (a.1 - b.1).abs() / 2.);
-                                        let pts: Vec<_> = (0..=96)
-                                            .map(|i| {
-                                                let k = i as f32 / 96. * std::f32::consts::TAU;
-                                                (cx_ + rx * k.cos(), cy_ + ry * k.sin())
-                                            })
-                                            .collect();
-                                        stroke(&pts, line, c, window);
-                                    }
-                                    _ => stroke(&boxed, 1.5, gpui::Rgba::from(marker), window),
-                                }
-                            }
-                            _ => {}
-                        }
-                    },
+                    .child(overlay),
+            )
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, e: &gpui::MouseDownEvent, window, cx| {
+                    this.pointer_down(e, window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Middle,
+                cx.listener(|this, e: &gpui::MouseDownEvent, window, cx| {
+                    this.pointer_down(e, window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .on_mouse_move(cx.listener(|this, e: &gpui::MouseMoveEvent, _, cx| {
+                this.pointer_move(e, cx);
+            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.pointer_up(cx)))
+            .on_mouse_up(MouseButton::Middle, cx.listener(|this, _, _, cx| this.pointer_up(cx)))
+            .on_scroll_wheel(cx.listener(|this, ev: &gpui::ScrollWheelEvent, window, cx| {
+                let dy = f32::from(ev.delta.pixel_delta(window.rem_size()).y);
+                if dy > 2. {
+                    this.zoom = (this.zoom + 1).min(ZOOMS.len() - 1);
+                    cx.notify();
+                } else if dy < -2. {
+                    this.zoom = this.zoom.saturating_sub(1);
+                    cx.notify();
+                }
+                cx.stop_propagation();
+            }));
+        let label_row = self.label_at.map(|_| {
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .w(px(360.))
+                .p(t.space.xs)
+                .pl(t.space.md)
+                .rounded_full()
+                .bg(t.colors.surface)
+                .shadow(t.elevation_popover())
+                .child(div().flex_1().child(Input::new(&self.label).appearance(false)))
+                .child(
+                    Button::secondary("edit-label-add", "Add label")
+                        .compact()
+                        .on_click(cx.listener(|this, _, window, cx| this.place_label(window, cx))),
                 )
-                .absolute()
-                .inset_0();
-                let cursor_pan = self.tool == Tool::Pan;
-                let pad = div()
-                    .id("draw-pad")
-                    .relative()
-                    .w(px(PAD_W))
-                    .h(px(PAD_H))
-                    .overflow_hidden()
-                    .rounded(t.radius.field)
-                    .bg(t.extra.inset)
-                    .when(cursor_pan, |d| d.cursor_grab())
-                    .when(!cursor_pan, |d| d.cursor_crosshair())
-                    .child(
-                        div()
-                            .absolute()
-                            .left(px(left))
-                            .top(px(top))
-                            .w(px(w))
-                            .h(px(h))
-                            .shadow_sm()
-                            .child(img(image).size_full().object_fit(ObjectFit::Fill))
-                            .child(overlay),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, e: &gpui::MouseDownEvent, window, cx| {
-                            this.pointer_down(e, window, cx);
-                            cx.stop_propagation();
-                        }),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Middle,
-                        cx.listener(|this, e: &gpui::MouseDownEvent, window, cx| {
-                            this.pointer_down(e, window, cx);
-                            cx.stop_propagation();
-                        }),
-                    )
-                    .on_mouse_move(cx.listener(|this, e: &gpui::MouseMoveEvent, _, cx| {
-                        this.pointer_move(e, cx);
-                    }))
-                    .on_mouse_up(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, cx| this.pointer_up(cx)),
-                    )
-                    .on_mouse_up(
-                        MouseButton::Middle,
-                        cx.listener(|this, _, _, cx| this.pointer_up(cx)),
-                    )
-                    .on_scroll_wheel(cx.listener(|this, ev: &gpui::ScrollWheelEvent, window, cx| {
-                        let dy = f32::from(ev.delta.pixel_delta(window.rem_size()).y);
-                        if dy > 2. {
-                            this.zoom = (this.zoom + 1).min(ZOOMS.len() - 1);
-                            cx.notify();
-                        } else if dy < -2. {
-                            this.zoom = this.zoom.saturating_sub(1);
-                            cx.notify();
-                        }
-                        cx.stop_propagation();
-                    }));
-                let label_row = self.label_at.map(|_| {
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .child(
-                            div()
-                                .flex_1()
-                                .px(t.space.sm)
-                                .rounded(t.radius.field)
-                                .border_1()
-                                .border_color(t.extra.border_strong)
-                                .bg(t.colors.surface)
-                                .child(Input::new(&self.label).appearance(false)),
-                        )
-                        .child(
-                            Button::secondary("edit-label-add", "Add label")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.place_label(window, cx)
-                                })),
-                        )
-                });
-                let hint = match self.tool {
-                    Tool::Text if self.label_at.is_none() => "Click where the label should go",
-                    Tool::Crop => "Drag the area to keep",
-                    Tool::Redact => "Drag over what to hide",
-                    Tool::Pan => "Drag to move around the picture",
-                    _ => "",
-                };
-                div()
-                    .flex()
-                    .gap(t.space.sm)
-                    .child(rail)
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(t.space.sm)
-                            .child(toolbar)
-                            .child(pad)
-                            .children(label_row)
-                            .child(
-                                div()
-                                    .h(px(16.))
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_muted)
-                                    .child(format!(
-                                        "{hint}{}{} × {} px",
-                                        if hint.is_empty() { "" } else { " · " },
-                                        p.w as u32,
-                                        p.h as u32
-                                    )),
-                            ),
-                    )
-                    .into_any_element()
-            }
+        });
+        let hint = match self.tool {
+            Tool::Text if self.label_at.is_none() => "Click where the label should go",
+            Tool::Crop => "Drag the area to keep",
+            Tool::Redact => "Drag over what to hide",
+            Tool::Pan => "Drag to move around the picture",
+            _ => "",
         };
+        // One caption line: the picture's name and size, what the tool
+        // wants, or what went wrong.
+        let caption = div()
+            .max_w(px(fw.max(480.)))
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .text_size(t.text.caption)
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .child(name),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_color(t.colors.text_muted)
+                    .child(format!(
+                        "{} × {} px{}{hint}",
+                        pw as u32,
+                        ph as u32,
+                        if hint.is_empty() { "" } else { " · " }
+                    )),
+            )
+            .children(self.error.clone().map(|e| {
+                div().flex_none().text_color(t.extra.danger).child(e)
+            }));
+        div()
+            .id("attachment-editor")
+            .occlude()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(t.space.md)
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .px(t.space.md)
+                    .py(t.space.xs)
+                    .rounded_full()
+                    .bg(t.colors.surface)
+                    .shadow(t.elevation_popover())
+                    .child(caption),
+            )
+            .child(frame)
+            .child(
+                toolbar
+                    .max_w(vp.width * 0.95)
+                    .px(t.space.sm)
+                    .py(t.space.xs)
+                    .rounded(t.size.composer_radius)
+                    .bg(t.colors.surface)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .shadow(t.elevation_popover()),
+            )
+            .children(label_row)
+            .into_any_element()
+    }
+
+    /// A pasted text being edited: a dialog with the text and Cancel / Save.
+    fn text_view(&mut self, name: SharedString, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = cx.theme().clone();
+        let lines = self.text.read(cx).value().lines().count();
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(t.space.xs)
+            .child(
+                div()
+                    .rounded(t.radius.field)
+                    .bg(t.colors.surface)
+                    .border_1()
+                    .border_color(t.extra.border_strong)
+                    .p(t.space.sm)
+                    .font_family(t.font_mono.clone())
+                    .text_size(t.text.body_sm)
+                    .child(super::hold_wheel(
+                        div().child(Textarea::new(&self.text).appearance(false).h(px(TEXT_H))),
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child(format!(
+                        "{lines} {} · sent whole with your message; erase it all to remove it",
+                        if lines == 1 { "line" } else { "lines" }
+                    )),
+            );
         let error = self.error.clone().map(|e| {
             div()
                 .text_size(t.text.caption)
@@ -966,12 +1035,62 @@ impl Render for AttachmentEditor {
             Button::ghost("attachment-editor-cancel", "Cancel")
                 .on_click(cx.listener(|this, _, window, cx| this.close(window, cx)))
                 .into_any_element(),
-            Button::accent("attachment-editor-save", if is_picture { "Save picture" } else { "Save" })
+            Button::accent("attachment-editor-save", "Save")
                 .loading(self.saving)
                 .on_click(cx.listener(|this, _, window, cx| this.save(window, cx)))
                 .into_any_element(),
         ];
-        let width = if is_picture { PAD_W + 48. + 48. } else { PAD_W + 48. };
+        super::motion::alert(
+            super::panel_chrome::window(
+                &t,
+                theme::popover(&t)
+                    .id("attachment-editor")
+                    .occlude()
+                    .w(px(TEXT_W + 48.))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+                "attachment-editor",
+                "Edit the pasted text",
+                None,
+                cx.listener(|this, _, window, cx| this.close(window, cx)),
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.md)
+                    .child(
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_color(t.colors.text_muted)
+                            .child(name),
+                    )
+                    .child(body)
+                    .children(error),
+                footer,
+            ),
+            "attachment-editor",
+            t.colors.primary,
+            self.leaving,
+            &t,
+        )
+    }
+}
+
+impl Render for AttachmentEditor {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = cx.theme().clone();
+        let content = match &self.open {
+            None => return div().into_any_element(),
+            Some(Open::Text { name, .. }) => {
+                let name = name.clone();
+                self.text_view(name, cx)
+            }
+            Some(Open::Picture(_)) => {
+                let view = self.picture_view(window, cx);
+                super::motion::dialog(div().child(view), "attachment-editor", self.leaving, &t)
+            }
+        };
         super::motion::backdrop(
             div()
                 .id("attachment-editor-scrim")
@@ -1046,40 +1165,7 @@ impl Render for AttachmentEditor {
                     }
                     cx.stop_propagation();
                 }))
-                .child(super::motion::alert(
-                    super::panel_chrome::window(
-                        &t,
-                        theme::popover(&t)
-                            .id("attachment-editor")
-                            .occlude()
-                            .w(px(width))
-                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
-                        "attachment-editor",
-                        title,
-                        None,
-                        cx.listener(|this, _, window, cx| this.close(window, cx)),
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(t.space.md)
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .text_color(t.colors.text_muted)
-                                    .child(name),
-                            )
-                            .child(body)
-                            .children(error),
-                        footer,
-                    ),
-                    "attachment-editor",
-                    t.colors.primary,
-                    self.leaving,
-                    &t,
-                )),
+                .child(content),
             "attachment-editor",
             t.extra.scrim,
             self.leaving,

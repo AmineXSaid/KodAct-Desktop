@@ -16858,6 +16858,9 @@ fn demo_title(prompt: &str) -> Option<&'static str> {
     .map(|(_, title)| title)
 }
 
+/// The demo reply that shows every reading style (`script`).
+const DEMO_STYLES: &str = "## What changed\n\nThe check in `verify.rs` now counts a batch-mode editor as a check. The skill's `self_check.py` passes, and `cargo test` is green. See [the harness notes](https://example.com/notes) for the details.\n\n> [!IMPORTANT]\n> Two verifier failures were infrastructure, not the agent: `report.py` misread a missing binary.\n\n| Metric | Raw | Adjusted |\n|---|---|---|\n| Pass@1 | 84.3% | 86.2% |\n| Exceptions | 0 | 0 |\n| Output tokens | 2.32M | — |\n\n### Next\n\n- Bound `finish_check_note` in `src/engine.rs` the way `summary_notes` is.\n- Scale the reasoning limit with the time left.\n\n> [!NOTE]\n> The demo replies are scripted; no model is called.";
+
 fn script(prompt: &str) -> Vec<Step> {
     let mut s = vec![];
     s.extend(words(
@@ -16885,6 +16888,13 @@ fn script(prompt: &str) -> Vec<Step> {
         ));
         s.push(Step::Remember(fact));
         s.push(Step::End { seconds: 1.4 });
+        return s;
+    }
+    // The reply's reading styles at once (headings, links, file chips, a
+    // callout, a table), to look at them: "show the reading styles".
+    if lower.contains("reading styles") {
+        s.extend(words(DEMO_STYLES, Step::Say));
+        s.push(Step::End { seconds: 2.1 });
         return s;
     }
     // Open Design's discovery form, before a design: a few questions.

@@ -109,7 +109,8 @@ impl Alert {
     /// Its colour and tint, from the theme's tokens.
     fn colors(self, t: &Theme) -> (gpui::Hsla, gpui::Hsla) {
         match self {
-            Alert::Note | Alert::Important => (t.colors.primary, t.colors.primary.opacity(0.08)),
+            Alert::Note => (t.extra.thought, t.extra.thought.opacity(0.09)),
+            Alert::Important => (t.extra.accent, t.extra.accent.opacity(0.08)),
             Alert::Tip => (t.extra.success, t.extra.success_tint),
             Alert::Warning => (t.extra.warning, t.extra.warning_tint),
             Alert::Caution => (t.extra.danger, t.extra.danger_tint),
@@ -778,15 +779,20 @@ fn linked(
     let text = StyledText::new(text).with_runs(runs);
     let layout = text.layout().clone();
     let code = code_ranges(spans);
+    let files = file_chips(spans);
     let el = linked_text(id, spans, text);
     let el = if code.is_empty() {
         el
     } else {
-        // The chips paint first, so the text sits on them.
+        // The chips paint first, so the text sits on them; a file's icon
+        // last, in the room kept before its name.
         div()
             .relative()
             .child(chips(layout.clone(), code, t))
             .child(el)
+            .when(!files.is_empty(), |d| {
+                d.child(file_icons(layout.clone(), files, chip_icon(t)))
+            })
             .into_any_element()
     };
     super::select::wrap(key, layout, el)
@@ -795,11 +801,77 @@ fn linked(
 /// How far an inline code chip reaches past its first and last glyph. No
 /// padding characters: the wrapper breaks at any space (a no-break one
 /// too), so padding made stray gaps before punctuation and empty rows.
-const CODE_REACH: f32 = 2.0;
+const CODE_REACH: f32 = 3.0;
 
-/// A span's text as it is laid out: exactly its text (code too).
+/// The room a file chip keeps for its icon: one em space before the name.
+/// The wrapper may break before it (not a word character) but never
+/// between it and the name, so the icon always travels with its file.
+/// Copying drops it (`select::selected_text`).
+pub const ICON_GAP: char = '\u{2003}';
+
+/// A file chip's icon size, from the icon scale.
+fn chip_icon(t: &Theme) -> gpui::Pixels {
+    t.size.icon_xs
+}
+
+/// Whether inline code names a file: one word, with a name or extension
+/// the file icons know (`verify.rs`, `src/ui/markdown.rs`, `Cargo.toml`).
+fn file_like(code: &str) -> bool {
+    use super::file_icon_map::{EXTENSIONS, NAMES};
+    if code.is_empty()
+        || code.len() > 160
+        || code.contains(char::is_whitespace)
+        || code.contains("://")
+        || code.starts_with('-')
+    {
+        return false;
+    }
+    let base = code
+        .trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(code)
+        .to_lowercase();
+    let known = |table: &[(&str, &str)], key: &str| {
+        table.binary_search_by(|(k, _)| (*k).cmp(key)).is_ok()
+    };
+    if known(NAMES, &base) {
+        return true;
+    }
+    match base.rsplit_once('.') {
+        Some((stem, ext)) => {
+            !stem.is_empty()
+                && !ext.is_empty()
+                && ext.chars().all(|c| c.is_ascii_alphanumeric())
+                && !ext.chars().all(|c| c.is_ascii_digit())
+                && known(EXTENSIONS, ext)
+        }
+        None => false,
+    }
+}
+
+/// A span's text as it is laid out: exactly its text, a file name with
+/// room for its icon before it.
 fn shown(s: &Span) -> std::borrow::Cow<'_, str> {
-    s.text.as_str().into()
+    if s.code && file_like(&s.text) {
+        format!("{ICON_GAP}{}", s.text).into()
+    } else {
+        s.text.as_str().into()
+    }
+}
+
+/// The file chips in the laid-out text: where each sits, and its name.
+fn file_chips(spans: &[Span]) -> Vec<(std::ops::Range<usize>, String)> {
+    let mut out = vec![];
+    let mut at = 0;
+    for s in spans.iter().filter(|s| !s.text.is_empty()) {
+        let len = shown(s).len();
+        if s.code && file_like(&s.text) {
+            out.push((at..at + len, s.text.clone()));
+        }
+        at += len;
+    }
+    out
 }
 
 /// Where the code spans sit in the laid-out text.
@@ -820,11 +892,7 @@ fn code_ranges(spans: &[Span]) -> Vec<std::ops::Range<usize>> {
 /// runs can only fill square, so these are painted from the laid-out
 /// glyph positions, under the text.
 fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> impl IntoElement {
-    let (bg, edge, radius) = (
-        t.extra.code_inline_bg,
-        t.colors.border.opacity(0.4),
-        t.radius.small,
-    );
+    let (bg, radius) = (t.extra.code_inline_bg, t.radius.small);
     canvas(
         |_, _, _| {},
         move |_, _, window, _| {
@@ -832,18 +900,53 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
             let text = layout.text();
             for r in &ranges {
                 for b in rows(&layout, &text, r.clone(), line) {
-                    // A soft pill wash with a whisper hairline, reaching slightly past the glyphs.
+                    // A soft pill wash, no edge, reaching slightly past the glyphs.
                     let b = Bounds::new(
                         point(b.origin.x - px(CODE_REACH), b.origin.y),
                         size(b.size.width + px(CODE_REACH * 2.), b.size.height),
                     );
-                    window.paint_quad(
-                        fill(b, bg)
-                            .corner_radii(radius)
-                            .border_widths(px(1.))
-                            .border_color(edge),
-                    );
+                    window.paint_quad(fill(b, bg).corner_radii(radius));
                 }
+            }
+        },
+    )
+    .absolute()
+    .size_full()
+}
+
+/// The file chips' icons (the file's own, full colour), each placed in the
+/// room its chip keeps before the name, on whichever row the name landed.
+/// Laid out once the text is (this sits after it), so the glyphs' places
+/// are known.
+fn file_icons(
+    layout: TextLayout,
+    files: Vec<(std::ops::Range<usize>, String)>,
+    side: gpui::Pixels,
+) -> impl IntoElement {
+    canvas(
+        move |_, window, cx| {
+            let line = layout.line_height();
+            let text = layout.text();
+            let mut out = vec![];
+            for (r, name) in &files {
+                let Some(first) = rows(&layout, &text, r.clone(), line).into_iter().next() else {
+                    continue;
+                };
+                let at = point(
+                    first.origin.x,
+                    first.origin.y + (first.size.height - side) / 2.,
+                );
+                let mut el = gpui::img(super::file_icon::asset(name, false, name))
+                    .size(side)
+                    .into_any_element();
+                el.prepaint_as_root(at, size(side, side).map(Into::into), window, cx);
+                out.push(el);
+            }
+            out
+        },
+        |_, mut icons, window, cx| {
+            for el in &mut icons {
+                el.paint(window, cx);
             }
         },
     )
@@ -859,8 +962,13 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
 /// `char_end` advances to the new row (`p1.y`, where `char_start` starts at
 /// `origin_x`). Comparing `p0.y` and `p1.y` places wrapped glyphs cleanly on
 /// `p1.y` from `origin_x..p1.x` and never paints a phantom box on `p0.y`.
+///
+/// A span on more than one row keeps only rows with real ink: a sliver
+/// narrower than `min_w` (a glyph's edge left at a row's end, as Windows'
+/// layout reports when the span wraps whole) would paint as an empty chip.
 fn glyph_rows(
     origin_x: f32,
+    min_w: f32,
     glyphs: &[(char, (f32, f32), (f32, f32))],
 ) -> Vec<(f32, f32, f32)> {
     let mut out: Vec<(f32, f32, f32)> = Vec::new();
@@ -905,6 +1013,9 @@ fn glyph_rows(
             out.push((rx0, cy, rx1));
         }
     }
+    if out.len() > 1 {
+        out.retain(|&(x0, _, x1)| x1 - x0 >= min_w);
+    }
     out
 }
 
@@ -930,6 +1041,8 @@ fn rows(
         ) else {
             continue;
         };
+        // A file chip's icon room is ink, not a space to skip.
+        let ch = if ch == ICON_GAP { 'I' } else { ch };
         glyphs.push((
             ch,
             (f32::from(p0.x), f32::from(p0.y)),
@@ -937,7 +1050,9 @@ fn rows(
         ));
     }
     let inset = line * 0.13;
-    glyph_rows(origin_x, &glyphs)
+    // The narrowest real glyph is a fifth of the line or more (a full stop).
+    let min_w = f32::from(line) * 0.18;
+    glyph_rows(origin_x, min_w, &glyphs)
         .into_iter()
         .map(|(x0, y, x1)| {
             Bounds::new(
@@ -1078,10 +1193,11 @@ fn run_list(
         runs.push(TextRun {
             len: shown.len(),
             font: f,
-            // Inline code (a file, a command) in KodAct's coral on a rounded
-            // chip (painted by `chips`): a name set apart at a glance.
+            // A link in burgundy ink; inline code (a file, a command) in
+            // its sky ink on a soft pill (painted by `chips`): a name set
+            // apart at a glance.
             color: if s.link.is_some() {
-                t.colors.primary
+                t.extra.reply_link
             } else if s.code {
                 t.extra.code_inline_fg
             } else {
@@ -1090,7 +1206,7 @@ fn run_list(
             background_color: None,
             underline: s.link.is_some().then(|| UnderlineStyle {
                 thickness: px(1.),
-                color: Some(t.colors.primary),
+                color: Some(t.extra.reply_link.opacity(0.45)),
                 wavy: false,
             }),
             strikethrough: s.strike.then(|| StrikethroughStyle {
@@ -1248,9 +1364,25 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     id,
                     &spans,
                     t,
-                    FontWeight::SEMIBOLD,
+                    // The top two levels a weight heavier: one clear step.
+                    if level <= 2 {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::SEMIBOLD
+                    },
                     t.colors.text_strong,
                 ))
+                // A section of a reply opens on a short burgundy rule.
+                .when(level <= 2 && !doc && !aside, |d| {
+                    d.child(
+                        div()
+                            .mt(t.space.xs)
+                            .w(t.space.xl)
+                            .h(px(2.))
+                            .rounded(t.radius.line)
+                            .bg(t.extra.accent),
+                    )
+                })
                 .into_any_element(),
             Block::Item {
                 number,
@@ -1339,7 +1471,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     .flex()
                     .flex_col()
                     .gap(t.space.xs)
-                    .border_l_2()
+                    .border_l(px(3.))
                     .border_color(color)
                     .bg(tint)
                     .rounded_r(t.radius.button)
@@ -1392,6 +1524,15 @@ fn table(
         .len()
         .max(rows.iter().map(|r| r.len()).max().unwrap_or(0))
         .max(1);
+    // A column of numbers with no alignment of its own sits right, so its
+    // digits line up.
+    let align: Vec<Alignment> = (0..columns)
+        .map(|i| match align.get(i).copied().unwrap_or(Alignment::None) {
+            Alignment::None if numeric_column(rows, i) => Alignment::Right,
+            a => a,
+        })
+        .collect();
+    let align = align.as_slice();
     let row = |cells: &[Vec<Span>], header: bool, y: usize| {
         let mut r = div().flex().w_full();
         for i in 0..columns {
@@ -1438,7 +1579,7 @@ fn table(
         .text_size(t.text.body_sm)
         .line_height(relative(1.45));
     if !head.is_empty() {
-        out = out.child(row(head, true, 0).bg(t.extra.inset));
+        out = out.child(row(head, true, 0).bg(t.extra.code_inline_bg));
     }
     for (y, r) in rows.iter().enumerate() {
         out = out.child(
@@ -1448,6 +1589,35 @@ fn table(
         );
     }
     out.into_any_element()
+}
+
+/// Whether every filled cell of column `i` is a number (`42`, `-3.5`,
+/// `84.3%`, `$1,200`, `2.32M`, `96.9% (89.3M / 92.2M in)` is not).
+fn numeric_column(rows: &[Vec<Vec<Span>>], i: usize) -> bool {
+    let mut any = false;
+    for r in rows {
+        let text: String = r
+            .get(i)
+            .map(|c| c.iter().map(|s| s.text.as_str()).collect())
+            .unwrap_or_default();
+        let s = text.trim();
+        if s.is_empty() || matches!(s, "-" | "—" | "–") {
+            continue;
+        }
+        if !number(s) {
+            return false;
+        }
+        any = true;
+    }
+    any
+}
+
+fn number(s: &str) -> bool {
+    let s = s.trim_start_matches(['+', '-', '−', '~', '$', '€', '£', '≈']);
+    let s = s.trim_end_matches(['%', 'x', '×', 'k', 'K', 'M', 'B', 's']);
+    !s.is_empty()
+        && s.starts_with(|c: char| c.is_ascii_digit())
+        && s.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',')
 }
 
 fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
@@ -1941,8 +2111,44 @@ mod tests {
             },
         ];
         let laid: String = spans.iter().map(|s| shown(s).into_owned()).collect();
-        assert_eq!(laid, "see a.rs.", "no padding before the full stop");
-        assert_eq!(code_ranges(&spans), vec![4..8]);
+        // A file keeps room for its icon before it, none after.
+        assert_eq!(laid, "see \u{2003}a.rs.", "no padding before the full stop");
+        assert_eq!(code_ranges(&spans), vec![4..11]);
+        let word = Span {
+            text: "cargo test".into(),
+            code: true,
+            ..Default::default()
+        };
+        assert_eq!(shown(&word), "cargo test", "a command is laid out as itself");
+    }
+
+    #[test]
+    fn number_columns_are_found() {
+        let cell = |s: &str| {
+            vec![Span {
+                text: s.into(),
+                ..Default::default()
+            }]
+        };
+        let rows = vec![
+            vec![cell("Pass@1"), cell("84.3%"), cell("75")],
+            vec![cell("Tokens"), cell("2.32M"), cell("—")],
+        ];
+        assert!(!numeric_column(&rows, 0));
+        assert!(numeric_column(&rows, 1));
+        assert!(numeric_column(&rows, 2));
+        assert!(!number("v1.2"));
+        assert!(number("$1,200"));
+    }
+
+    #[test]
+    fn file_names_are_told_from_other_code() {
+        for f in ["verify.rs", "src/ui/markdown.rs", "Cargo.toml", "self_check.py", "report.py"] {
+            assert!(file_like(f), "{f} is a file");
+        }
+        for c in ["cargo test", "3.14", "x.y", "https://a.com/b.rs", "--flag.rs", "fn", "a.b()"] {
+            assert!(!file_like(c), "{c} is not a file");
+        }
     }
 
     #[test]
@@ -2044,7 +2250,7 @@ mod tests {
             ('-', (328.0, 124.0), (336.0, 124.0)),
             ('s', (336.0, 124.0), (344.0, 124.0)),
         ];
-        assert_eq!(glyph_rows(origin_x, &glyphs), vec![(320.0, 124.0, 344.0)]);
+        assert_eq!(glyph_rows(origin_x, 4., &glyphs), vec![(320.0, 124.0, 344.0)]);
 
         // Mid-span wrap after `a-` (`a-` on y=100, `b` wrapping to y=124), plus
         // trailing space before wrap ignored.
@@ -2056,9 +2262,25 @@ mod tests {
             ('c', (328.0, 124.0), (336.0, 124.0)),
         ];
         assert_eq!(
-            glyph_rows(origin_x, &mid_wrap),
+            glyph_rows(origin_x, 4., &mid_wrap),
             vec![(820.0, 100.0, 836.0), (320.0, 124.0, 336.0)]
         );
+    }
+
+    #[test]
+    fn a_sliver_left_at_a_rows_end_is_not_a_chip() {
+        // `KODACT_NUDGES` wrapping whole after "or ": the layout leaves its
+        // first glyph's edge as a 0.4px sliver at the end of the first row.
+        let origin_x = 320.0;
+        let glyphs = vec![
+            ('K', (860.0, 100.0), (860.4, 100.0)),
+            ('O', (860.4, 100.0), (338.0, 124.0)),
+            ('D', (338.0, 124.0), (348.0, 124.0)),
+        ];
+        assert_eq!(glyph_rows(origin_x, 4., &glyphs), vec![(320.0, 124.0, 348.0)]);
+        // A one-character span on one row is kept, however narrow.
+        let dot = vec![('.', (400.0, 100.0), (403.0, 100.0))];
+        assert_eq!(glyph_rows(origin_x, 4., &dot), vec![(400.0, 100.0, 403.0)]);
     }
 
     #[test]

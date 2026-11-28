@@ -91,7 +91,7 @@ An Operate surface: an app for long agent sessions, judged against Claude Deskto
 
 ## Typography
 
-One sans for interface and prose (Anthropic Sans Text), in regular and semibold; replies at 15px on 23px lines. Code in Anthropic Sans Text; a name in prose (a file, a command) in Anthropic Sans Text on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.
+One sans for interface and prose (Anthropic Sans Text), in regular and semibold; replies at 15px on 23px lines. Code in Anthropic Sans Text; a name in prose (a file, a command) in Anthropic Sans Text, in a deep sky ink on a soft pill of its hue; a link in a reply in burgundy ink. Small text is sentence case: no uppercase labels and no label above a heading.
 
 ## Layout
 

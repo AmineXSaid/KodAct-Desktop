@@ -178,7 +178,8 @@ pub fn selected_text() -> Option<String> {
             };
             if let Some(r) = part(&s, &s.order, o, text.len()) {
                 let r = floor(text, r.start)..floor(text, r.end);
-                parts.push(text[r].to_string());
+                // A file chip's icon room is not part of the words.
+                parts.push(text[r].replace(super::markdown::ICON_GAP, ""));
             }
         }
         (!parts.is_empty()).then(|| parts.join("\n"))

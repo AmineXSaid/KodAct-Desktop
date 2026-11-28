@@ -88,7 +88,10 @@ fn aspect(shape: Shape, art: &Art) -> f32 {
 
 /// What a frame holds, filling the box it is put in.
 fn art(frame: &Frame, shape: Shape, t: &Theme) -> AnyElement {
-    let base = div().size_full().overflow_hidden();
+    // Its frame is rounded with a 1px edge: the art's ground and picture
+    // follow that curve themselves (a parent clips children square).
+    let inner = t.radius.small - px(1.);
+    let base = div().size_full().overflow_hidden().rounded(inner);
     match &frame.art {
         // A page or slide as it prints: white paper in both themes.
         Art::Page { image, .. } => base
@@ -96,6 +99,7 @@ fn art(frame: &Frame, shape: Shape, t: &Theme) -> AnyElement {
             .child(
                 gpui::img(image.clone())
                     .size_full()
+                    .rounded(inner)
                     .object_fit(if shape == Shape::Slide {
                         ObjectFit::Cover
                     } else {
@@ -114,7 +118,7 @@ fn art(frame: &Frame, shape: Shape, t: &Theme) -> AnyElement {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .when(r == 0, |d| d.bg(t.extra.success))
+                    .when(r == 0, |d| d.bg(t.extra.success).rounded_t(inner))
                     .when(r > 0 && r % 2 == 0, |d| d.bg(t.extra.inset))
                     .children(
                         rows.get(r)
@@ -327,6 +331,7 @@ fn strip_view(
                 .child(
                     gpui::img(image.clone())
                         .w_full()
+                        .rounded_t(t.radius.small - px(1.))
                         .aspect_ratio(ratio)
                         // A margin in a share of the width: the page's height
                         // is the width over its aspect.

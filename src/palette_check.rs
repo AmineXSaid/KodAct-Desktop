@@ -313,6 +313,9 @@ fn coloured_text_reads_on_its_tint() {
                 Hsla::from(over(x.code_inline_bg, card)),
             ),
             ("skill", x.skill, card),
+            ("a reply's link", x.reply_link, x.stage),
+            ("a reply's link on a card", x.reply_link, card),
+            ("your message", t.colors.text_body, x.user_bubble),
             (
                 "ping fast",
                 x.ping_fast_fg,
@@ -335,6 +338,8 @@ fn coloured_text_reads_on_its_tint() {
         }
         // A mode's colour marks the composer's edge and its icon (UI parts).
         for (name, c) in [
+            ("thought", x.thought),
+            ("nudge", x.nudge),
             ("edit", x.mode_edit),
             ("auto", x.mode_auto),
             ("plan", x.mode_plan),
